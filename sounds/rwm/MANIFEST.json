@@ -1,0 +1,2350 @@
+{
+ "river_loop": {
+  "rwm_name": "@river_loop",
+  "files": [
+   "river_loop.ogg",
+   "river_loop.1.ogg"
+  ]
+ },
+ "sea": {
+  "rwm_name": "@sea",
+  "files": [
+   "sea.ogg",
+   "sea.1.ogg",
+   "sea.2.ogg"
+  ]
+ },
+ "fire_loop": {
+  "rwm_name": "@fire_loop",
+  "files": [
+   "fire_loop.ogg"
+  ]
+ },
+ "crow": {
+  "rwm_name": "@crow",
+  "files": [
+   "crow.ogg"
+  ]
+ },
+ "birds": {
+  "rwm_name": "@birds",
+  "files": [
+   "birds.ogg",
+   "birds.1.ogg",
+   "birds.2.ogg",
+   "birds.3.ogg",
+   "birds.4.ogg",
+   "birds.5.ogg",
+   "birds.6.ogg",
+   "birds.7.ogg",
+   "birds.8.ogg",
+   "birds.9.ogg",
+   "birds.10.ogg",
+   "birds.11.ogg",
+   "birds.12.ogg",
+   "birds.13.ogg",
+   "birds.14.ogg"
+  ]
+ },
+ "cicades_loop": {
+  "rwm_name": "@cicades_loop",
+  "files": [
+   "cicades_loop.ogg"
+  ]
+ },
+ "wind_bunker_loop": {
+  "rwm_name": "@wind_bunker_loop",
+  "files": [
+   "wind_bunker_loop.ogg"
+  ]
+ },
+ "wind_eerie_loop": {
+  "rwm_name": "@wind_eerie_loop",
+  "files": [
+   "wind_eerie_loop.ogg"
+  ]
+ },
+ "wind_emptyhouse": {
+  "rwm_name": "@wind_emptyhouse",
+  "files": [
+   "wind_emptyhouse.ogg"
+  ]
+ },
+ "wind_barn": {
+  "rwm_name": "@wind_barn",
+  "files": [
+   "wind_barn.ogg"
+  ]
+ },
+ "wind_rigging": {
+  "rwm_name": "@wind_rigging",
+  "files": [
+   "wind_rigging.ogg"
+  ]
+ },
+ "wind_plant": {
+  "rwm_name": "@wind_plant",
+  "files": [
+   "wind_plant.ogg"
+  ]
+ },
+ "wind_plant_loop": {
+  "rwm_name": "@wind_plant_loop",
+  "files": [
+   "wind_plant_loop.ogg"
+  ]
+ },
+ "wind_hangar_loop": {
+  "rwm_name": "@wind_hangar_loop",
+  "files": [
+   "wind_hangar_loop.ogg"
+  ]
+ },
+ "wind_forest_loop": {
+  "rwm_name": "@wind_forest_loop",
+  "files": [
+   "wind_forest_loop.ogg"
+  ]
+ },
+ "wind_grass_loop": {
+  "rwm_name": "@wind_grass_loop",
+  "files": [
+   "wind_grass_loop.ogg"
+  ]
+ },
+ "groza": {
+  "rwm_name": "@groza",
+  "files": [
+   "groza.ogg"
+  ]
+ },
+ "rain_loop": {
+  "rwm_name": "@rain_loop",
+  "files": [
+   "rain_loop.ogg"
+  ]
+ },
+ "rain_ontheroof_loop": {
+  "rwm_name": "@rain_ontheroof_loop",
+  "files": [
+   "rain_ontheroof_loop.ogg"
+  ]
+ },
+ "ack_deu": {
+  "rwm_name": "ack_deu",
+  "files": [
+   "ack_deu.ogg"
+  ]
+ },
+ "ack_rus": {
+  "rwm_name": "ack_rus",
+  "files": [
+   "ack_rus.ogg"
+  ]
+ },
+ "ack_ally": {
+  "rwm_name": "ack_ally",
+  "files": [
+   "ack_ally.ogg"
+  ]
+ },
+ "accept": {
+  "rwm_name": "accept",
+  "files": [
+   "accept.ogg"
+  ]
+ },
+ "choose": {
+  "rwm_name": "choose",
+  "files": [
+   "choose.ogg"
+  ]
+ },
+ "push": {
+  "rwm_name": "push",
+  "files": [
+   "push.ogg",
+   "push.1.ogg",
+   "push.2.ogg",
+   "push.3.ogg"
+  ]
+ },
+ "pull": {
+  "rwm_name": "pull",
+  "files": [
+   "pull.ogg",
+   "pull.1.ogg",
+   "pull.2.ogg",
+   "pull.3.ogg",
+   "pull.4.ogg",
+   "pull.5.ogg"
+  ]
+ },
+ "switch": {
+  "rwm_name": "switch",
+  "files": [
+   "switch.ogg"
+  ]
+ },
+ "mult": {
+  "rwm_name": "mult",
+  "files": [
+   "mult.ogg"
+  ]
+ },
+ "checkbox_switch": {
+  "rwm_name": "checkbox_switch",
+  "files": [
+   "checkbox_switch.ogg"
+  ]
+ },
+ "checkbox_open": {
+  "rwm_name": "checkbox_open",
+  "files": [
+   "checkbox_open.ogg"
+  ]
+ },
+ "checkbox_close": {
+  "rwm_name": "checkbox_close",
+  "files": [
+   "checkbox_close.ogg"
+  ]
+ },
+ "agit": {
+  "rwm_name": "agit",
+  "files": [
+   "agit.ogg"
+  ]
+ },
+ "walk_ground": {
+  "rwm_name": "walk_ground",
+  "files": [
+   "walk_ground.ogg",
+   "walk_ground.1.ogg",
+   "walk_ground.2.ogg",
+   "walk_ground.3.ogg"
+  ]
+ },
+ "walk_water": {
+  "rwm_name": "walk_water",
+  "files": [
+   "walk_water.ogg",
+   "walk_water.1.ogg",
+   "walk_water.2.ogg"
+  ]
+ },
+ "sink": {
+  "rwm_name": "sink",
+  "files": [
+   "sink.ogg",
+   "sink.1.ogg"
+  ]
+ },
+ "faustshot": {
+  "rwm_name": "faustshot",
+  "files": [
+   "faustshot.ogg",
+   "faustshot.1.ogg",
+   "faustshot.2.ogg"
+  ]
+ },
+ "gunshot": {
+  "rwm_name": "gunshot",
+  "files": [
+   "gunshot.ogg",
+   "gunshot.1.ogg",
+   "gunshot.2.ogg",
+   "gunshot.3.ogg"
+  ]
+ },
+ "atrifle": {
+  "rwm_name": "atrifle",
+  "files": [
+   "atrifle.ogg"
+  ]
+ },
+ "rocket": {
+  "rwm_name": "rocket",
+  "files": [
+   "rocket.ogg",
+   "rocket.1.ogg",
+   "rocket.2.ogg",
+   "rocket.3.ogg"
+  ]
+ },
+ "bomb": {
+  "rwm_name": "bomb",
+  "files": [
+   "bomb.ogg"
+  ]
+ },
+ "piat": {
+  "rwm_name": "piat",
+  "files": [
+   "piat.ogg"
+  ]
+ },
+ "breaktree": {
+  "rwm_name": "breaktree",
+  "files": [
+   "breaktree.ogg"
+  ]
+ },
+ "ricochet": {
+  "rwm_name": "ricochet",
+  "files": [
+   "ricochet.ogg",
+   "ricochet.1.ogg",
+   "ricochet.2.ogg",
+   "ricochet.3.ogg",
+   "ricochet.4.ogg"
+  ]
+ },
+ "ricochet_ground": {
+  "rwm_name": "ricochet_ground",
+  "files": [
+   "ricochet_ground.ogg",
+   "ricochet_ground.1.ogg",
+   "ricochet_ground.2.ogg",
+   "ricochet_ground.3.ogg"
+  ]
+ },
+ "ricochet_water": {
+  "rwm_name": "ricochet_water",
+  "files": [
+   "ricochet_water.ogg",
+   "ricochet_water.1.ogg"
+  ]
+ },
+ "ricochet_burst": {
+  "rwm_name": "ricochet_burst",
+  "files": [
+   "ricochet_burst.ogg",
+   "ricochet_burst.1.ogg"
+  ]
+ },
+ "smallexplosion": {
+  "rwm_name": "smallexplosion",
+  "files": [
+   "smallexplosion.ogg",
+   "smallexplosion.1.ogg",
+   "smallexplosion.2.ogg"
+  ]
+ },
+ "howitzerexplosion": {
+  "rwm_name": "howitzerexplosion",
+  "files": [
+   "howitzerexplosion.ogg",
+   "howitzerexplosion.1.ogg",
+   "howitzerexplosion.2.ogg"
+  ]
+ },
+ "defaultexplosion": {
+  "rwm_name": "defaultexplosion",
+  "files": [
+   "defaultexplosion.ogg",
+   "defaultexplosion.1.ogg",
+   "defaultexplosion.2.ogg",
+   "defaultexplosion.3.ogg",
+   "defaultexplosion.4.ogg",
+   "defaultexplosion.5.ogg"
+  ]
+ },
+ "explo_tankdir": {
+  "rwm_name": "explo_tankdir",
+  "files": [
+   "explo_tankdir.ogg"
+  ]
+ },
+ "collision": {
+  "rwm_name": "collision",
+  "files": [
+   "collision.ogg"
+  ]
+ },
+ "rifle2": {
+  "rwm_name": "rifle2",
+  "files": [
+   "rifle2.ogg",
+   "rifle2.1.ogg",
+   "rifle2.2.ogg"
+  ]
+ },
+ "rifle1": {
+  "rwm_name": "rifle1",
+  "files": [
+   "rifle1.ogg"
+  ]
+ },
+ "rifle": {
+  "rwm_name": "rifle",
+  "files": [
+   "rifle.ogg",
+   "rifle.1.ogg",
+   "rifle.2.ogg"
+  ]
+ },
+ "mg_tank_burst": {
+  "rwm_name": "mg_tank_burst",
+  "files": [
+   "mg_tank_burst.ogg",
+   "mg_tank_burst.1.ogg"
+  ]
+ },
+ "smg_burst": {
+  "rwm_name": "smg_burst",
+  "files": [
+   "smg_burst.ogg",
+   "smg_burst.1.ogg",
+   "smg_burst.2.ogg"
+  ]
+ },
+ "mg_heavy": {
+  "rwm_name": "mg_heavy",
+  "files": [
+   "mg_heavy.ogg",
+   "mg_heavy.1.ogg"
+  ]
+ },
+ "knife": {
+  "rwm_name": "knife",
+  "files": [
+   "knife.ogg"
+  ]
+ },
+ "knife_hit": {
+  "rwm_name": "knife_hit",
+  "files": [
+   "knife_hit.ogg"
+  ]
+ },
+ "knife_rico": {
+  "rwm_name": "knife_rico",
+  "files": [
+   "knife_rico.ogg"
+  ]
+ },
+ "mg_aa": {
+  "rwm_name": "mg_aa",
+  "files": [
+   "mg_aa.ogg"
+  ]
+ },
+ "mg2_aa": {
+  "rwm_name": "mg2_aa",
+  "files": [
+   "mg2_aa.ogg"
+  ]
+ },
+ "rifle_reload": {
+  "rwm_name": "rifle_reload",
+  "files": [
+   "rifle_reload.ogg",
+   "rifle_reload.1.ogg",
+   "rifle_reload.2.ogg",
+   "rifle_reload.3.ogg"
+  ]
+ },
+ "fire": {
+  "rwm_name": "fire",
+  "files": [
+   "fire.ogg"
+  ]
+ },
+ "fmw": {
+  "rwm_name": "fmw",
+  "files": [
+   "fmw.ogg"
+  ]
+ },
+ "howitzer": {
+  "rwm_name": "howitzer",
+  "files": [
+   "howitzer.ogg",
+   "howitzer.1.ogg"
+  ]
+ },
+ "water_boom": {
+  "rwm_name": "water_boom",
+  "files": [
+   "water_boom.ogg",
+   "water_boom.1.ogg",
+   "water_boom.2.ogg"
+  ]
+ },
+ "v2standby": {
+  "rwm_name": "v2standby",
+  "files": [
+   "v2standby.ogg"
+  ]
+ },
+ "bike_move": {
+  "rwm_name": "bike_move",
+  "files": [
+   "bike_move.ogg"
+  ]
+ },
+ "bike_move_finish": {
+  "rwm_name": "bike_move_finish",
+  "files": [
+   "bike_move_finish.ogg"
+  ]
+ },
+ "bike_idle": {
+  "rwm_name": "bike_idle",
+  "files": [
+   "bike_idle.ogg"
+  ]
+ },
+ "diesel_start": {
+  "rwm_name": "diesel_start",
+  "files": [
+   "diesel_start.ogg"
+  ]
+ },
+ "wheel_start": {
+  "rwm_name": "wheel_start",
+  "files": [
+   "wheel_start.ogg"
+  ]
+ },
+ "diesel_move": {
+  "rwm_name": "diesel_move",
+  "files": [
+   "diesel_move.ogg"
+  ]
+ },
+ "rollgun": {
+  "rwm_name": "rollgun",
+  "files": [
+   "rollgun.ogg"
+  ]
+ },
+ "diesel_move_finish": {
+  "rwm_name": "diesel_move_finish",
+  "files": [
+   "diesel_move_finish.ogg"
+  ]
+ },
+ "sovtank_move": {
+  "rwm_name": "sovtank_move",
+  "files": [
+   "sovtank_move.ogg"
+  ]
+ },
+ "sovtank_move_finish": {
+  "rwm_name": "sovtank_move_finish",
+  "files": [
+   "sovtank_move_finish.ogg"
+  ]
+ },
+ "carb_standby": {
+  "rwm_name": "carb_standby",
+  "files": [
+   "carb_standby.ogg"
+  ]
+ },
+ "carb_move": {
+  "rwm_name": "carb_move",
+  "files": [
+   "carb_move.ogg"
+  ]
+ },
+ "carb_move_finish": {
+  "rwm_name": "carb_move_finish",
+  "files": [
+   "carb_move_finish.ogg"
+  ]
+ },
+ "wheel_move": {
+  "rwm_name": "wheel_move",
+  "files": [
+   "wheel_move.ogg"
+  ]
+ },
+ "wheel_move_finish": {
+  "rwm_name": "wheel_move_finish",
+  "files": [
+   "wheel_move_finish.ogg",
+   "wheel_move_finish.1.ogg"
+  ]
+ },
+ "diesel2_move": {
+  "rwm_name": "diesel2_move",
+  "files": [
+   "diesel2_move.ogg"
+  ]
+ },
+ "small_idle": {
+  "rwm_name": "small_idle",
+  "files": [
+   "small_idle.ogg"
+  ]
+ },
+ "diesel_idle": {
+  "rwm_name": "diesel_idle",
+  "files": [
+   "diesel_idle.ogg"
+  ]
+ },
+ "heavy_idle": {
+  "rwm_name": "heavy_idle",
+  "files": [
+   "heavy_idle.ogg"
+  ]
+ },
+ "light_move": {
+  "rwm_name": "light_move",
+  "files": [
+   "light_move.ogg"
+  ]
+ },
+ "light_move_finish": {
+  "rwm_name": "light_move_finish",
+  "files": [
+   "light_move_finish.ogg"
+  ]
+ },
+ "train_move_start": {
+  "rwm_name": "train_move_start",
+  "files": [
+   "train_move_start.ogg",
+   "train_move_start.1.ogg",
+   "train_move_start.2.ogg"
+  ]
+ },
+ "train_move": {
+  "rwm_name": "train_move",
+  "files": [
+   "train_move.ogg"
+  ]
+ },
+ "train_move_finish": {
+  "rwm_name": "train_move_finish",
+  "files": [
+   "train_move_finish.ogg"
+  ]
+ },
+ "train_stop": {
+  "rwm_name": "train_stop",
+  "files": [
+   "train_stop.ogg"
+  ]
+ },
+ "aquatic_move": {
+  "rwm_name": "aquatic_move",
+  "files": [
+   "aquatic_move.ogg"
+  ]
+ },
+ "aquatic_big_move": {
+  "rwm_name": "aquatic_big_move",
+  "files": [
+   "aquatic_big_move.ogg"
+  ]
+ },
+ "v2": {
+  "rwm_name": "v2",
+  "files": [
+   "v2.ogg"
+  ]
+ },
+ "fly_heavy": {
+  "rwm_name": "fly_heavy",
+  "files": [
+   "fly_heavy.ogg"
+  ]
+ },
+ "fly_heavy_ground": {
+  "rwm_name": "fly_heavy_ground",
+  "files": [
+   "fly_heavy_ground.ogg"
+  ]
+ },
+ "falling_heavy": {
+  "rwm_name": "falling_heavy",
+  "files": [
+   "falling_heavy.ogg"
+  ]
+ },
+ "fly_jet": {
+  "rwm_name": "fly_jet",
+  "files": [
+   "fly_jet.ogg"
+  ]
+ },
+ "fly_small": {
+  "rwm_name": "fly_small",
+  "files": [
+   "fly_small.ogg"
+  ]
+ },
+ "fall_small": {
+  "rwm_name": "fall_small",
+  "files": [
+   "fall_small.ogg"
+  ]
+ },
+ "flak": {
+  "rwm_name": "flak",
+  "files": [
+   "flak.ogg",
+   "flak.1.ogg",
+   "flak.2.ogg",
+   "flak.3.ogg"
+  ]
+ },
+ "flak_explosion": {
+  "rwm_name": "flak_explosion",
+  "files": [
+   "flak_explosion.ogg",
+   "flak_explosion.1.ogg",
+   "flak_explosion.2.ogg",
+   "flak_explosion.3.ogg"
+  ]
+ },
+ "flak_endburst": {
+  "rwm_name": "flak_endburst",
+  "files": [
+   "flak_endburst.ogg"
+  ]
+ },
+ "flak_20mm": {
+  "rwm_name": "flak_20mm",
+  "files": [
+   "flak_20mm.ogg",
+   "flak_20mm.1.ogg"
+  ]
+ },
+ "flak_37mm": {
+  "rwm_name": "flak_37mm",
+  "files": [
+   "flak_37mm.ogg",
+   "flak_37mm.1.ogg"
+  ]
+ },
+ "agit_russian": {
+  "rwm_name": "agit_russian",
+  "files": [
+   "agit_russian.ogg"
+  ]
+ },
+ "agit_german": {
+  "rwm_name": "agit_german",
+  "files": [
+   "agit_german.ogg"
+  ]
+ },
+ "agit_japan": {
+  "rwm_name": "agit_japan",
+  "files": [
+   "agit_japan.ogg"
+  ]
+ },
+ "turret_move": {
+  "rwm_name": "turret_move",
+  "files": [
+   "turret_move.ogg"
+  ]
+ },
+ "gilse": {
+  "rwm_name": "gilse",
+  "files": [
+   "gilse.ogg",
+   "gilse.1.ogg",
+   "gilse.2.ogg",
+   "gilse.3.ogg",
+   "gilse.4.ogg"
+  ]
+ },
+ "construct": {
+  "rwm_name": "construct",
+  "files": [
+   "construct.ogg",
+   "construct.1.ogg",
+   "construct.2.ogg"
+  ]
+ },
+ "b_art_ack": {
+  "rwm_name": "b_art_ack",
+  "files": [
+   "b_art_ack.ogg",
+   "b_art_ack.1.ogg",
+   "b_art_ack.2.ogg"
+  ]
+ },
+ "b_art_attack": {
+  "rwm_name": "b_art_attack",
+  "files": [
+   "b_art_attack.ogg",
+   "b_art_attack.1.ogg"
+  ]
+ },
+ "b_art_enemy": {
+  "rwm_name": "b_art_enemy",
+  "files": [
+   "b_art_enemy.ogg"
+  ]
+ },
+ "b_art_move": {
+  "rwm_name": "b_art_move",
+  "files": [
+   "b_art_move.ogg",
+   "b_art_move.1.ogg"
+  ]
+ },
+ "b_art_select": {
+  "rwm_name": "b_art_select",
+  "files": [
+   "b_art_select.ogg"
+  ]
+ },
+ "b_off_ack": {
+  "rwm_name": "b_off_ack",
+  "files": [
+   "b_off_ack.ogg",
+   "b_off_ack.1.ogg",
+   "b_off_ack.2.ogg",
+   "b_off_ack.3.ogg",
+   "b_off_ack.4.ogg"
+  ]
+ },
+ "b_off_move": {
+  "rwm_name": "b_off_move",
+  "files": [
+   "b_off_move.ogg",
+   "b_off_move.1.ogg"
+  ]
+ },
+ "b_off_sele": {
+  "rwm_name": "b_off_sele",
+  "files": [
+   "b_off_sele.ogg"
+  ]
+ },
+ "b_pilot_ack": {
+  "rwm_name": "b_pilot_ack",
+  "files": [
+   "b_pilot_ack.ogg",
+   "b_pilot_ack.1.ogg",
+   "b_pilot_ack.2.ogg"
+  ]
+ },
+ "b_pilot_move": {
+  "rwm_name": "b_pilot_move",
+  "files": [
+   "b_pilot_move.ogg",
+   "b_pilot_move.1.ogg"
+  ]
+ },
+ "b_pilot_select": {
+  "rwm_name": "b_pilot_select",
+  "files": [
+   "b_pilot_select.ogg"
+  ]
+ },
+ "b_plane_ack": {
+  "rwm_name": "b_plane_ack",
+  "files": [
+   "b_plane_ack.ogg",
+   "b_plane_ack.1.ogg",
+   "b_plane_ack.2.ogg"
+  ]
+ },
+ "b_plane_move": {
+  "rwm_name": "b_plane_move",
+  "files": [
+   "b_plane_move.ogg",
+   "b_plane_move.1.ogg",
+   "b_plane_move.2.ogg"
+  ]
+ },
+ "b_plane_select": {
+  "rwm_name": "b_plane_select",
+  "files": [
+   "b_plane_select.ogg",
+   "b_plane_select.1.ogg"
+  ]
+ },
+ "b_sap_ack": {
+  "rwm_name": "b_sap_ack",
+  "files": [
+   "b_sap_ack.ogg",
+   "b_sap_ack.1.ogg",
+   "b_sap_ack.2.ogg",
+   "b_sap_ack.3.ogg",
+   "b_sap_ack.4.ogg"
+  ]
+ },
+ "b_sap_move": {
+  "rwm_name": "b_sap_move",
+  "files": [
+   "b_sap_move.ogg",
+   "b_sap_move.1.ogg"
+  ]
+ },
+ "b_sap_repair": {
+  "rwm_name": "b_sap_repair",
+  "files": [
+   "b_sap_repair.ogg"
+  ]
+ },
+ "b_sap_search": {
+  "rwm_name": "b_sap_search",
+  "files": [
+   "b_sap_search.ogg"
+  ]
+ },
+ "b_sap_select": {
+  "rwm_name": "b_sap_select",
+  "files": [
+   "b_sap_select.ogg",
+   "b_sap_select.1.ogg"
+  ]
+ },
+ "b_sold_ack": {
+  "rwm_name": "b_sold_ack",
+  "files": [
+   "b_sold_ack.ogg"
+  ]
+ },
+ "b_sold_attack": {
+  "rwm_name": "b_sold_attack",
+  "files": [
+   "b_sold_attack.ogg",
+   "b_sold_attack.1.ogg",
+   "b_sold_attack.2.ogg",
+   "b_sold_attack.3.ogg",
+   "b_sold_attack.4.ogg",
+   "b_sold_attack.5.ogg"
+  ]
+ },
+ "b_sold_move": {
+  "rwm_name": "b_sold_move",
+  "files": [
+   "b_sold_move.ogg",
+   "b_sold_move.1.ogg",
+   "b_sold_move.2.ogg"
+  ]
+ },
+ "b_sold_select": {
+  "rwm_name": "b_sold_select",
+  "files": [
+   "b_sold_select.ogg",
+   "b_sold_select.1.ogg",
+   "b_sold_select.2.ogg"
+  ]
+ },
+ "b_tank_ack": {
+  "rwm_name": "b_tank_ack",
+  "files": [
+   "b_tank_ack.ogg",
+   "b_tank_ack.1.ogg"
+  ]
+ },
+ "b_tank_attack": {
+  "rwm_name": "b_tank_attack",
+  "files": [
+   "b_tank_attack.ogg",
+   "b_tank_attack.1.ogg"
+  ]
+ },
+ "b_tank_enemy": {
+  "rwm_name": "b_tank_enemy",
+  "files": [
+   "b_tank_enemy.ogg"
+  ]
+ },
+ "b_tank_move": {
+  "rwm_name": "b_tank_move",
+  "files": [
+   "b_tank_move.ogg",
+   "b_tank_move.1.ogg",
+   "b_tank_move.2.ogg",
+   "b_tank_move.3.ogg",
+   "b_tank_move.4.ogg"
+  ]
+ },
+ "b_tank_select": {
+  "rwm_name": "b_tank_select",
+  "files": [
+   "b_tank_select.ogg",
+   "b_tank_select.1.ogg"
+  ]
+ },
+ "b_tank_stop": {
+  "rwm_name": "b_tank_stop",
+  "files": [
+   "b_tank_stop.ogg"
+  ]
+ },
+ "b_trans_ack": {
+  "rwm_name": "b_trans_ack",
+  "files": [
+   "b_trans_ack.ogg",
+   "b_trans_ack.1.ogg",
+   "b_trans_ack.2.ogg"
+  ]
+ },
+ "b_trans_move": {
+  "rwm_name": "b_trans_move",
+  "files": [
+   "b_trans_move.ogg",
+   "b_trans_move.1.ogg",
+   "b_trans_move.2.ogg",
+   "b_trans_move.3.ogg"
+  ]
+ },
+ "b_trans_select": {
+  "rwm_name": "b_trans_select",
+  "files": [
+   "b_trans_select.ogg",
+   "b_trans_select.1.ogg"
+  ]
+ },
+ "f_sold_attack": {
+  "rwm_name": "f_sold_attack",
+  "files": [
+   "f_sold_attack.ogg",
+   "f_sold_attack.1.ogg",
+   "f_sold_attack.2.ogg"
+  ]
+ },
+ "f_sold_move": {
+  "rwm_name": "f_sold_move",
+  "files": [
+   "f_sold_move.ogg",
+   "f_sold_move.1.ogg"
+  ]
+ },
+ "f_sold_select": {
+  "rwm_name": "f_sold_select",
+  "files": [
+   "f_sold_select.ogg",
+   "f_sold_select.1.ogg"
+  ]
+ },
+ "f_tank_ack": {
+  "rwm_name": "f_tank_ack",
+  "files": [
+   "f_tank_ack.ogg",
+   "f_tank_ack.1.ogg"
+  ]
+ },
+ "f_tank_attack": {
+  "rwm_name": "f_tank_attack",
+  "files": [
+   "f_tank_attack.ogg",
+   "f_tank_attack.1.ogg"
+  ]
+ },
+ "f_tank_move": {
+  "rwm_name": "f_tank_move",
+  "files": [
+   "f_tank_move.ogg",
+   "f_tank_move.1.ogg"
+  ]
+ },
+ "f_tank_select": {
+  "rwm_name": "f_tank_select",
+  "files": [
+   "f_tank_select.ogg",
+   "f_tank_select.1.ogg"
+  ]
+ },
+ "f_tank_stop": {
+  "rwm_name": "f_tank_stop",
+  "files": [
+   "f_tank_stop.ogg"
+  ]
+ },
+ "d_art_ack": {
+  "rwm_name": "d_art_ack",
+  "files": [
+   "d_art_ack.ogg",
+   "d_art_ack.1.ogg",
+   "d_art_ack.2.ogg",
+   "d_art_ack.3.ogg"
+  ]
+ },
+ "d_art_attack": {
+  "rwm_name": "d_art_attack",
+  "files": [
+   "d_art_attack.ogg",
+   "d_art_attack.1.ogg",
+   "d_art_attack.2.ogg"
+  ]
+ },
+ "d_art_move": {
+  "rwm_name": "d_art_move",
+  "files": [
+   "d_art_move.ogg",
+   "d_art_move.1.ogg"
+  ]
+ },
+ "d_art_select": {
+  "rwm_name": "d_art_select",
+  "files": [
+   "d_art_select.ogg"
+  ]
+ },
+ "d_med_ack": {
+  "rwm_name": "d_med_ack",
+  "files": [
+   "d_med_ack.ogg",
+   "d_med_ack.1.ogg"
+  ]
+ },
+ "d_med_move": {
+  "rwm_name": "d_med_move",
+  "files": [
+   "d_med_move.ogg",
+   "d_med_move.1.ogg",
+   "d_med_move.2.ogg"
+  ]
+ },
+ "d_med_select": {
+  "rwm_name": "d_med_select",
+  "files": [
+   "d_med_select.ogg",
+   "d_med_select.1.ogg",
+   "d_med_select.2.ogg"
+  ]
+ },
+ "d_off_ack": {
+  "rwm_name": "d_off_ack",
+  "files": [
+   "d_off_ack.ogg",
+   "d_off_ack.1.ogg",
+   "d_off_ack.2.ogg",
+   "d_off_ack.3.ogg"
+  ]
+ },
+ "d_off_move": {
+  "rwm_name": "d_off_move",
+  "files": [
+   "d_off_move.ogg",
+   "d_off_move.1.ogg"
+  ]
+ },
+ "d_off_select": {
+  "rwm_name": "d_off_select",
+  "files": [
+   "d_off_select.ogg"
+  ]
+ },
+ "d_pilot_ack": {
+  "rwm_name": "d_pilot_ack",
+  "files": [
+   "d_pilot_ack.ogg",
+   "d_pilot_ack.1.ogg"
+  ]
+ },
+ "d_pilot_move": {
+  "rwm_name": "d_pilot_move",
+  "files": [
+   "d_pilot_move.ogg",
+   "d_pilot_move.1.ogg",
+   "d_pilot_move.2.ogg"
+  ]
+ },
+ "d_pilot_select": {
+  "rwm_name": "d_pilot_select",
+  "files": [
+   "d_pilot_select.ogg"
+  ]
+ },
+ "d_plane_ack": {
+  "rwm_name": "d_plane_ack",
+  "files": [
+   "d_plane_ack.ogg",
+   "d_plane_ack.1.ogg"
+  ]
+ },
+ "d_plane_move": {
+  "rwm_name": "d_plane_move",
+  "files": [
+   "d_plane_move.ogg"
+  ]
+ },
+ "d_plane_select": {
+  "rwm_name": "d_plane_select",
+  "files": [
+   "d_plane_select.ogg"
+  ]
+ },
+ "d_sap_ack": {
+  "rwm_name": "d_sap_ack",
+  "files": [
+   "d_sap_ack.ogg",
+   "d_sap_ack.1.ogg",
+   "d_sap_ack.2.ogg",
+   "d_sap_ack.3.ogg",
+   "d_sap_ack.4.ogg"
+  ]
+ },
+ "d_sap_mine": {
+  "rwm_name": "d_sap_mine",
+  "files": [
+   "d_sap_mine.ogg"
+  ]
+ },
+ "d_sap_move": {
+  "rwm_name": "d_sap_move",
+  "files": [
+   "d_sap_move.ogg",
+   "d_sap_move.1.ogg"
+  ]
+ },
+ "d_sap_repair": {
+  "rwm_name": "d_sap_repair",
+  "files": [
+   "d_sap_repair.ogg"
+  ]
+ },
+ "d_sap_search": {
+  "rwm_name": "d_sap_search",
+  "files": [
+   "d_sap_search.ogg"
+  ]
+ },
+ "d_sap_select": {
+  "rwm_name": "d_sap_select",
+  "files": [
+   "d_sap_select.ogg",
+   "d_sap_select.1.ogg"
+  ]
+ },
+ "d_attack": {
+  "rwm_name": "d_attack",
+  "files": [
+   "d_attack.ogg",
+   "d_attack.1.ogg",
+   "d_attack.2.ogg",
+   "d_attack.3.ogg"
+  ]
+ },
+ "d_startattack": {
+  "rwm_name": "d_startattack",
+  "files": [
+   "d_startattack.ogg",
+   "d_startattack.1.ogg",
+   "d_startattack.2.ogg",
+   "d_startattack.3.ogg",
+   "d_startattack.4.ogg"
+  ]
+ },
+ "d_close": {
+  "rwm_name": "d_close",
+  "files": [
+   "d_close.ogg",
+   "d_close.1.ogg",
+   "d_close.2.ogg"
+  ]
+ },
+ "d_enemy": {
+  "rwm_name": "d_enemy",
+  "files": [
+   "d_enemy.ogg",
+   "d_enemy.1.ogg"
+  ]
+ },
+ "d_laymine": {
+  "rwm_name": "d_laymine",
+  "files": [
+   "d_laymine.ogg"
+  ]
+ },
+ "d_getmine": {
+  "rwm_name": "d_getmine",
+  "files": [
+   "d_getmine.ogg"
+  ]
+ },
+ "d_move": {
+  "rwm_name": "d_move",
+  "files": [
+   "d_move.ogg",
+   "d_move.1.ogg",
+   "d_move.2.ogg",
+   "d_move.3.ogg"
+  ]
+ },
+ "d_noammo": {
+  "rwm_name": "d_noammo",
+  "files": [
+   "d_noammo.ogg",
+   "d_noammo.1.ogg",
+   "d_noammo.2.ogg"
+  ]
+ },
+ "d_rotate": {
+  "rwm_name": "d_rotate",
+  "files": [
+   "d_rotate.ogg"
+  ]
+ },
+ "d_select": {
+  "rwm_name": "d_select",
+  "files": [
+   "d_select.ogg",
+   "d_select.1.ogg",
+   "d_select.2.ogg",
+   "d_select.3.ogg",
+   "d_select.4.ogg"
+  ]
+ },
+ "d_stop": {
+  "rwm_name": "d_stop",
+  "files": [
+   "d_stop.ogg",
+   "d_stop.1.ogg"
+  ]
+ },
+ "d_underattack": {
+  "rwm_name": "d_underattack",
+  "files": [
+   "d_underattack.ogg",
+   "d_underattack.1.ogg"
+  ]
+ },
+ "d_tank_ack": {
+  "rwm_name": "d_tank_ack",
+  "files": [
+   "d_tank_ack.ogg",
+   "d_tank_ack.1.ogg"
+  ]
+ },
+ "d_tank_attack": {
+  "rwm_name": "d_tank_attack",
+  "files": [
+   "d_tank_attack.ogg",
+   "d_tank_attack.1.ogg"
+  ]
+ },
+ "d_tank_enemy": {
+  "rwm_name": "d_tank_enemy",
+  "files": [
+   "d_tank_enemy.ogg"
+  ]
+ },
+ "d_tank_move": {
+  "rwm_name": "d_tank_move",
+  "files": [
+   "d_tank_move.ogg",
+   "d_tank_move.1.ogg",
+   "d_tank_move.2.ogg",
+   "d_tank_move.3.ogg",
+   "d_tank_move.4.ogg"
+  ]
+ },
+ "d_tank_select": {
+  "rwm_name": "d_tank_select",
+  "files": [
+   "d_tank_select.ogg",
+   "d_tank_select.1.ogg"
+  ]
+ },
+ "d_tank_stop": {
+  "rwm_name": "d_tank_stop",
+  "files": [
+   "d_tank_stop.ogg"
+  ]
+ },
+ "d_trans_ack": {
+  "rwm_name": "d_trans_ack",
+  "files": [
+   "d_trans_ack.ogg",
+   "d_trans_ack.1.ogg",
+   "d_trans_ack.2.ogg",
+   "d_trans_ack.3.ogg",
+   "d_trans_ack.4.ogg"
+  ]
+ },
+ "d_trans_move": {
+  "rwm_name": "d_trans_move",
+  "files": [
+   "d_trans_move.ogg",
+   "d_trans_move.1.ogg",
+   "d_trans_move.2.ogg"
+  ]
+ },
+ "d_trans_select": {
+  "rwm_name": "d_trans_select",
+  "files": [
+   "d_trans_select.ogg"
+  ]
+ },
+ "d_vet_ack": {
+  "rwm_name": "d_vet_ack",
+  "files": [
+   "d_vet_ack.ogg",
+   "d_vet_ack.1.ogg"
+  ]
+ },
+ "d_vet_attack": {
+  "rwm_name": "d_vet_attack",
+  "files": [
+   "d_vet_attack.ogg",
+   "d_vet_attack.1.ogg",
+   "d_vet_attack.2.ogg",
+   "d_vet_attack.3.ogg",
+   "d_vet_attack.4.ogg",
+   "d_vet_attack.5.ogg"
+  ]
+ },
+ "d_vet_move": {
+  "rwm_name": "d_vet_move",
+  "files": [
+   "d_vet_move.ogg",
+   "d_vet_move.1.ogg",
+   "d_vet_move.2.ogg"
+  ]
+ },
+ "d_vet_search": {
+  "rwm_name": "d_vet_search",
+  "files": [
+   "d_vet_search.ogg"
+  ]
+ },
+ "d_vet_select": {
+  "rwm_name": "d_vet_select",
+  "files": [
+   "d_vet_select.ogg",
+   "d_vet_select.1.ogg"
+  ]
+ },
+ "i_sold_attack": {
+  "rwm_name": "i_sold_attack",
+  "files": [
+   "i_sold_attack.ogg",
+   "i_sold_attack.1.ogg",
+   "i_sold_attack.2.ogg",
+   "i_sold_attack.3.ogg"
+  ]
+ },
+ "i_sold_startattack": {
+  "rwm_name": "i_sold_startattack",
+  "files": [
+   "i_sold_startattack.ogg",
+   "i_sold_startattack.1.ogg",
+   "i_sold_startattack.2.ogg",
+   "i_sold_startattack.3.ogg",
+   "i_sold_startattack.4.ogg"
+  ]
+ },
+ "i_sold_close": {
+  "rwm_name": "i_sold_close",
+  "files": [
+   "i_sold_close.ogg",
+   "i_sold_close.1.ogg",
+   "i_sold_close.2.ogg"
+  ]
+ },
+ "i_sold_enemy": {
+  "rwm_name": "i_sold_enemy",
+  "files": [
+   "i_sold_enemy.ogg",
+   "i_sold_enemy.1.ogg"
+  ]
+ },
+ "i_sold_laymine": {
+  "rwm_name": "i_sold_laymine",
+  "files": [
+   "i_sold_laymine.ogg"
+  ]
+ },
+ "i_sold_getmine": {
+  "rwm_name": "i_sold_getmine",
+  "files": [
+   "i_sold_getmine.ogg"
+  ]
+ },
+ "i_sold_move": {
+  "rwm_name": "i_sold_move",
+  "files": [
+   "i_sold_move.ogg",
+   "i_sold_move.1.ogg",
+   "i_sold_move.2.ogg",
+   "i_sold_move.3.ogg"
+  ]
+ },
+ "i_sold_noammo": {
+  "rwm_name": "i_sold_noammo",
+  "files": [
+   "i_sold_noammo.ogg",
+   "i_sold_noammo.1.ogg",
+   "i_sold_noammo.2.ogg"
+  ]
+ },
+ "i_sold_select": {
+  "rwm_name": "i_sold_select",
+  "files": [
+   "i_sold_select.ogg",
+   "i_sold_select.1.ogg",
+   "i_sold_select.2.ogg",
+   "i_sold_select.3.ogg",
+   "i_sold_select.4.ogg"
+  ]
+ },
+ "i_sold_stop": {
+  "rwm_name": "i_sold_stop",
+  "files": [
+   "i_sold_stop.ogg",
+   "i_sold_stop.1.ogg"
+  ]
+ },
+ "i_sold_underattack": {
+  "rwm_name": "i_sold_underattack",
+  "files": [
+   "i_sold_underattack.ogg",
+   "i_sold_underattack.1.ogg"
+  ]
+ },
+ "i_tank_attack": {
+  "rwm_name": "i_tank_attack",
+  "files": [
+   "i_tank_attack.ogg",
+   "i_tank_attack.1.ogg",
+   "i_tank_attack.2.ogg",
+   "i_tank_attack.3.ogg"
+  ]
+ },
+ "i_tank_startattack": {
+  "rwm_name": "i_tank_startattack",
+  "files": [
+   "i_tank_startattack.ogg",
+   "i_tank_startattack.1.ogg",
+   "i_tank_startattack.2.ogg",
+   "i_tank_startattack.3.ogg",
+   "i_tank_startattack.4.ogg"
+  ]
+ },
+ "i_tank_enemy": {
+  "rwm_name": "i_tank_enemy",
+  "files": [
+   "i_tank_enemy.ogg",
+   "i_tank_enemy.1.ogg"
+  ]
+ },
+ "i_tank_move": {
+  "rwm_name": "i_tank_move",
+  "files": [
+   "i_tank_move.ogg",
+   "i_tank_move.1.ogg",
+   "i_tank_move.2.ogg",
+   "i_tank_move.3.ogg"
+  ]
+ },
+ "i_tank_noammo": {
+  "rwm_name": "i_tank_noammo",
+  "files": [
+   "i_tank_noammo.ogg",
+   "i_tank_noammo.1.ogg",
+   "i_tank_noammo.2.ogg"
+  ]
+ },
+ "i_tank_pickup": {
+  "rwm_name": "i_tank_pickup",
+  "files": [
+   "i_tank_pickup.ogg",
+   "i_tank_pickup.1.ogg",
+   "i_tank_pickup.2.ogg"
+  ]
+ },
+ "i_tank_rotate": {
+  "rwm_name": "i_tank_rotate",
+  "files": [
+   "i_tank_rotate.ogg",
+   "i_tank_rotate.1.ogg"
+  ]
+ },
+ "i_tank_select": {
+  "rwm_name": "i_tank_select",
+  "files": [
+   "i_tank_select.ogg",
+   "i_tank_select.1.ogg",
+   "i_tank_select.2.ogg",
+   "i_tank_select.3.ogg",
+   "i_tank_select.4.ogg"
+  ]
+ },
+ "i_tank_stop": {
+  "rwm_name": "i_tank_stop",
+  "files": [
+   "i_tank_stop.ogg",
+   "i_tank_stop.1.ogg"
+  ]
+ },
+ "j_sold_startattack": {
+  "rwm_name": "j_sold_startattack",
+  "files": [
+   "j_sold_startattack.ogg",
+   "j_sold_startattack.1.ogg",
+   "j_sold_startattack.2.ogg",
+   "j_sold_startattack.3.ogg",
+   "j_sold_startattack.4.ogg"
+  ]
+ },
+ "j_sold_attack": {
+  "rwm_name": "j_sold_attack",
+  "files": [
+   "j_sold_attack.ogg",
+   "j_sold_attack.1.ogg",
+   "j_sold_attack.2.ogg",
+   "j_sold_attack.3.ogg"
+  ]
+ },
+ "j_sold_close": {
+  "rwm_name": "j_sold_close",
+  "files": [
+   "j_sold_close.ogg",
+   "j_sold_close.1.ogg",
+   "j_sold_close.2.ogg"
+  ]
+ },
+ "j_sold_enemy": {
+  "rwm_name": "j_sold_enemy",
+  "files": [
+   "j_sold_enemy.ogg",
+   "j_sold_enemy.1.ogg"
+  ]
+ },
+ "j_sold_laymine": {
+  "rwm_name": "j_sold_laymine",
+  "files": [
+   "j_sold_laymine.ogg"
+  ]
+ },
+ "j_sold_getmine": {
+  "rwm_name": "j_sold_getmine",
+  "files": [
+   "j_sold_getmine.ogg"
+  ]
+ },
+ "j_sold_move": {
+  "rwm_name": "j_sold_move",
+  "files": [
+   "j_sold_move.ogg",
+   "j_sold_move.1.ogg",
+   "j_sold_move.2.ogg",
+   "j_sold_move.3.ogg"
+  ]
+ },
+ "j_sold_noammo": {
+  "rwm_name": "j_sold_noammo",
+  "files": [
+   "j_sold_noammo.ogg",
+   "j_sold_noammo.1.ogg",
+   "j_sold_noammo.2.ogg"
+  ]
+ },
+ "j_sold_select": {
+  "rwm_name": "j_sold_select",
+  "files": [
+   "j_sold_select.ogg",
+   "j_sold_select.1.ogg",
+   "j_sold_select.2.ogg",
+   "j_sold_select.3.ogg",
+   "j_sold_select.4.ogg"
+  ]
+ },
+ "j_sold_stop": {
+  "rwm_name": "j_sold_stop",
+  "files": [
+   "j_sold_stop.ogg",
+   "j_sold_stop.1.ogg"
+  ]
+ },
+ "j_sold_underattack": {
+  "rwm_name": "j_sold_underattack",
+  "files": [
+   "j_sold_underattack.ogg",
+   "j_sold_underattack.1.ogg"
+  ]
+ },
+ "j_tank_attack": {
+  "rwm_name": "j_tank_attack",
+  "files": [
+   "j_tank_attack.ogg",
+   "j_tank_attack.1.ogg",
+   "j_tank_attack.2.ogg",
+   "j_tank_attack.3.ogg"
+  ]
+ },
+ "j_tank_enemy": {
+  "rwm_name": "j_tank_enemy",
+  "files": [
+   "j_tank_enemy.ogg",
+   "j_tank_enemy.1.ogg"
+  ]
+ },
+ "j_tank_move": {
+  "rwm_name": "j_tank_move",
+  "files": [
+   "j_tank_move.ogg",
+   "j_tank_move.1.ogg",
+   "j_tank_move.2.ogg",
+   "j_tank_move.3.ogg"
+  ]
+ },
+ "j_tank_noammo": {
+  "rwm_name": "j_tank_noammo",
+  "files": [
+   "j_tank_noammo.ogg",
+   "j_tank_noammo.1.ogg",
+   "j_tank_noammo.2.ogg"
+  ]
+ },
+ "j_tank_pickup": {
+  "rwm_name": "j_tank_pickup",
+  "files": [
+   "j_tank_pickup.ogg",
+   "j_tank_pickup.1.ogg",
+   "j_tank_pickup.2.ogg"
+  ]
+ },
+ "j_tank_repair": {
+  "rwm_name": "j_tank_repair",
+  "files": [
+   "j_tank_repair.ogg"
+  ]
+ },
+ "j_tank_rotate": {
+  "rwm_name": "j_tank_rotate",
+  "files": [
+   "j_tank_rotate.ogg",
+   "j_tank_rotate.1.ogg"
+  ]
+ },
+ "j_tank_select": {
+  "rwm_name": "j_tank_select",
+  "files": [
+   "j_tank_select.ogg",
+   "j_tank_select.1.ogg",
+   "j_tank_select.2.ogg",
+   "j_tank_select.3.ogg"
+  ]
+ },
+ "j_tank_stop": {
+  "rwm_name": "j_tank_stop",
+  "files": [
+   "j_tank_stop.ogg",
+   "j_tank_stop.1.ogg"
+  ]
+ },
+ "r_art_ack": {
+  "rwm_name": "r_art_ack",
+  "files": [
+   "r_art_ack.ogg",
+   "r_art_ack.1.ogg"
+  ]
+ },
+ "r_art_noammo": {
+  "rwm_name": "r_art_noammo",
+  "files": [
+   "r_art_noammo.ogg",
+   "r_art_noammo.1.ogg"
+  ]
+ },
+ "r_art_attack": {
+  "rwm_name": "r_art_attack",
+  "files": [
+   "r_art_attack.ogg"
+  ]
+ },
+ "r_art_attack_dir": {
+  "rwm_name": "r_art_attack_dir",
+  "files": [
+   "r_art_attack_dir.ogg",
+   "r_art_attack_dir.1.ogg",
+   "r_art_attack_dir.2.ogg"
+  ]
+ },
+ "r_art_select": {
+  "rwm_name": "r_art_select",
+  "files": [
+   "r_art_select.ogg",
+   "r_art_select.1.ogg",
+   "r_art_select.2.ogg"
+  ]
+ },
+ "r_off_mine": {
+  "rwm_name": "r_off_mine",
+  "files": [
+   "r_off_mine.ogg"
+  ]
+ },
+ "r_off_ack": {
+  "rwm_name": "r_off_ack",
+  "files": [
+   "r_off_ack.ogg",
+   "r_off_ack.1.ogg",
+   "r_off_ack.2.ogg",
+   "r_off_ack.3.ogg",
+   "r_off_ack.4.ogg"
+  ]
+ },
+ "r_off_stop": {
+  "rwm_name": "r_off_stop",
+  "files": [
+   "r_off_stop.ogg"
+  ]
+ },
+ "r_off_select": {
+  "rwm_name": "r_off_select",
+  "files": [
+   "r_off_select.ogg",
+   "r_off_select.1.ogg"
+  ]
+ },
+ "r_pilot_ack": {
+  "rwm_name": "r_pilot_ack",
+  "files": [
+   "r_pilot_ack.ogg",
+   "r_pilot_ack.1.ogg"
+  ]
+ },
+ "r_plane_ack": {
+  "rwm_name": "r_plane_ack",
+  "files": [
+   "r_plane_ack.ogg",
+   "r_plane_ack.1.ogg"
+  ]
+ },
+ "r_plane_move": {
+  "rwm_name": "r_plane_move",
+  "files": [
+   "r_plane_move.ogg",
+   "r_plane_move.1.ogg",
+   "r_plane_move.2.ogg"
+  ]
+ },
+ "r_sold_ack": {
+  "rwm_name": "r_sold_ack",
+  "files": [
+   "r_sold_ack.ogg",
+   "r_sold_ack.1.ogg",
+   "r_sold_ack.2.ogg"
+  ]
+ },
+ "r_sold_assault": {
+  "rwm_name": "r_sold_assault",
+  "files": [
+   "r_sold_assault.ogg"
+  ]
+ },
+ "r_sold_attack": {
+  "rwm_name": "r_sold_attack",
+  "files": [
+   "r_sold_attack.ogg",
+   "r_sold_attack.1.ogg"
+  ]
+ },
+ "r_sold_enemy": {
+  "rwm_name": "r_sold_enemy",
+  "files": [
+   "r_sold_enemy.ogg"
+  ]
+ },
+ "r_sold_select": {
+  "rwm_name": "r_sold_select",
+  "files": [
+   "r_sold_select.ogg"
+  ]
+ },
+ "r_sold_noammo": {
+  "rwm_name": "r_sold_noammo",
+  "files": [
+   "r_sold_noammo.ogg"
+  ]
+ },
+ "r_tank_ack": {
+  "rwm_name": "r_tank_ack",
+  "files": [
+   "r_tank_ack.ogg"
+  ]
+ },
+ "r_tank_noammo": {
+  "rwm_name": "r_tank_noammo",
+  "files": [
+   "r_tank_noammo.ogg"
+  ]
+ },
+ "r_tank_attack": {
+  "rwm_name": "r_tank_attack",
+  "files": [
+   "r_tank_attack.ogg",
+   "r_tank_attack.1.ogg"
+  ]
+ },
+ "r_tank_stop": {
+  "rwm_name": "r_tank_stop",
+  "files": [
+   "r_tank_stop.ogg"
+  ]
+ },
+ "r_tank_enemy": {
+  "rwm_name": "r_tank_enemy",
+  "files": [
+   "r_tank_enemy.ogg"
+  ]
+ },
+ "r_tank_close": {
+  "rwm_name": "r_tank_close",
+  "files": [
+   "r_tank_close.ogg"
+  ]
+ },
+ "r_tank_move": {
+  "rwm_name": "r_tank_move",
+  "files": [
+   "r_tank_move.ogg",
+   "r_tank_move.1.ogg"
+  ]
+ },
+ "r_tank_select": {
+  "rwm_name": "r_tank_select",
+  "files": [
+   "r_tank_select.ogg",
+   "r_tank_select.1.ogg"
+  ]
+ },
+ "r_trans_ack": {
+  "rwm_name": "r_trans_ack",
+  "files": [
+   "r_trans_ack.ogg",
+   "r_trans_ack.1.ogg"
+  ]
+ },
+ "r_trans_move": {
+  "rwm_name": "r_trans_move",
+  "files": [
+   "r_trans_move.ogg"
+  ]
+ },
+ "r_trans_select": {
+  "rwm_name": "r_trans_select",
+  "files": [
+   "r_trans_select.ogg"
+  ]
+ },
+ "r_sap_select": {
+  "rwm_name": "r_sap_select",
+  "files": [
+   "r_sap_select.ogg"
+  ]
+ },
+ "r_sap_repair": {
+  "rwm_name": "r_sap_repair",
+  "files": [
+   "r_sap_repair.ogg",
+   "r_sap_repair.1.ogg"
+  ]
+ },
+ "r_sap_ack": {
+  "rwm_name": "r_sap_ack",
+  "files": [
+   "r_sap_ack.ogg",
+   "r_sap_ack.1.ogg",
+   "r_sap_ack.2.ogg"
+  ]
+ },
+ "a_sold_attack": {
+  "rwm_name": "a_sold_attack",
+  "files": [
+   "a_sold_attack.ogg",
+   "a_sold_attack.1.ogg",
+   "a_sold_attack.2.ogg",
+   "a_sold_attack.3.ogg"
+  ]
+ },
+ "a_sold_startattack": {
+  "rwm_name": "a_sold_startattack",
+  "files": [
+   "a_sold_startattack.ogg",
+   "a_sold_startattack.1.ogg",
+   "a_sold_startattack.2.ogg",
+   "a_sold_startattack.3.ogg",
+   "a_sold_startattack.4.ogg"
+  ]
+ },
+ "a_sold_close": {
+  "rwm_name": "a_sold_close",
+  "files": [
+   "a_sold_close.ogg",
+   "a_sold_close.1.ogg",
+   "a_sold_close.2.ogg"
+  ]
+ },
+ "a_sold_enemy": {
+  "rwm_name": "a_sold_enemy",
+  "files": [
+   "a_sold_enemy.ogg",
+   "a_sold_enemy.1.ogg"
+  ]
+ },
+ "a_sold_laymine": {
+  "rwm_name": "a_sold_laymine",
+  "files": [
+   "a_sold_laymine.ogg"
+  ]
+ },
+ "a_sold_getmine": {
+  "rwm_name": "a_sold_getmine",
+  "files": [
+   "a_sold_getmine.ogg"
+  ]
+ },
+ "a_sold_move": {
+  "rwm_name": "a_sold_move",
+  "files": [
+   "a_sold_move.ogg",
+   "a_sold_move.1.ogg",
+   "a_sold_move.2.ogg",
+   "a_sold_move.3.ogg"
+  ]
+ },
+ "a_sold_noammo": {
+  "rwm_name": "a_sold_noammo",
+  "files": [
+   "a_sold_noammo.ogg",
+   "a_sold_noammo.1.ogg",
+   "a_sold_noammo.2.ogg"
+  ]
+ },
+ "a_sold_rotate": {
+  "rwm_name": "a_sold_rotate",
+  "files": [
+   "a_sold_rotate.ogg",
+   "a_sold_rotate.1.ogg"
+  ]
+ },
+ "a_sold_select": {
+  "rwm_name": "a_sold_select",
+  "files": [
+   "a_sold_select.ogg",
+   "a_sold_select.1.ogg",
+   "a_sold_select.2.ogg",
+   "a_sold_select.3.ogg",
+   "a_sold_select.4.ogg"
+  ]
+ },
+ "a_sold_stop": {
+  "rwm_name": "a_sold_stop",
+  "files": [
+   "a_sold_stop.ogg",
+   "a_sold_stop.1.ogg"
+  ]
+ },
+ "a_sold_underattack": {
+  "rwm_name": "a_sold_underattack",
+  "files": [
+   "a_sold_underattack.ogg",
+   "a_sold_underattack.1.ogg"
+  ]
+ },
+ "a_tank_attack": {
+  "rwm_name": "a_tank_attack",
+  "files": [
+   "a_tank_attack.ogg",
+   "a_tank_attack.1.ogg",
+   "a_tank_attack.2.ogg",
+   "a_tank_attack.3.ogg"
+  ]
+ },
+ "a_tank_startattack": {
+  "rwm_name": "a_tank_startattack",
+  "files": [
+   "a_tank_startattack.ogg",
+   "a_tank_startattack.1.ogg",
+   "a_tank_startattack.2.ogg",
+   "a_tank_startattack.3.ogg",
+   "a_tank_startattack.4.ogg"
+  ]
+ },
+ "a_tank_enemy": {
+  "rwm_name": "a_tank_enemy",
+  "files": [
+   "a_tank_enemy.ogg",
+   "a_tank_enemy.1.ogg"
+  ]
+ },
+ "a_tank_move": {
+  "rwm_name": "a_tank_move",
+  "files": [
+   "a_tank_move.ogg",
+   "a_tank_move.1.ogg",
+   "a_tank_move.2.ogg",
+   "a_tank_move.3.ogg"
+  ]
+ },
+ "a_tank_noammo": {
+  "rwm_name": "a_tank_noammo",
+  "files": [
+   "a_tank_noammo.ogg",
+   "a_tank_noammo.1.ogg",
+   "a_tank_noammo.2.ogg"
+  ]
+ },
+ "a_tank_pickup": {
+  "rwm_name": "a_tank_pickup",
+  "files": [
+   "a_tank_pickup.ogg",
+   "a_tank_pickup.1.ogg",
+   "a_tank_pickup.2.ogg"
+  ]
+ },
+ "a_tank_repair": {
+  "rwm_name": "a_tank_repair",
+  "files": [
+   "a_tank_repair.ogg",
+   "a_tank_repair.1.ogg"
+  ]
+ },
+ "a_tank_rotate": {
+  "rwm_name": "a_tank_rotate",
+  "files": [
+   "a_tank_rotate.ogg",
+   "a_tank_rotate.1.ogg"
+  ]
+ },
+ "a_tank_select": {
+  "rwm_name": "a_tank_select",
+  "files": [
+   "a_tank_select.ogg",
+   "a_tank_select.1.ogg",
+   "a_tank_select.2.ogg",
+   "a_tank_select.3.ogg",
+   "a_tank_select.4.ogg"
+  ]
+ },
+ "a_tank_stop": {
+  "rwm_name": "a_tank_stop",
+  "files": [
+   "a_tank_stop.ogg",
+   "a_tank_stop.1.ogg"
+  ]
+ },
+ "a_tank_underattack": {
+  "rwm_name": "a_tank_underattack",
+  "files": [
+   "a_tank_underattack.ogg",
+   "a_tank_underattack.1.ogg"
+  ]
+ },
+ "a_off_move": {
+  "rwm_name": "a_off_move",
+  "files": [
+   "a_off_move.ogg",
+   "a_off_move.1.ogg"
+  ]
+ },
+ "a_off_attack": {
+  "rwm_name": "a_off_attack",
+  "files": [
+   "a_off_attack.ogg"
+  ]
+ },
+ "a_off_select": {
+  "rwm_name": "a_off_select",
+  "files": [
+   "a_off_select.ogg",
+   "a_off_select.1.ogg"
+  ]
+ },
+ "a_off_startattack": {
+  "rwm_name": "a_off_startattack",
+  "files": [
+   "a_off_startattack.ogg",
+   "a_off_startattack.1.ogg"
+  ]
+ },
+ "a_off_mines": {
+  "rwm_name": "a_off_mines",
+  "files": [
+   "a_off_mines.ogg"
+  ]
+ },
+ "a_off_underattack": {
+  "rwm_name": "a_off_underattack",
+  "files": [
+   "a_off_underattack.ogg"
+  ]
+ },
+ "screamofpain": {
+  "rwm_name": "screamofpain",
+  "files": [
+   "screamofpain.ogg",
+   "screamofpain.1.ogg",
+   "screamofpain.2.ogg",
+   "screamofpain.3.ogg",
+   "screamofpain.4.ogg"
+  ]
+ },
+ "e_airraid_siren": {
+  "rwm_name": "$e_airraid_siren",
+  "files": [
+   "e_airraid_siren.ogg"
+  ]
+ },
+ "e_airraid": {
+  "rwm_name": "$e_airraid",
+  "files": [
+   "e_airraid.ogg",
+   "e_airraid.1.ogg"
+  ]
+ },
+ "e_watchout": {
+  "rwm_name": "$e_watchout",
+  "files": [
+   "e_watchout.ogg",
+   "e_watchout.1.ogg"
+  ]
+ },
+ "e_trap": {
+  "rwm_name": "$e_trap",
+  "files": [
+   "e_trap.ogg"
+  ]
+ },
+ "e_mines": {
+  "rwm_name": "$e_mines",
+  "files": [
+   "e_mines.ogg"
+  ]
+ },
+ "e_stopretreat": {
+  "rwm_name": "$e_stopretreat",
+  "files": [
+   "e_stopretreat.ogg"
+  ]
+ },
+ "e_reenforcement": {
+  "rwm_name": "$e_reenforcement",
+  "files": [
+   "e_reenforcement.ogg"
+  ]
+ },
+ "e_continue": {
+  "rwm_name": "$e_continue",
+  "files": [
+   "e_continue.ogg"
+  ]
+ },
+ "e_attack": {
+  "rwm_name": "$e_attack",
+  "files": [
+   "e_attack.ogg"
+  ]
+ },
+ "e_alldone": {
+  "rwm_name": "$e_alldone",
+  "files": [
+   "e_alldone.ogg"
+  ]
+ },
+ "e_victory": {
+  "rwm_name": "$e_victory",
+  "files": [
+   "e_victory.ogg"
+  ]
+ },
+ "e_successful": {
+  "rwm_name": "$e_successful",
+  "files": [
+   "e_successful.ogg"
+  ]
+ },
+ "e_fail": {
+  "rwm_name": "$e_fail",
+  "files": [
+   "e_fail.ogg"
+  ]
+ },
+ "e_defeat": {
+  "rwm_name": "$e_defeat",
+  "files": [
+   "e_defeat.ogg"
+  ]
+ },
+ "e_captured": {
+  "rwm_name": "$e_captured",
+  "files": [
+   "e_captured.ogg"
+  ]
+ },
+ "e_xcellent": {
+  "rwm_name": "$e_xcellent",
+  "files": [
+   "e_xcellent.ogg"
+  ]
+ },
+ "e_welldone": {
+  "rwm_name": "$e_welldone",
+  "files": [
+   "e_welldone.ogg",
+   "e_welldone.1.ogg"
+  ]
+ },
+ "e_telegram": {
+  "rwm_name": "$e_telegram",
+  "files": [
+   "e_telegram.ogg"
+  ]
+ },
+ "e_carryonwith": {
+  "rwm_name": "$e_carryonwith",
+  "files": [
+   "e_carryonwith.ogg"
+  ]
+ },
+ "e_missed": {
+  "rwm_name": "$e_missed",
+  "files": [
+   "e_missed.ogg"
+  ]
+ },
+ "e_objective": {
+  "rwm_name": "$e_objective",
+  "files": [
+   "e_objective.ogg"
+  ]
+ },
+ "e_a": {
+  "rwm_name": "$e_a",
+  "files": [
+   "e_a.ogg"
+  ]
+ },
+ "e_b": {
+  "rwm_name": "$e_b",
+  "files": [
+   "e_b.ogg"
+  ]
+ },
+ "e_c": {
+  "rwm_name": "$e_c",
+  "files": [
+   "e_c.ogg"
+  ]
+ },
+ "e_d": {
+  "rwm_name": "$e_d",
+  "files": [
+   "e_d.ogg"
+  ]
+ },
+ "e_e": {
+  "rwm_name": "$e_e",
+  "files": [
+   "e_e.ogg"
+  ]
+ },
+ "pause05sec": {
+  "rwm_name": "$pause05sec",
+  "files": [
+   "pause05sec.ogg"
+  ]
+ }
+}

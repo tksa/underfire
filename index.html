@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Under Fire — A World War II RTS</title>
+  <style>
+    /* Gothic blackletter logo face (German "Germanica" family) */
+    @font-face {
+      font-family: 'Germanica';
+      src: url("fonts/germanica_family/Plain Germanica.ttf") format("truetype");
+      font-display: swap;
+    }
+
+    :root {
+      --bg: #161a1e;
+      --panel: rgba(14, 18, 22, 0.88);
+      --panel-border: rgba(104, 119, 130, 0.36);
+      --text: #d7dde6;
+      --muted: #9fb0c0;
+      --accent: #c9a45d;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      background: #0a0e12;
+      color: var(--text);
+      font-family: Inter, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      user-select: none;
+      height: 100%;
+    }
+
+    /* ── WW2 Film Grain Overlay ─────────────────── */
+    #filmGrain {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.04;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 256px 256px;
+    }
+
+    /* Subtle sepia/desaturated tint over the 3D viewport */
+    #filmTint {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 9998;
+      background: radial-gradient(ellipse at center,
+          transparent 60%,
+          rgba(8, 6, 4, 0.3) 100%);
+      mix-blend-mode: multiply;
+    }
+
+    /* ── Main Menu ─────────────────────────────── */
+    #mainMenu {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      background: #0a0e12;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: Inter, system-ui, sans-serif;
+    }
+
+    #menuBgVideo {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 0;
+      filter: blur(3px) brightness(0.92);
+      transform: scale(1.06); /* hide the soft blurred edges */
+    }
+
+    .menu-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: linear-gradient(rgba(8, 10, 13, 0.5), rgba(8, 10, 13, 0.74));
+      pointer-events: none;
+    }
+
+    #mainMenu.hidden {
+      display: none;
+    }
+
+    /* ── Welcome / Intro gate (shown before the menu) ── */
+    #welcomeGate {
+      position: fixed; inset: 0; z-index: 10001;
+      background:
+        linear-gradient(rgba(8, 10, 13, 0.55), rgba(8, 10, 13, 0.8)),
+        url("splash.png") center / cover no-repeat, #0a0e12;
+      display: flex; align-items: center; justify-content: center;
+      font-family: Inter, system-ui, sans-serif;
+      transition: opacity 0.4s ease;
+    }
+    #welcomeGate.hidden { opacity: 0; pointer-events: none; display: none; }
+    .welcome-panel {
+      width: 640px; max-width: 92vw; max-height: 92vh; overflow-y: auto;
+      background: rgba(20, 23, 28, 0.94);
+      border: 1px solid rgba(106, 114, 126, 0.4); border-radius: 5px;
+      padding: 38px 44px; box-shadow: 0 14px 48px rgba(0, 0, 0, 0.65);
+      text-align: center;
+    }
+
+    /* Homepage layout: main panel + development-path sidebar */
+    .welcome-layout {
+      display: flex; gap: 16px; align-items: flex-start;
+      justify-content: center; flex-wrap: wrap; max-width: 96vw;
+    }
+    .welcome-sidebar {
+      width: 256px; max-width: 92vw; max-height: 92vh; overflow-y: auto;
+      background: rgba(20, 23, 28, 0.94);
+      border: 1px solid rgba(106, 114, 126, 0.4); border-radius: 5px;
+      padding: 26px 22px; box-shadow: 0 14px 48px rgba(0, 0, 0, 0.65);
+      text-align: left;
+    }
+    .ws-title {
+      font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+      color: #c9a45d; margin-bottom: 16px;
+    }
+    /* "now" root node (filled) that forks into possible directions */
+    .ws-root { position: relative; padding-left: 24px; margin-bottom: 8px; }
+    .ws-root::before {
+      content: ''; position: absolute; left: 4px; top: 3px;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: #c9a45d; box-shadow: 0 0 0 3px rgba(201, 164, 93, 0.18);
+    }
+    .ws-branches { list-style: none; margin: 0 0 0 10px; padding: 0; position: relative; }
+    .ws-branches::before { /* the trunk */
+      content: ''; position: absolute; left: 0; top: -10px; bottom: 16px;
+      width: 1px; background: rgba(201, 164, 93, 0.45);
+    }
+    .ws-branches li { position: relative; padding-left: 24px; margin-bottom: 14px; }
+    .ws-branches li:last-child { margin-bottom: 0; }
+    .ws-branches li::before { /* elbow connector */
+      content: ''; position: absolute; left: 0; top: 8px; width: 14px; height: 1px;
+      background: rgba(201, 164, 93, 0.45);
+    }
+    .ws-branches li::after { /* open branch node */
+      content: ''; position: absolute; left: 9px; top: 4px;
+      width: 9px; height: 9px; border-radius: 50%;
+      background: #181b20; border: 1px solid rgba(201, 164, 93, 0.65);
+    }
+    .ws-name { display: block; font-size: 13px; font-weight: 600; color: #e6ebf0; }
+    .ws-det { display: block; font-size: 11.5px; line-height: 1.45; color: #9aa6b4; margin-top: 2px; }
+    /* Neural renderer = the ideal destination branch */
+    .ws-branches li.ws-ideal::after {
+      background: #c9a45d; border-color: #c9a45d; box-shadow: 0 0 0 3px rgba(201, 164, 93, 0.18);
+    }
+    .ws-ideal .ws-name { display: inline; color: #e8c97a; }
+    .ws-badge {
+      display: inline-block; font-size: 9px; text-transform: uppercase; letter-spacing: 1px;
+      color: #c9a45d; border: 1px solid rgba(201, 164, 93, 0.5); border-radius: 10px;
+      padding: 1px 6px; margin-left: 4px; vertical-align: middle;
+    }
+    /* Language selector (top-right) */
+    #langBar {
+      position: fixed;
+      top: 12px;
+      right: 14px;
+      z-index: 10002;
+      display: flex;
+      gap: 5px;
+      background: rgba(16, 18, 22, 0.55);
+      border: 1px solid rgba(106, 114, 126, 0.35);
+      border-radius: 20px;
+      padding: 4px 6px;
+      backdrop-filter: blur(4px);
+    }
+    .lang-btn {
+      width: 26px;
+      height: 22px;
+      border: none;
+      border-radius: 14px;
+      background: transparent;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      opacity: 0.55;
+      transition: all 0.15s;
+    }
+    .lang-btn:hover { opacity: 1; background: rgba(255, 255, 255, 0.08); }
+    .lang-btn.active {
+      opacity: 1;
+      background: rgba(201, 164, 93, 0.25);
+      box-shadow: inset 0 0 0 1px rgba(201, 164, 93, 0.7);
+    }
+
+    #welcomeGate .menu-title {
+      font-size: 88px;
+      margin-bottom: 6px;
+    }
+
+    #menuLogo {
+      cursor: pointer;
+      transition: filter 0.15s;
+    }
+    #menuLogo:hover { filter: brightness(1.18); }
+    /* Pair the tag directly under the "World War II" subtitle */
+    #welcomeGate .menu-subtitle { margin-bottom: 4px; }
+
+    .welcome-tag {
+      font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+      color: #c9a45d; margin-bottom: 22px;
+    }
+    .welcome-lead {
+      font-size: 20px; line-height: 1.45; color: #d2d8e0;
+      margin: 0 auto 12px; max-width: 560px; font-weight: 500;
+    }
+    .welcome-lead strong { color: #f0f3f7; }
+    .welcome-sub {
+      font-size: 15px; line-height: 1.5; color: #9aa6b4;
+      margin: 0 auto; max-width: 520px;
+    }
+    .welcome-points {
+      list-style: none; padding: 0; margin: 6px 0 4px;
+      text-align: left;
+    }
+    .welcome-points li {
+      position: relative; padding-left: 24px; margin-bottom: 15px;
+      font-size: 17px; line-height: 1.45; color: #d2d8e0;
+    }
+    .welcome-points li:last-child { margin-bottom: 0; }
+    .welcome-points li::before {
+      content: '▸'; position: absolute; left: 0; top: 0; color: #c9a45d;
+    }
+    .welcome-points strong { color: #f0f3f7; }
+    .welcome-areas {
+      display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+      margin: 20px 0 4px;
+    }
+    .welcome-chip {
+      font-size: 11px; color: #aeb6c2; padding: 5px 12px;
+      border: 1px solid rgba(106, 114, 126, 0.4); border-radius: 20px;
+      background: rgba(30, 33, 39, 0.6);
+    }
+    .welcome-actions {
+      display: flex; gap: 12px; justify-content: center; margin-top: 26px;
+      flex-wrap: wrap;
+    }
+    .welcome-enter {
+      padding: 14px 40px; font-size: 16px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 2px; color: #0a0e12;
+      background: linear-gradient(to bottom, #d4b060, #a88a3a);
+      border: none; border-radius: 3px; cursor: pointer; transition: all 0.15s;
+    }
+    .welcome-enter:hover { background: linear-gradient(to bottom, #e0c070, #b8994a); }
+    .welcome-link {
+      padding: 13px 22px; font-size: 13px; font-weight: 600; letter-spacing: 1px;
+      color: #d7dde6; text-decoration: none;
+      background: rgba(40, 44, 52, 0.8); border: 1px solid rgba(106, 114, 126, 0.45);
+      border-radius: 3px; transition: all 0.15s;
+      display: inline-flex; align-items: center; gap: 7px;
+    }
+    .welcome-link:hover { background: rgba(58, 63, 72, 0.9); border-color: rgba(126, 134, 146, 0.6); }
+    .welcome-foot {
+      margin: 24px -22px 0; font-size: 12px; line-height: 1.75;
+      color: #7e8794;
+    }
+    .welcome-foot a { color: #9aa6b4; }
+    .welcome-foot strong { color: #b6bdc8; }
+    .menu-version {
+      margin-top: 14px; text-align: center; font-size: 10px;
+      letter-spacing: 1px; color: #6a727e;
+    }
+
+    /* ── Welcome gate: "Build it with Claude" box ── */
+    .welcome-claude {
+      margin: 22px 0 0; text-align: left;
+      border: 1px solid rgba(106, 114, 126, 0.4); border-radius: 4px;
+      background: rgba(30, 33, 39, 0.55); padding: 14px 18px;
+    }
+    .wc-title {
+      font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+      color: #c9a45d; margin-bottom: 9px;
+    }
+    .wc-steps { margin: 0; padding-left: 20px; }
+    .wc-steps li { font-size: 13.5px; line-height: 1.55; color: #b6bdc8; margin-bottom: 6px; }
+    .wc-steps li:last-child { margin-bottom: 0; }
+    .wc-steps strong { color: #e6ebf0; }
+
+    /* ── Start-mission menu: "Latest Updates" panel ── */
+    .menu-updates { max-height: 120px; overflow-y: auto; padding-right: 4px; }
+    .update-entry { margin-bottom: 9px; }
+    .update-entry:last-child { margin-bottom: 0; }
+    .update-ver { font-size: 11px; font-weight: 600; color: #c9a45d; }
+    .update-ver .ud-date { color: #7e8794; font-weight: 400; margin-left: 6px; }
+    .update-notes { margin: 3px 0 0; padding-left: 16px; }
+    .update-notes li { font-size: 11px; line-height: 1.5; color: #9aa6b4; margin-bottom: 2px; }
+
+    .menu-panel {
+      position: relative;
+      z-index: 2;
+      width: 580px;
+      max-height: 90vh;
+      overflow-y: auto;
+      background: rgba(22, 25, 30, 0.96);
+      border: 1px solid rgba(106, 114, 126, 0.4);
+      border-radius: 4px;
+      padding: 32px 36px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    .menu-title {
+      font-family: 'Germanica', 'Times New Roman', serif;
+      font-size: 56px;
+      font-weight: 400;
+      white-space: nowrap;
+      color: #b9c0c8;
+      background: linear-gradient(to bottom, #e6ebf0 0%, #aab2bc 45%, #6c7480 55%, #9aa2ac 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-transform: none;
+      letter-spacing: 2px;
+      line-height: 1.05;
+      text-align: center;
+      margin-bottom: 2px;
+      filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.7));
+    }
+
+    .menu-subtitle {
+      font-size: 12px;
+      color: #888f9c;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 24px;
+    }
+
+    .menu-section {
+      margin-bottom: 20px;
+    }
+
+    .menu-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #a0a8b4;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 8px;
+      border-bottom: 1px solid rgba(106, 114, 126, 0.3);
+      padding-bottom: 4px;
+    }
+
+    .mission-card {
+      padding: 10px 14px;
+      margin-bottom: 6px;
+      border: 1px solid rgba(102, 108, 120, 0.3);
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: rgba(30, 33, 39, 0.6);
+    }
+
+    .mission-card:hover {
+      background: rgba(52, 56, 64, 0.6);
+      border-color: rgba(126, 134, 146, 0.5);
+    }
+
+    .mission-card.selected {
+      background: rgba(58, 63, 72, 0.7);
+      border-color: #c9a45d;
+      box-shadow: 0 0 8px rgba(201, 164, 93, 0.15);
+    }
+
+    .mission-card .mc-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #d7dde6;
+    }
+
+    .mission-card .mc-desc {
+      font-size: 11px;
+      color: #8e96a2;
+      margin-top: 2px;
+    }
+
+    .side-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .side-btn {
+      flex: 1;
+      padding: 10px;
+      text-align: center;
+      border: 1px solid rgba(102, 108, 120, 0.3);
+      border-radius: 3px;
+      cursor: pointer;
+      background: rgba(30, 33, 39, 0.6);
+      color: #d7dde6;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+
+    .side-btn:hover {
+      background: rgba(52, 56, 64, 0.6);
+    }
+
+    .side-btn.selected {
+      border-color: #c9a45d;
+      background: rgba(58, 63, 72, 0.7);
+      color: #c9a45d;
+    }
+
+    .side-btn.disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      filter: grayscale(0.8);
+    }
+    .side-btn.disabled:hover { background: rgba(30, 33, 39, 0.6); border-color: rgba(102, 108, 120, 0.3); }
+    .side-soon {
+      font-size: 9px; text-transform: uppercase; letter-spacing: 1px;
+      color: #c9a45d; border: 1px solid rgba(201, 164, 93, 0.5);
+      border-radius: 10px; padding: 1px 6px; margin-left: 4px; vertical-align: middle;
+    }
+
+    .doc-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .doc-row.disabled {
+      opacity: 0.4;
+      filter: grayscale(0.8);
+      pointer-events: none;
+    }
+
+    .doc-btn {
+      flex: 1;
+      padding: 8px 6px;
+      text-align: center;
+      border: 1px solid rgba(102, 108, 120, 0.3);
+      border-radius: 3px;
+      cursor: pointer;
+      background: rgba(30, 33, 39, 0.6);
+      color: #d7dde6;
+      font-size: 11px;
+      transition: all 0.15s;
+    }
+
+    .doc-btn:hover {
+      background: rgba(52, 56, 64, 0.6);
+    }
+
+    .doc-btn.selected {
+      border-color: #c9a45d;
+      background: rgba(58, 63, 72, 0.7);
+    }
+
+    .doc-btn .db-name {
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    .doc-btn .db-desc {
+      font-size: 10px;
+      color: #8e96a2;
+      margin-top: 2px;
+    }
+
+    .menu-start {
+      width: 100%;
+      padding: 14px;
+      margin-top: 16px;
+      font-size: 16px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #0a0e12;
+      background: linear-gradient(to bottom, #d4b060, #a88a3a);
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .menu-start:hover {
+      background: linear-gradient(to bottom, #e0c070, #b8994a);
+    }
+
+    .menu-save-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .menu-save-btn {
+      flex: 1;
+      padding: 8px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #a0a8b4;
+      background: rgba(30, 33, 39, 0.6);
+      border: 1px solid rgba(102, 108, 120, 0.3);
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .menu-save-btn:hover {
+      background: rgba(52, 56, 64, 0.6);
+      color: #d7dde6;
+    }
+
+    /* ── Layout ────────────────────────────────── */
+    #shell {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    #topBar {
+      display: none;
+    }
+
+    .pill {
+      display: none;
+    }
+
+    /* ── 3D Viewport ───────────────────────────── */
+    #viewport {
+      flex: 1;
+      position: relative;
+      cursor: crosshair;
+      overflow: hidden;
+    }
+
+    #viewport canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Pause Banner ──────────────────────────── */
+    #pauseBanner {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      display: none;
+      padding: 6px 22px;
+      background: rgba(14, 18, 22, 0.85);
+      border: 1px solid #c9a45d;
+      border-radius: 3px;
+      color: #c9a45d;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    /* ── Selection Box ─────────────────────────── */
+    #selectionBox {
+      position: fixed;
+      border: 1.5px solid rgba(219, 190, 115, 0.95);
+      background: rgba(219, 190, 115, 0.08);
+      pointer-events: none;
+      display: none;
+      z-index: 20;
+    }
+
+    /* ── HUD Bottom Bar (Sudden Strike style) ── */
+    #hudBar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 160px;
+      display: flex;
+      align-items: stretch;
+      background: linear-gradient(to bottom, #2b2d32, #1c1e22);
+      border-top: 2px solid #454a52;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 -4px 18px rgba(0, 0, 0, 0.45);
+      z-index: 15;
+      font-size: 12px;
+      pointer-events: none;
+    }
+
+    #hudBar>* {
+      pointer-events: auto;
+    }
+
+    .hud-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 8px 16px;
+      border-right: 1px solid rgba(80, 90, 100, 0.18);
+      min-width: 0;
+    }
+
+    .hud-section:last-child {
+      border-right: none;
+    }
+
+    .hud-section.minimap-section {
+      flex: 0 0 200px;
+      padding: 8px;
+      align-items: center;
+      justify-content: center;
+      border-right: 2px solid #34373d;
+    }
+
+    .minimap-frame {
+      width: 180px;
+      height: 140px;
+      background: #0a0c0e;
+      border: 2px solid #5a6068;
+      box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.6);
+    }
+
+    .minimap-frame canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .hud-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(180, 190, 200, 0.7);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 3px;
+    }
+
+    .hud-subtitle {
+      font-size: 14px;
+      font-weight: 600;
+      color: #dfe7ef;
+      margin-bottom: 2px;
+    }
+
+    .hud-unit-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #ecf1f6;
+    }
+
+    .hud-text {
+      font-size: 12px;
+      color: #9aabb8;
+      line-height: 1.5;
+    }
+
+    .hud-text.muted {
+      color: #6a7a87;
+    }
+
+    .hud-status {
+      font-size: 12px;
+      font-weight: 600;
+      color: #d8ba7b;
+    }
+
+    .win {
+      color: #d3e7b5;
+      font-size: 13px;
+    }
+
+    .lose {
+      color: #f1b1a7;
+      font-size: 13px;
+    }
+
+    /* Health / suppression bars */
+    .hud-bar {
+      height: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      margin-top: 3px;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .hud-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.2s ease;
+    }
+
+    .hud-bar-fill.hp {
+      background: #8dbdf7;
+    }
+
+    .hud-bar-fill.supp {
+      background: #d9ab57;
+    }
+
+    #minimapCanvas {
+      image-rendering: pixelated;
+    }
+
+    /* Command (orders) panel */
+    .cmd-section {
+      flex: 0 0 214px;
+      justify-content: flex-start;
+      padding: 10px 12px;
+      border-right: 2px solid #34373d;
+    }
+
+    .cmd-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 4px;
+      flex: 1;
+      width: 100%;
+      margin-top: 5px;
+    }
+
+    .cmd-btn.active {
+      background: linear-gradient(to bottom, #8a7846, #574a2c);
+      border-color: #c9a45d;
+      color: #f0ead0;
+    }
+
+    .cmd-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      background: linear-gradient(to bottom, #34373d, #26282d);
+      border: 1px solid #454b54;
+      border-radius: 3px;
+      color: #c4cad4;
+      font-size: 10px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      user-select: none;
+    }
+
+    .cmd-btn:hover {
+      background: linear-gradient(to bottom, #454b54, #33363c);
+      border-color: #646b76;
+      color: #e8edf4;
+    }
+
+    .cmd-btn:active {
+      background: #23252a;
+    }
+
+    .cmd-btn .cmd-icon {
+      font-size: 17px;
+      margin-bottom: 3px;
+    }
+
+    .cmd-btn .cmd-label {
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      opacity: 0.7;
+    }
+
+    /* Unit info section */
+    .hud-section.info-section {
+      flex: 1;
+      border-left: 2px solid #34373d;
+    }
+
+    /* Formation selector */
+    .fm-section {
+      flex: 0 0 78px !important;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 6px !important;
+      border-right: 2px solid #34373d;
+    }
+
+    .fm-section .hud-title {
+      text-align: center;
+      font-size: 9px;
+      white-space: normal;
+      line-height: 1.25;
+      margin-bottom: 6px;
+    }
+
+    .fm-strip {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .fm-btn {
+      width: 36px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: #8e96a2;
+      background: rgba(40, 43, 49, 0.6);
+      border: 1px solid rgba(102, 108, 120, 0.4);
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .fm-btn:hover {
+      color: #c4cad4;
+      border-color: #8e96a2;
+    }
+
+    .fm-btn.active {
+      color: #c9a45d;
+      border-color: #c9a45d;
+      background: rgba(80, 70, 30, 0.3);
+    }
+
+
+    /* Messages — HUD log panel */
+    .hud-log-section {
+      flex: 0 0 220px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      overflow: hidden;
+      padding: 4px 8px;
+      border-right: 2px solid #34373d;
+      min-width: 220px;
+      max-width: 220px;
+    }
+
+    #gameMessages {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      overflow-y: auto;
+      max-height: 100%;
+      pointer-events: none;
+    }
+
+    #gameMessages::-webkit-scrollbar {
+      width: 3px;
+    }
+
+    #gameMessages::-webkit-scrollbar-thumb {
+      background: rgba(150, 160, 140, 0.3);
+      border-radius: 2px;
+    }
+
+    .game-msg {
+      color: #c4cad4;
+      font-size: 11px;
+      padding: 2px 0;
+      border-bottom: 1px solid rgba(106, 114, 126, 0.15);
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      white-space: normal;
+      animation: msgSlideIn 0.2s ease;
+      opacity: 1;
+      transition: opacity 0.5s ease;
+    }
+
+    .game-msg.fading {
+      opacity: 0;
+    }
+
+    @keyframes msgSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Help button + tooltip */
+    .hud-help-wrap {
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      z-index: 30;
+    }
+
+    .hud-help-btn {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: rgba(52, 56, 64, 0.6);
+      border: 1px solid rgba(106, 114, 126, 0.4);
+      color: #a0a8b4;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .hud-help-btn:hover {
+      color: #c9a45d;
+      border-color: #c9a45d;
+    }
+
+    .hud-help-tooltip {
+      display: none;
+      position: absolute;
+      bottom: 100%;
+      right: 0;
+      margin-bottom: 6px;
+      background: rgba(22, 25, 30, 0.96);
+      border: 1px solid rgba(106, 114, 126, 0.4);
+      border-radius: 4px;
+      padding: 10px 14px;
+      color: #c4cad4;
+      font-size: 10px;
+      line-height: 1.6;
+      white-space: nowrap;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    }
+
+    .hud-help-tooltip.show {
+      display: block;
+    }
+
+    /* Credits */
+    #credits {
+      display: none;
+    }
+
+    /* Debug panel */
+    #debugPanel {
+      position: fixed;
+      top: 40px;
+      left: 12px;
+      background: rgba(20, 24, 28, 0.92);
+      border: 1px solid rgba(80, 90, 100, 0.3);
+      padding: 10px 14px;
+      z-index: 100;
+      pointer-events: all;
+      font-size: 11px;
+      color: #b0bcc8;
+      display: none;
+      min-width: 240px;
+      max-height: calc(100vh - 160px);
+      overflow-y: auto;
+    }
+
+    #debugPanel label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      gap: 8px;
+    }
+
+    #debugPanel input[type=range] {
+      flex: 1;
+      max-width: 120px;
+    }
+
+    #debugPanel .dbg-val {
+      font-family: monospace;
+      color: #d8ba7b;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    #debugPanel .dbg-title {
+      font-weight: 600;
+      color: #dfe7ef;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="shell">
+    <div id="viewport">
+      <!-- Three.js canvas is injected here by engine.js -->
+      <div id="selectionBox"></div>
+    </div>
+    <div id="pauseBanner">⏸ Paused — issue orders, Space to resume</div>
+
+    <!-- Debug Panel -->
+    <div id="debugPanel">
+      <div class="dbg-title">Debug Controls (` to toggle)</div>
+
+      <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Terrain
+      </div>
+      <label>Height Scale
+        <input type="range" id="dbgHeight" min="0.5" max="8" step="0.25" value="3.5">
+        <span class="dbg-val" id="dbgHeightVal">3.50</span>
+      </label>
+      <label>Smooth Passes
+        <input type="range" id="dbgSmooth" min="0" max="30" step="1" value="14">
+        <span class="dbg-val" id="dbgSmoothVal">14</span>
+      </label>
+      <label style="color:#d88">Crater Height Offset
+        <input type="range" id="dbgCrater" min="-0.2" max="1.5" step="0.05" value="0.12">
+        <span class="dbg-val" id="dbgCraterVal">0.12</span>
+      </label>
+      <label>Bump Scale
+        <input type="range" id="dbgBump" min="0" max="2" step="0.05" value="0.3">
+        <span class="dbg-val" id="dbgBumpVal">0.30</span>
+      </label>
+      <label>Roughness
+        <input type="range" id="dbgRough" min="0" max="1" step="0.02" value="0.88">
+        <span class="dbg-val" id="dbgRoughVal">0.88</span>
+      </label>
+      <label>Metalness
+        <input type="range" id="dbgMetal" min="0" max="1" step="0.02" value="0.02">
+        <span class="dbg-val" id="dbgMetalVal">0.02</span>
+      </label>
+      <label>Tex Filter
+        <select id="dbgTexFilter"
+          style="background:#2a3038;color:#dfe7ef;border:1px solid rgba(80,90,100,0.4);font-size:11px;padding:2px 4px">
+          <option value="aniso" selected>Anisotropic</option>
+          <option value="linear">Linear</option>
+          <option value="nearest">Nearest (Pixel)</option>
+        </select>
+      </label>
+      <label>Tex Scale
+        <input type="range" id="dbgTexScale" min="0.5" max="4" step="0.1" value="1">
+        <span class="dbg-val" id="dbgTexScaleVal">1.0</span>
+      </label>
+      <label style="gap:4px"><input type="checkbox" id="dbgFlatShade"> Flat Shading</label>
+
+      <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Lighting
+      </div>
+      <label>Sun Intensity
+        <input type="range" id="dbgSun" min="0" max="3" step="0.05" value="2.8">
+        <span class="dbg-val" id="dbgSunVal">2.80</span>
+      </label>
+      <label>Ambient
+        <input type="range" id="dbgAmbient" min="0" max="2" step="0.05" value="1.3">
+        <span class="dbg-val" id="dbgAmbientVal">1.30</span>
+      </label>
+      <label>Cloud Shadows
+        <input type="range" id="dbgCloud" min="0" max="0.5" step="0.01" value="0.18">
+        <span class="dbg-val" id="dbgCloudVal">0.18</span>
+      </label>
+      <label style="gap:4px"><input type="checkbox" id="dbgDynLight" checked> Dynamic Light</label>
+
+      <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Water</div>
+      <label>Water Level
+        <input type="range" id="dbgWater" min="0" max="1" step="0.01" value="0.63">
+        <span class="dbg-val" id="dbgWaterVal">0.63</span>
+      </label>
+      <label>Water Opacity
+        <input type="range" id="dbgWaterOpacity" min="0" max="1" step="0.02" value="0.76">
+        <span class="dbg-val" id="dbgWaterOpacityVal">0.76</span>
+      </label>
+      <label>Water Roughness
+        <input type="range" id="dbgWaterRough" min="0" max="1" step="0.02" value="0.64">
+        <span class="dbg-val" id="dbgWaterRoughVal">0.64</span>
+      </label>
+      <label>Normal Scale
+        <input type="range" id="dbgWaterNorm" min="0" max="2" step="0.05" value="1.05">
+        <span class="dbg-val" id="dbgWaterNormVal">1.05</span>
+      </label>
+
+      <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Camera
+      </div>
+      <label>Tilt (deg)
+        <input type="range" id="dbgCamTilt" min="15" max="89" step="1" value="35">
+        <span class="dbg-val" id="dbgCamTiltVal">35</span>
+      </label>
+      <label>Min Zoom
+        <input type="range" id="dbgZoomMin" min="2" max="20" step="1" value="16">
+        <span class="dbg-val" id="dbgZoomMinVal">16</span>
+      </label>
+      <label>Max Zoom
+        <input type="range" id="dbgZoomMax" min="20" max="120" step="2" value="34">
+        <span class="dbg-val" id="dbgZoomMaxVal">34</span>
+      </label>
+      <label>Current Zoom
+        <input type="range" id="dbgZoomCur" min="2" max="120" step="1" value="20">
+        <span class="dbg-val" id="dbgZoomCurVal">20</span>
+      </label>
+
+      <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Tank Model
+      </div>
+      <label>Select Tank
+        <select id="dbgTankSelect"
+          style="background:#2a3038;color:#dfe7ef;border:1px solid rgba(80,90,100,0.4);font-size:11px;padding:2px 4px;max-width:120px">
+          <option value="">-- select --</option>
+        </select>
+      </label>
+      <button onclick="Game.dbgScanTank()"
+        style="margin:2px 0 6px;padding:3px 10px;cursor:pointer;background:#2a3038;color:#dfe7ef;border:1px solid rgba(80,90,100,0.4);font-size:10px">Scan
+        Nodes</button>
+      <div id="dbgTankNodes" style="font-size:10px;color:#8a9aaa;max-height:300px;overflow-y:auto"></div>
+
+      <button onclick="Game.debugRebuildTerrain()"
+        style="margin-top:6px;padding:4px 12px;cursor:pointer;background:#2a3038;color:#dfe7ef;border:1px solid rgba(80,90,100,0.4);font-size:11px">Rebuild
+        Terrain</button>
+
+      <div class="dbg-title" style="margin-top:8px">Neural Renderer</div>
+      <button onclick="Game.NeuralExport.downloadFrame('frame_' + Date.now())"
+        style="margin-top:2px;padding:4px 12px;cursor:pointer;background:#2a3038;color:#dfe7ef;border:1px solid rgba(80,90,100,0.4);font-size:11px">Export
+        Frame (RGB + masks)</button>
+    </div>
+
+    <!-- HUD Bottom Bar (Sudden Strike style) -->
+    <div id="hudBar">
+      <div class="hud-help-wrap">
+        <div class="hud-help-btn" onclick="this.nextElementSibling.classList.toggle('show')">?</div>
+        <div class="hud-help-tooltip">
+          <strong style="color:#c9a45d">Hotkeys</strong><br>
+          C: Run/Walk/Crouch/Crawl &nbsp; S: Run toggle &nbsp; F: First aid<br>
+          G: Grenade &nbsp; T: Smoke &nbsp; V: Stop &nbsp; H: Hold fire<br>
+          E: Assault &nbsp; R: Rotate &nbsp; N: Entrench &nbsp; M: Mine &nbsp; Q: Garrison<br>
+          B: Air strike &nbsp; J: Recon &nbsp; Y: Binoculars &nbsp; K: TNT (sapper)<br>
+          Space: Pause &nbsp; X: Exit vehicle &nbsp; L: Last attack<br>
+          RC enemy: Attack target &nbsp; RC ground (mortar): Bombard<br>
+          Arrows / screen edge: Pan &nbsp; + / -: Zoom<br>
+          Shift+RC: Queue &nbsp; Esc: Menu &nbsp; Z: Formation &nbsp; /: Behavior
+        </div>
+      </div>
+      <div class="hud-section minimap-section">
+        <div class="minimap-frame">
+          <canvas id="minimapCanvas" width="200" height="200"></canvas>
+        </div>
+      </div>
+      <div class="hud-section" id="missionPanel" style="display:none"></div>
+      <div class="hud-section cmd-section">
+        <div class="hud-title">Orders</div>
+        <div class="cmd-grid">
+          <div class="cmd-btn" id="cmdMove" title="Right-click to move"><span class="cmd-icon">⇒</span><span
+              class="cmd-label">Move</span></div>
+          <div class="cmd-btn" id="cmdAttack" title="Attack move (E)"><span class="cmd-icon">⊕</span><span
+              class="cmd-label">Attack</span></div>
+          <div class="cmd-btn" id="cmdStop" title="Stop (V)"><span class="cmd-icon">■</span><span
+              class="cmd-label">Stop</span></div>
+          <div class="cmd-btn" id="cmdHold" title="Hold fire (H)"><span class="cmd-icon">⊘</span><span
+              class="cmd-label">Hold</span></div>
+          <div class="cmd-btn" id="cmdGrenade" title="Grenade (G)"><span class="cmd-icon">💣</span><span
+              class="cmd-label">Grenade</span></div>
+          <div class="cmd-btn" id="cmdSmoke" title="Smoke (T)"><span class="cmd-icon">🌫</span><span
+              class="cmd-label">Smoke</span></div>
+          <div class="cmd-btn" id="cmdAirStrike" title="Air Strike (B)"><span class="cmd-icon">✈</span><span
+              class="cmd-label">Strike</span></div>
+          <div class="cmd-btn" id="cmdRotate" title="Rotate (R)"><span class="cmd-icon">↻</span><span
+              class="cmd-label">Rotate</span></div>
+          <div class="cmd-btn" id="cmdProne" title="Crawl / Stand toggle (C cycles)"><span class="cmd-icon">⤓</span><span
+              class="cmd-label">Crawl</span></div>
+        </div>
+      </div>
+      <div class="hud-section fm-section">
+        <div class="hud-title">Formation (Z)</div>
+        <div class="fm-strip">
+          <div class="fm-btn" data-formation="line" title="Line"
+            onclick="Game.currentFormation='line';document.querySelectorAll('.fm-btn').forEach(b=>b.classList.toggle('active',b.dataset.formation==='line'))">
+            ═</div>
+          <div class="fm-btn" data-formation="column" title="Column"
+            onclick="Game.currentFormation='column';document.querySelectorAll('.fm-btn').forEach(b=>b.classList.toggle('active',b.dataset.formation==='column'))">
+            ║</div>
+          <div class="fm-btn" data-formation="wedge" title="Wedge"
+            onclick="Game.currentFormation='wedge';document.querySelectorAll('.fm-btn').forEach(b=>b.classList.toggle('active',b.dataset.formation==='wedge'))">
+            ◁</div>
+          <div class="fm-btn active" data-formation="block" title="Block"
+            onclick="Game.currentFormation='block';document.querySelectorAll('.fm-btn').forEach(b=>b.classList.toggle('active',b.dataset.formation==='block'))">
+            ▣</div>
+          <div class="fm-btn" data-formation="spread" title="Spread"
+            onclick="Game.currentFormation='spread';document.querySelectorAll('.fm-btn').forEach(b=>b.classList.toggle('active',b.dataset.formation==='spread'))">
+            ⁘</div>
+        </div>
+      </div>
+      <div class="hud-section info-section" id="selectedPanel"></div>
+      <div class="hud-log-section" style="border-right:none; border-left: 2px solid #34373d;">
+        <div id="gameMessages"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ LANGUAGE SELECTOR ═══ -->
+  <div id="langBar">
+    <button class="lang-btn active" data-lang="en" title="English">🇬🇧</button>
+    <button class="lang-btn" data-lang="de" title="Deutsch">🇩🇪</button>
+    <button class="lang-btn" data-lang="pl" title="Polski">🇵🇱</button>
+    <button class="lang-btn" data-lang="fr" title="Français">🇫🇷</button>
+    <button class="lang-btn" data-lang="es" title="Español">🇪🇸</button>
+  </div>
+
+  <!-- ═══ WELCOME / INTRO GATE ═══ -->
+  <div id="welcomeGate">
+    <div class="welcome-layout">
+    <div class="welcome-panel">
+      <div class="menu-title">Under Fire</div>
+      <div class="menu-subtitle" data-i18n="subtitle">World War II Real-Time Tactics Game</div>
+      <div class="welcome-tag" data-i18n="tag">Built by fans &amp; AI vibes</div>
+
+      <ul class="welcome-points">
+        <li data-i18n="b1"><strong>Free &amp; open:</strong> micro-management &amp; historical accuracy</li>
+        <li data-i18n="b2"><strong>Playable today,</strong> early and rough, with plenty still to do.</li>
+        <li data-i18n="b3"><strong>Help shape it:</strong> models, scenery, sound, mechanics, history.</li>
+      </ul>
+
+      <div class="welcome-areas">
+        <span class="welcome-chip" data-i18n="chip_models">Models</span>
+        <span class="welcome-chip" data-i18n="chip_scenery">Scenery</span>
+        <span class="welcome-chip" data-i18n="chip_textures">Textures</span>
+        <span class="welcome-chip" data-i18n="chip_effects">Effects</span>
+        <span class="welcome-chip" data-i18n="chip_sound">Sound</span>
+        <span class="welcome-chip" data-i18n="chip_mechanics">Game mechanics</span>
+        <span class="welcome-chip" data-i18n="chip_history">Historical accuracy</span>
+      </div>
+
+      <div class="welcome-actions">
+        <button class="welcome-enter" id="btnEnterGame" data-i18n="enter">Enter &amp; Play ▸</button>
+        <a class="welcome-link" data-repo-link href="#" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+          <span data-i18n="build">Let's Build</span>
+        </a>
+      </div>
+
+      <div class="welcome-claude">
+        <div class="wc-title" data-i18n="claude_title">Improve it with Claude</div>
+        <ol class="wc-steps">
+          <li data-i18n="claude_s1">Fork the repo and open it in <strong>Claude Code</strong>. It loads <strong>CLAUDE.md</strong> and the bundled skills as working context for the whole codebase.</li>
+          <li data-i18n="claude_s2">Tell it what you want to add or change. It knows the codebase, finds the right files, and builds it with you.</li>
+          <li data-i18n="claude_s3">Get it working, open a pull request, and we take it from there. Solid contributions get merged.</li>
+        </ol>
+      </div>
+
+      <div class="welcome-foot">
+        <span data-i18n="foot_license">Free &amp; non-commercial. Credit <strong>Under Fire</strong>, no ads, no spin-offs.</span>
+        <a data-repo-doc="CONTRIBUTING.md" href="#" target="_blank" rel="noopener" data-i18n="foot_guide">Contributor guide</a>
+        ·
+        <a data-repo-doc="LICENSE.md" href="#" target="_blank" rel="noopener" data-i18n="foot_license_link">License</a>
+      </div>
+    </div>
+
+    <aside class="welcome-sidebar">
+      <div class="ws-title" data-i18n="dev_title">Development Paths</div>
+      <div class="ws-root">
+        <span class="ws-name" data-i18n="dev_1n">Three.js (now)</span>
+        <span class="ws-det" data-i18n="dev_1d">Runs in any browser, zero install. Where we are.</span>
+      </div>
+      <ul class="ws-branches">
+        <li><span class="ws-name" data-i18n="dev_2n">Existing engine</span><span class="ws-det" data-i18n="dev_2d">Port to Unity, Unreal or Godot for scale and tooling.</span></li>
+        <li><span class="ws-name" data-i18n="dev_3n">Custom engine</span><span class="ws-det" data-i18n="dev_3d">Bespoke C++/Rust + WebGPU for massive unit counts.</span></li>
+        <li class="ws-ideal"><span class="ws-name" data-i18n="dev_4n">Neural renderer</span> <span class="ws-badge" data-i18n="dev_ideal">ideal vision</span><span class="ws-det" data-i18n="dev_4d">AI image-to-image layer for photorealism on top.</span></li>
+      </ul>
+    </aside>
+    </div>
+  </div>
+
+  <!-- ═══ MAIN MENU ═══ -->
+  <div id="mainMenu">
+    <video id="menuBgVideo" autoplay muted loop playsinline poster="splash.png">
+      <source src="under_vid.mp4" type="video/mp4">
+    </video>
+    <div class="menu-overlay"></div>
+    <div class="menu-panel">
+      <div class="menu-title" id="menuLogo" title="Back to home">Under Fire</div>
+      <div class="menu-subtitle" data-i18n="menu_subtitle">World War Two RTS</div>
+
+      <div class="menu-section">
+        <div class="menu-section-title" data-i18n="m_briefing">Mission Briefing</div>
+        <div class="mission-card selected" data-mission="dyle">
+          <div class="mc-name" data-i18n="m_name">Advance to the Dyle Line</div>
+          <div class="mc-desc" data-i18n="m_desc">Western Front, May 1940. Push your French vanguard through the bocage, seize the village crossroads, and break the German hold on the Dyle. More scenarios are on the way, or build your own.</div>
+        </div>
+      </div>
+
+      <div class="menu-section">
+        <div class="menu-section-title" data-i18n="m_side">Choose Side</div>
+        <div class="side-row">
+          <div class="side-btn selected" data-side="french">🇫🇷 <span data-i18n="side_fr">French</span></div>
+          <div class="side-btn disabled" data-side="german" title="Not yet playable">🇩🇪 <span data-i18n="side_de">German</span> <span class="side-soon" data-i18n="soon">soon</span></div>
+        </div>
+      </div>
+
+      <div class="menu-section">
+        <div class="menu-section-title"><span data-i18n="m_doctrine">Doctrine</span> <span class="side-soon" data-i18n="soon">soon</span></div>
+        <div class="doc-row disabled">
+          <div class="doc-btn selected" data-doctrine="infantry">
+            <div class="db-name" data-i18n="doc_inf">Infantry</div>
+            <div class="db-desc" data-i18n="doc_inf_d">+20% HP, +2 sight</div>
+          </div>
+          <div class="doc-btn" data-doctrine="armor">
+            <div class="db-name" data-i18n="doc_arm">Armor</div>
+            <div class="db-desc" data-i18n="doc_arm_d">+15% HP, +10% speed</div>
+          </div>
+          <div class="doc-btn" data-doctrine="support">
+            <div class="db-name" data-i18n="doc_sup">Support</div>
+            <div class="db-desc" data-i18n="doc_sup_d">+1 airstrike, +2 mines</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="menu-section">
+        <div class="menu-section-title" data-i18n="m_updates">Latest Updates</div>
+        <div class="menu-updates" id="menuUpdates"></div>
+      </div>
+
+      <button class="menu-start" id="btnStartMission" data-i18n="start">Start Mission</button>
+      <div class="menu-version" id="menuVersion"></div>
+    </div>
+  </div>
+
+  <script>
+    // Menu selection logic
+    document.querySelectorAll('.mission-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.mission-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+      });
+    });
+    document.querySelectorAll('.side-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.classList.contains('disabled')) return; // German not playable yet
+        document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+      });
+    });
+    document.querySelectorAll('.doc-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.doc-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+      });
+    });
+
+    // ── Repo links — update UNDER_REPO once the GitHub repo is live ──
+    const UNDER_REPO = 'https://github.com/tksa/underfire';
+    document.querySelectorAll('[data-repo-link]').forEach(a => { a.href = UNDER_REPO; });
+    document.querySelectorAll('[data-repo-doc]').forEach(a => {
+      a.href = UNDER_REPO + '/blob/main/' + a.getAttribute('data-repo-doc');
+    });
+
+    // ── Welcome gate → reveal the main menu ──
+    document.getElementById('btnEnterGame')?.addEventListener('click', () => {
+      document.getElementById('welcomeGate')?.classList.add('hidden');
+    });
+    // ── Menu logo → back to the welcome gate (home) ──
+    document.getElementById('menuLogo')?.addEventListener('click', () => {
+      document.getElementById('welcomeGate')?.classList.remove('hidden');
+    });
+
+    // ── Build version (CI can replace UNDER_VERSION at deploy time) ──
+    const UNDER_VERSION = 'v0.5.0-dev';
+    const vEl = document.getElementById('menuVersion');
+    if (vEl) vEl.textContent = UNDER_VERSION;
+
+    // ── Latest updates (keep in sync with CHANGELOG.md; newest first) ──
+    const UNDER_CHANGELOG = [
+      {
+        version: 'v0.5.0-dev', date: 'Initial build', notes: [
+          'First public, community-buildable release.',
+          'Procedural French-village battlefield: fields, church, windmill, river + bridge.',
+          'Squad AI now alerts the whole squad when a unit is hit.',
+        ]
+      },
+    ];
+    const upEl = document.getElementById('menuUpdates');
+    if (upEl) {
+      upEl.innerHTML = UNDER_CHANGELOG.map(e =>
+        `<div class="update-entry"><div class="update-ver">${e.version}<span class="ud-date">${e.date}</span></div>`
+        + `<ul class="update-notes">${e.notes.map(n => `<li>${n}</li>`).join('')}</ul></div>`
+      ).join('');
+    }
+  </script>
+
+  <!-- WW2 Film grain overlay -->
+  <div id="filmGrain"></div>
+  <div id="filmTint"></div>
+
+  <!-- Three.js importmap (ES module from cdnjs) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.180.0/three.module.min.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+      "fflate": "https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js"
+    }
+  }
+  </script>
+
+  <!-- Game scripts (classic, loaded in dependency order) -->
+  <script src="js/config.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/weapons.js"></script>
+  <script src="js/terrain.js"></script>
+  <script src="js/units.js"></script>
+  <script src="js/pathfinding.js"></script>
+  <script src="js/combat.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/camera.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/mission.js"></script>
+  <script src="js/neural_export.js"></script>
+
+  <!-- main.js is a module — imports THREE, sets it globally, then boots -->
+  <script type="module" src="js/main.js"></script>
+</body>
+
+</html>

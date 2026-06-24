@@ -1,0 +1,23 @@
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Logs / temp
+*.log
+/scratch/
+/tmp/
+
+# Node (only if a contributor adds tooling locally — runtime stays build-free)
+node_modules/
+package-lock.json
+
+# Local environment
+.env
+.env.local

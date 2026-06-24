@@ -1,0 +1,10 @@
+# Offline Neural Renderer toolchain (NOT part of the game build).
+# Install in a virtualenv: python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+pillow>=10.0
+numpy>=1.24
+# Training (Pix2PixHD): install torch matching your CUDA from pytorch.org, plus:
+# torch torchvision dominate
+# Inference / export:
+onnx>=1.15
+onnxruntime>=1.17        # or onnxruntime-gpu for CUDA
+# TensorRT is installed separately via NVIDIA (trtexec) — not pip-managed here.

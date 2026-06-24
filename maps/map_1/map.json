@@ -1,0 +1,12 @@
+{
+    "name": "Crossroads at Sedan",
+    "description": "A French countryside with rolling hills, streams, and a village at the crossroads. Based on the 1940 Battle of France.",
+    "cols": 52,
+    "rows": 34,
+    "tileSize": 3,
+    "heightScale": 8,
+    "waterLevel": 1.8,
+    "depthMap": "depth.png",
+    "textureMap": "texture.png",
+    "notes": "Place additional map-specific textures (roads, buildings, foliage) in this folder. The depth map drives terrain elevation (white=high, black=low), and the texture map is applied as the ground color."
+}

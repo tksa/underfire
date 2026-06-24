@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  syntax:
+    name: JS syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: node --check every js file
+        run: |
+          set -e
+          for f in js/*.js; do
+            echo "checking $f"
+            node --check "$f"
+          done
+
+  smoke:
+    name: Headless boot smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Playwright
+        run: npm install --no-save playwright
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Serve the game
+        run: python3 -m http.server 8741 &
+      - name: Wait for server
+        run: npx --yes wait-on http://localhost:8741 || sleep 3
+      - name: Run smoke test
+        run: node scripts/smoke-test.mjs

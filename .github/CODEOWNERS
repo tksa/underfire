@@ -1,0 +1,17 @@
+# Code owners — GitHub requests these reviewers automatically on matching PRs.
+# Replace the placeholder org/team handles once the org and teams exist.
+
+# Default: maintainers own everything
+*                       @REPLACE-ME/maintainers
+
+# Core gameplay (higher bar for review)
+/js/ai.js               @REPLACE-ME/maintainers
+/js/combat.js           @REPLACE-ME/maintainers
+/js/weapons.js          @REPLACE-ME/maintainers
+/js/units.js            @REPLACE-ME/maintainers
+/js/terrain.js          @REPLACE-ME/maintainers
+
+# Project-defining files
+/LICENSE.md             @REPLACE-ME/maintainers
+/vision.md              @REPLACE-ME/maintainers
+/.github/               @REPLACE-ME/maintainers

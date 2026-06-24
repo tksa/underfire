@@ -1,0 +1,902 @@
+================================================================================
+UNDER — GAME VISION & DESIGN DOCUMENT
+================================================================================
+
+This document defines the unit structure, weapons, and gameplay parameters
+for a WWII tactical RTS game where players control between 50 and 800 units.
+
+The design is based on historical doctrine but simplified for gameplay.
+
+================================================================================
+GAMEPLAY SCALE
+================================================================================
+
+Typical map sizes:
+
+| Battle Size     | Units per side | Example                |
+|-----------------|---------------|------------------------|
+| Small skirmish  | 50–120        | Reinforced platoon     |
+| Medium battle   | 120–300       | Company                |
+| Large battle    | 300–800       | Battalion              |
+
+================================================================================
+UNIT HIERARCHY
+================================================================================
+
+Division (~15,000)
+└── Regiment (~3,000)
+    └── Battalion (~700–900)
+        └── Company (~120–180)
+            └── Platoon (~35–45)
+                └── Squad (~8–12)
+
+Players usually command:
+• 1–4 Companies
+• or 1 Battalion
+
+================================================================================
+GERMAN ARMY (WEHRMACHT 1940)
+================================================================================
+
+Doctrine Summary
+----------------
+German infantry doctrine centered around the machine gun.
+The MG34 provided most of the squad's firepower while riflemen supported it.
+
+Strengths:
+• High suppression capability
+• Excellent machine guns
+• Good combined arms coordination
+
+Weakness:
+• Fewer rifles per squad
+• Less armor protection in early war tanks
+
+German Infantry Squad (Gruppe) — 10 soldiers
+---------------------------------------------
+1 Squad Leader (MP38/MP40)
+1 MG34 Gunner
+1 MG Assistant
+1 Ammo Carrier
+6 Riflemen (Kar98k)
+
+Role: Machine gun forms the base of fire while riflemen maneuver.
+
+German Platoon (Zug) — ~35–40 soldiers
+---------------------------------------
+Platoon HQ
+• Lieutenant
+• Radio operator
+• Runner
+3 Infantry squads
+
+German Company (Kompanie) — ~140 soldiers
+------------------------------------------
+Company HQ
+3 Rifle Platoons
+Heavy Weapons Section
+• Mortar teams
+• Heavy MG teams
+• Anti-tank guns
+
+German Battalion (Bataillon) — ~700–800 soldiers
+--------------------------------------------------
+Battalion HQ
+3 Rifle Companies
+Heavy Company
+• Heavy machine guns
+• Mortars
+• Anti-tank guns
+
+================================================================================
+FRENCH ARMY (1940)
+================================================================================
+
+Doctrine Summary
+----------------
+French infantry relied more on rifle fire and defensive tactics.
+Their tanks were often stronger individually, but poorly coordinated.
+
+Strengths:
+• Strong individual tanks (Somua S35, Char B1)
+• Good defensive weapons
+
+Weakness:
+• Slower operational mobility
+• Less flexible command structure
+
+French Infantry Squad (Groupe de Combat) — 11 soldiers
+-------------------------------------------------------
+1 Squad Leader
+1 LMG gunner (FM 24/29)
+1 Assistant gunner
+8 Riflemen (MAS-36)
+
+Doctrine: Riflemen deliver most firepower while LMG supports.
+
+French Platoon (Section) — ~35 soldiers
+-----------------------------------------
+Platoon HQ
+3 Infantry squads
+
+French Company (Compagnie) — ~140 soldiers
+--------------------------------------------
+Company HQ
+3 Rifle Platoons
+Support Section
+• Mortars
+• Machine guns
+
+French Battalion — ~700 soldiers
+----------------------------------
+Battalion HQ
+3 Infantry companies
+Heavy weapons company
+
+================================================================================
+INFANTRY UNITS
+================================================================================
+
+Rifleman — Primary infantry soldier
+-------------------------------------
+Weapons:
+  Germany: Kar98k
+  France:  MAS-36
+
+Stats:
+  Effective range: 400 m
+  Max range: 800 m
+  Rate of fire: 10–15 rounds/min
+  Damage: Medium
+
+Equipment:
+  • Rifle
+  • Bayonet
+  • Grenades
+  • Field shovel
+
+Submachine Gunner — Close combat specialist
+---------------------------------------------
+Weapons:
+  Germany: MP38 / MP40
+  France:  MAS-38
+
+Stats:
+  Effective range: 80 m
+  Max range: 150 m
+  Rate of fire: 500–600 rpm
+  Damage: High (close range)
+
+Light Machine Gunner — Squad automatic weapon
+-----------------------------------------------
+Weapons:
+  Germany: MG34
+  France:  FM 24/29
+
+Stats:
+  Effective range: 600 m
+  Max range: 1200 m
+  Rate of fire:
+    MG34: 800 rpm
+    FM24/29: 450 rpm
+  Suppression: High
+
+Crew:
+  Gunner
+  Assistant
+  Ammo carrier
+
+Sniper — Precision infantry
+-----------------------------
+Weapons:
+  Scoped Kar98k
+  Scoped MAS-36
+
+  Effective range: 800 m
+  Max range: 1200 m
+  Fire rate: 5 rounds/min
+
+================================================================================
+HEAVY WEAPONS
+================================================================================
+
+Heavy Machine Gun
+------------------
+Germany: MG34 tripod
+France:  Hotchkiss M1914
+
+Crew: 3 soldiers
+Effective range: 1000 m
+Max range: 3000 m
+Suppression: Very high
+
+Light Mortar
+-------------
+Germany: 50mm mortar
+France:  60mm mortar
+
+Range: 80–500 m
+Fire rate: 15 rounds/min
+Damage: Medium
+
+Medium Mortar
+--------------
+Germany: 81mm mortar
+France:  Brandt 81mm mortar
+
+Range: 500–3000 m
+Damage: High
+Crew: 3–4 soldiers
+
+Anti Tank Gun
+--------------
+Germany: Pak 36 (37mm)
+France:  25mm Hotchkiss AT gun
+
+Crew: 5 soldiers
+Effective range: 500–800 m
+
+================================================================================
+VEHICLES
+================================================================================
+
+Light Tank
+-----------
+Germany: Panzer II
+France:  Hotchkiss H35
+
+Crew: 2–3
+Gun range: 800 m
+Armor: Light
+Speed: Fast
+
+Medium Tank
+------------
+Germany: Panzer III
+France:  Somua S35
+
+Crew: 4–5
+Gun range: 1500 m
+Armor: Medium
+Speed: Medium
+
+Heavy Tank
+-----------
+France: Char B1 bis
+
+Crew: 4
+Armor: Heavy
+Speed: Slow
+
+================================================================================
+WEAPONS REFERENCE
+================================================================================
+
+German Weapons
+| Weapon     | Type       | Role                    |
+|------------|------------|-------------------------|
+| Kar98k     | Bolt rifle | Infantry standard rifle |
+| MP38/40    | SMG        | Assault weapon          |
+| MG34       | LMG/MMG    | Squad firepower         |
+| Pak 36     | AT gun     | Anti tank               |
+| 81mm mortar| Mortar     | Indirect fire           |
+
+French Weapons
+| Weapon          | Type       | Role            |
+|-----------------|------------|-----------------|
+| MAS-36          | Bolt rifle | Infantry rifle  |
+| MAS-38          | SMG        | Close combat    |
+| FM 24/29        | LMG        | Squad support   |
+| Hotchkiss M1914 | HMG        | Defensive MG    |
+| Brandt 81mm     | Mortar     | Indirect fire   |
+
+================================================================================
+EXAMPLE BATTLE COMPOSITIONS
+================================================================================
+
+Battalion Battle (Large Map) — per side
+-----------------------------------------
+Battalion HQ (20)
+3 Infantry companies (~420)
+Heavy weapons (~120)
+Armor support (~30)
+Recon and engineers (~40)
+Total: ≈ 600–750 units
+
+Company Battle (Medium Map) — per side
+-----------------------------------------
+Company HQ (10)
+3 Platoons (~100)
+Mortar teams (10)
+Machine gun teams (10)
+Anti tank guns (10)
+Total: ≈ 150 units
+
+Platoon Battle (Small Map) — per side
+----------------------------------------
+Platoon HQ (3)
+3 Squads (~30)
+Machine gun team (3)
+Mortar team (3)
+Total: ≈ 40 units
+
+================================================================================
+GAMEPLAY DESIGN NOTES
+================================================================================
+
+Machine guns suppress infantry
+Mortars destroy cover
+Tanks dominate open terrain
+Infantry dominates forests and towns
+Anti-tank guns counter armor
+Recon increases vision
+Engineers place mines and destroy obstacles
+
+================================================================================
+WEAPONS BALANCE — DETAILED
+================================================================================
+
+Design Principles
+-----------------
+- Bolt-action rifles are accurate and reliable at medium range.
+- Submachine guns dominate at very short range.
+- Light machine guns are the backbone of squad firepower.
+- Heavy machine guns lock down lanes and open ground.
+- Mortars are for suppression, smoke, and indirect fire.
+- Anti-tank guns are lethal against early-war armor when positioned well.
+- Tank guns should feel powerful, but line of sight, reload, and turret
+  limitations matter.
+
+Range Model
+-----------
+Suggested conversion: 1 game meter = 5 real meters
+
+Combat bands:
+- Point blank: 0-20 m
+- Close: 20-80 m
+- Medium: 80-250 m
+- Long: 250-600 m
+- Extreme: 600 m+
+
+Note: Weapons should not simply stop working past effective range.
+Accuracy, suppression, and penetration should fall off by band.
+
+================================================================================
+DETAILED INFANTRY WEAPON PROFILES
+================================================================================
+
+Kar98k
+  Nation: Germany
+  Type: Bolt-action rifle
+  Crew: 1
+  Typical users: Rifleman, assistant roles, squad support
+  Fire type: Single shot
+  Effective range: 400 m
+  Maximum range: 800 m
+  Recommended game range: 80 game m
+  Rate of fire: 12 rounds/min practical
+  Reload: 5-round stripper clip
+  Accuracy: Close=Medium, Medium=High, Long=High
+  Damage vs infantry: Medium-high
+  Suppression: Low
+  Damage vs vehicles: Negligible
+  Notes: Strong at deliberate fire. Weak in close assaults vs SMGs/LMGs.
+
+MAS-36
+  Nation: France
+  Type: Bolt-action rifle
+  Crew: 1
+  Fire type: Single shot
+  Effective range: 400 m
+  Maximum range: 800 m
+  Recommended game range: 80 game m
+  Rate of fire: 10-12 rounds/min practical
+  Reload: 5-round internal magazine
+  Accuracy: Close=Medium, Medium=High, Long=High
+  Damage vs infantry: Medium-high
+  Suppression: Low
+  Damage vs vehicles: Negligible
+  Notes: Comparable to Kar98k. Good defensive rifle.
+
+MP38 / MP40
+  Nation: Germany
+  Type: Submachine gun
+  Crew: 1
+  Typical users: Squad leaders, assault troops, recon, vehicle crews
+  Fire type: Automatic / short bursts
+  Effective range: 80-100 m
+  Maximum range: 150 m
+  Recommended game range: 20 game m
+  Cyclic rate: ~500-550 rpm
+  Accuracy: Point blank=High, Close=Medium, Medium=Low
+  Damage vs infantry: High at close range
+  Suppression: Medium
+  Notes: Ideal for towns, trenches, forests, ambushes. Poor in open-field.
+
+MAS-38
+  Nation: France
+  Type: Submachine gun
+  Crew: 1
+  Typical users: NCOs, specialist units
+  Fire type: Automatic / short bursts
+  Effective range: 70-100 m
+  Maximum range: 150 m
+  Recommended game range: 18-20 game m
+  Cyclic rate: ~600 rpm
+  Accuracy: Point blank=High, Close=Medium, Medium=Low
+  Damage vs infantry: Medium-high at close range
+  Suppression: Medium
+  Notes: Similar niche to MP40. Less widely distributed.
+
+================================================================================
+SQUAD AUTOMATIC WEAPONS — DETAILED
+================================================================================
+
+MG34 (bipod)
+  Nation: Germany
+  Type: Light / general-purpose machine gun
+  Crew: 2-3
+  Fire type: Automatic, sustained bursts
+  Effective range: 600 m
+  Maximum range: 1200 m
+  Recommended game range: 120 game m
+  Cyclic rate: ~800-900 rpm
+  Practical fire: 120-250 rounds/min in bursts
+  Accuracy: Close=High, Medium=High, Long=Medium-high
+  Damage vs infantry: High
+  Suppression: Very high
+  Damage vs vehicles: Very low
+  Setup/Teardown: Short
+  Overheat risk: Moderate under sustained fire
+  Notes: Centerpiece of German squad doctrine.
+         Should be one of the most decisive infantry weapons in the game.
+
+FM 24/29
+  Nation: France
+  Type: Light machine gun
+  Crew: 2
+  Fire type: Automatic, controlled bursts
+  Effective range: 500-600 m
+  Maximum range: 1200 m
+  Recommended game range: 100-120 game m
+  Cyclic rate: ~450 rpm
+  Accuracy: Close=High, Medium=High, Long=Medium
+  Damage vs infantry: Medium-high
+  Suppression: High
+  Damage vs vehicles: Very low
+  Setup time: Short
+  Notes: Reliable support weapon. Good for defense, less overwhelming than MG34.
+
+================================================================================
+HEAVY MACHINE GUNS — DETAILED
+================================================================================
+
+MG34 (tripod)
+  Nation: Germany
+  Crew: 3
+  Effective range: 1000 m
+  Maximum range: 3000 m
+  Recommended game range: 180-200 game m
+  Damage vs infantry: High
+  Suppression: Extreme
+  Setup time: Medium
+  Traverse: Moderate
+  Notes: Excellent for defensive arcs and open-ground suppression.
+         Vulnerable to mortars, flanking, and snipers.
+
+Hotchkiss M1914
+  Nation: France
+  Crew: 3-4
+  Effective range: 1000 m
+  Maximum range: 3000 m
+  Recommended game range: 180-200 game m
+  Damage vs infantry: High
+  Suppression: Very high
+  Setup time: Medium
+  Notes: Slower feel than MG34. Strong defensive emplacement weapon.
+
+================================================================================
+MORTARS — DETAILED
+================================================================================
+
+German 5 cm leGrW 36
+  Type: Light mortar
+  Crew: 2-3
+  Fire type: Indirect HE / smoke
+  Effective range: 80-500 m
+  Game range: 16-100 game m
+  Rate of fire: High
+  Blast radius: Small
+  Damage vs infantry: Medium in open, high in clusters
+  Suppression: High
+
+German 8 cm GrW 34
+  Type: Medium mortar
+  Crew: 3-4
+  Fire type: Indirect HE / smoke
+  Effective range: 500-3000 m
+  Game range: 100-600 game m
+  Rate of fire: Moderate
+  Blast radius: Medium
+  Damage vs infantry: High
+  Suppression: Very high
+  Notes: Excellent for breaking static defenses.
+
+Brandt 60 mm mortar
+  Nation: France
+  Crew: 2-3
+  Effective range: 100-1000 m
+  Game range: 20-200 game m
+  Rate of fire: High
+  Blast radius: Small-medium
+  Notes: Flexible infantry support mortar.
+
+Brandt 81 mm mortar
+  Nation: France
+  Crew: 3-4
+  Effective range: 500-3000+ m
+  Game range: 100-600 game m
+  Rate of fire: Moderate
+  Blast radius: Medium
+  Damage vs infantry: High
+  Notes: Good counter to entrenched German MGs.
+
+================================================================================
+ANTI-TANK GUNS — DETAILED
+================================================================================
+
+Pak 36 (37 mm)
+  Nation: Germany
+  Crew: 5
+  Fire type: Direct AP
+  Effective range: 500-800 m
+  Game range: 100-160 game m
+  Rate of fire: Fast
+  Accuracy: High
+  HE capability: Very limited
+  Notes: Effective against light tanks. Struggles against heavier French armor.
+         Best used from flank positions.
+
+25 mm Hotchkiss AT gun
+  Nation: France
+  Crew: 4-5
+  Effective range: 400-800 m
+  Game range: 80-160 game m
+  Rate of fire: Fast
+  Accuracy: High
+  Notes: Good against Panzer I, II, most early German vehicles.
+         Limited against better-armored targets frontally.
+
+47 mm SA 37 AT gun
+  Nation: France
+  Crew: 5
+  Effective range: 800-1200 m
+  Game range: 160-240 game m
+  Rate of fire: Moderate
+  Accuracy: High
+  Notes: Very dangerous anti-tank weapon. One of the best French AT assets.
+
+================================================================================
+TANK GUNS — DETAILED
+================================================================================
+
+2 cm KwK 30
+  Nation: Germany | Vehicle: Panzer II
+  Type: Light autocannon
+  Effective range: 500-800 m | Game range: 100-160 game m
+  Damage vs infantry: Medium | Suppression: Medium
+  Penetration: Low
+  Notes: Good against infantry and soft targets. Poor against medium/heavy armor.
+
+3.7 cm KwK 36
+  Nation: Germany | Vehicle: Panzer III early
+  Effective range: 800-1200 m | Game range: 160-240 game m
+  Reload: Moderate
+  Damage vs infantry: Medium with HE | Penetration: Medium
+  Notes: Useful against light/some medium armor. Not reliable vs Char B1 frontally.
+
+7.5 cm KwK 37 L/24
+  Nation: Germany | Vehicle: Panzer IV early
+  Type: Short-barreled support gun
+  Effective range: 700-1200 m | Game range: 140-240 game m
+  Damage vs infantry: High | Suppression: High
+  Penetration: Low-medium
+  Notes: Strong infantry support. Not a true long-range tank killer in 1940.
+
+3.7 cm SA 18
+  Nation: France | Vehicle: Hotchkiss H35 / Renault R35
+  Effective range: 500-800 m | Game range: 100-160 game m
+  Damage vs infantry: Medium | Penetration: Low
+  Notes: Adequate against light vehicles. Limited anti-armor punch.
+
+4.7 cm SA 35
+  Nation: France | Vehicle: Somua S35 / Char B1 turret
+  Effective range: 800-1200 m | Game range: 160-240 game m
+  Damage vs infantry: Medium | Penetration: Medium-high
+  Notes: Excellent anti-tank weapon for 1940. A major French strength.
+
+7.5 cm ABS SA 35
+  Nation: France | Vehicle: Char B1 hull gun
+  Effective range: 400-1000 m | Game range: 80-200 game m
+  Damage vs infantry: High | Suppression: High
+  Penetration: Low-medium
+  Notes: Devastating support fire. Less flexible (hull mounting).
+
+================================================================================
+SQUAD WEAPON PROFILES
+================================================================================
+
+German Rifle Squad
+  1x MP38/40 or SMG leader
+  1x MG34 team core
+  6x Kar98k riflemen
+  Role: Strong suppression, fire-and-maneuver.
+        Best when MG gets line of sight.
+
+French Rifle Squad
+  1x squad leader
+  1x FM 24/29 team
+  8x MAS-36 riflemen
+  Role: Stronger line of rifle fire, more even distribution.
+        Good on defense, less explosive than German MG-centered squad.
+
+================================================================================
+NORMALIZED STATS MODEL (1-10)
+================================================================================
+
+| Weapon       | Damage | Suppression | Accuracy | Anti-Armor |
+|--------------|--------|-------------|----------|------------|
+| Kar98k       | 6      | 2           | 8        | 0          |
+| MG34 bipod   | 7      | 10          | 7        | 1          |
+| FM 24/29     | 6      | 8           | 7        | 1          |
+| MP40         | 7*     | 5           | 4        | 0          |
+| Pak 36       | —      | —           | —        | 5          |
+| SA 37        | —      | —           | —        | 8          |
+
+* close range only
+
+================================================================================
+ARMOR AND PENETRATION TABLE
+================================================================================
+
+Rules of Interpretation
+-----------------------
+Penetration >= Armor + 15:
+  Very high pen chance. High damage. Possible one-shot kill.
+
+Penetration >= Armor:
+  Good pen chance. Normal damage. Crew shock likely.
+
+Penetration within 10 below armor:
+  Partial / inconsistent pen. Spall, stun, module damage possible.
+  Better from closer range or flank.
+
+Penetration > 10 below armor:
+  Usually no penetration. Minor shock only. Use flanks or stronger weapons.
+
+Angle modifiers:
+  Front armor: listed value
+  Side armor: listed value
+  Rear armor: listed value
+  30° obliquity: effective armor +10%
+  45° obliquity: effective armor +20%
+
+================================================================================
+VEHICLE ARMOR TABLE
+================================================================================
+
+| Vehicle           | Nation  | Class          | Front | Side  | Rear  | Speed       |
+|-------------------|---------|----------------|-------|-------|-------|-------------|
+| Panzer I          | Germany | Light tankette | 13    | 13    | 13    | Fast        |
+| Panzer II         | Germany | Light tank     | 14-30 | 14-20 | 14-20 | Fast        |
+| Panzer III early  | Germany | Medium tank    | 30    | 21-30 | 21    | Medium      |
+| Panzer IV early   | Germany | Medium support | 30    | 20    | 20    | Medium      |
+| Sd.Kfz. 221/222   | Germany | Armored car    | 8-15  | 8     | 8     | Very fast   |
+| Hotchkiss H35     | France  | Light tank     | 34-40 | 34    | 34    | Slow-medium |
+| Renault R35       | France  | Light tank     | 32-40 | 32-40 | 25-32 | Slow        |
+| Somua S35         | France  | Medium cavalry | 36-47 | 40    | 35    | Medium      |
+| Char B1 bis       | France  | Heavy tank     | 60    | 55    | 55    | Slow        |
+| Panhard 178       | France  | Armored car    | 20    | 15    | 10    | Fast        |
+
+Simplified Gameplay Armor Values
+| Vehicle        | Front | Side | Rear |
+|----------------|-------|------|------|
+| Panzer I       | 13    | 13   | 13   |
+| Panzer II      | 22    | 18   | 16   |
+| Panzer III     | 30    | 26   | 21   |
+| Panzer IV      | 30    | 20   | 20   |
+| Sd.Kfz. 222    | 12    | 8    | 8    |
+| Hotchkiss H35  | 38    | 34   | 34   |
+| Renault R35    | 38    | 35   | 28   |
+| Somua S35      | 45    | 40   | 35   |
+| Char B1 bis    | 60    | 55   | 55   |
+| Panhard 178    | 20    | 15   | 10   |
+
+================================================================================
+PENETRATION TABLE BY WEAPON
+================================================================================
+
+Values at Close (0-300m) / Medium (300-600m) / Long (600-1000m):
+
+| Weapon                  | Nation  | Close | Med  | Long | HE  |
+|-------------------------|---------|-------|------|------|-----|
+| Rifle grenade / ATR     | Mixed   | 5     | 3    | 1    | 1   |
+| 2 cm KwK 30             | Germany | 12    | 8    | 5    | 3   |
+| 3.7 cm Pak 36           | Germany | 40    | 34   | 28   | 2   |
+| 3.7 cm KwK 36           | Germany | 38    | 32   | 26   | 3   |
+| 7.5 cm KwK 37 L/24 (AP) | Germany | 32    | 26   | 20   | 8   |
+| 25 mm Hotchkiss         | France  | 30    | 24   | 18   | 1   |
+| 47 mm SA 37             | France  | 70    | 60   | 50   | 3   |
+| 37 mm SA 18             | France  | 18    | 14   | 10   | 4   |
+| 47 mm SA 35             | France  | 65    | 55   | 45   | 5   |
+| 75 mm SA 35 hull gun    | France  | 28    | 24   | 18   | 9   |
+
+================================================================================
+QUICK OUTCOME GUIDE
+================================================================================
+
+German weapons vs French armor:
+| Weapon          | H35/R35 Front       | S35 Front           | B1 bis Front |
+|-----------------|---------------------|---------------------|--------------|
+| 2cm KwK 30      | No                  | No                  | No           |
+| 3.7cm Pak 36    | Marginal/close only | Weak/flank          | No           |
+| 3.7cm KwK 36    | Marginal/close only | Weak/flank          | No           |
+| 7.5cm KwK 37 AP | Inconsistent        | Weak                | No           |
+
+French weapons vs German armor:
+| Weapon          | Pz II Front | Pz III Front | Pz IV Front |
+|-----------------|-------------|--------------|-------------|
+| 25mm Hotchkiss  | Good        | Marginal     | Marginal    |
+| 37mm SA 18      | Limited     | Weak         | Weak        |
+| 47mm SA 35      | Excellent   | Excellent    | Excellent   |
+| 47mm SA 37      | Excellent   | Excellent    | Excellent   |
+
+================================================================================
+SIDE AND REAR VULNERABILITY
+================================================================================
+
+Side shots:  +20 penetration bonus equivalent
+Rear shots:  +35 penetration bonus equivalent
+Point-blank flank shot: additional +10 penetration equivalent
+Moving target hit penalty offsets some bonus.
+
+This means:
+- Pak 36 can threaten Somua or heavy French tanks from the flank
+- 25mm Hotchkiss reliably kills Panzer II and threatens Panzer III from side
+- Autocannons become dangerous against armored cars and rear armor
+
+================================================================================
+DAMAGE RESULTS ON PENETRATION
+================================================================================
+
+When penetration occurs, choose from:
+- Crew stunned
+- Gun disabled
+- Engine damaged
+- Track damaged
+- Turret jammed
+- Vehicle knocked out
+- Catastrophic kill
+
+Light gun penetrations often disable before destroying.
+Medium/high penetration hits should have high knockout chance.
+
+Examples:
+- 25mm into Panzer II side: high chance of kill
+- Pak 36 into H35 front: moderate chance of damage only
+- 47mm SA 35 into Panzer III front: high chance of knockout
+- Pak 36 into Char B1 front: effectively none
+
+================================================================================
+ARMOR CLASSES (SIMPLIFIED)
+================================================================================
+
+| Class                | Value  | Examples                                |
+|----------------------|--------|-----------------------------------------|
+| Class 1 - Very light | 0-15   | Armored cars, Panzer I                  |
+| Class 2 - Light      | 16-30  | Panzer II, early medium side armor      |
+| Class 3 - Medium     | 31-45  | Panzer III front, H35, R35, Somua       |
+| Class 4 - Heavy      | 46-60  | Char B1 bis, strongest 1940 armor       |
+
+Weapon Power Classes:
+| Class | Typical Weapons                          |
+|-------|------------------------------------------|
+| AP 1  | Autocannon / weak short guns             |
+| AP 2  | 25mm AT / weak 37mm class                |
+| AP 3  | Pak 36 / 37mm tank gun                   |
+| AP 4  | 47mm SA 35 / SA 37                       |
+| AP 5  | Later-war weapons (not for 1940 set)     |
+
+Interactions:
+- AP 1 beats Armor Class 1
+- AP 2 beats Armor Class 1-2
+- AP 3 beats Armor Class 2 and can threaten 3
+- AP 4 beats Armor Class 2-3 and can threaten 4 from some angles
+
+================================================================================
+VEHICLE ROLES
+================================================================================
+
+German:
+  Panzer I:   Recon, harassment, infantry suppression only
+  Panzer II:  Light support, anti-recon, anti-infantry
+  Panzer III: Main anti-tank tank
+  Panzer IV:  Infantry support and HE fire
+
+French:
+  H35 / R35:    Defensive tank, resilient line holder
+  Somua S35:    Elite cavalry tank, best all-round French vehicle
+  Char B1 bis:  Breakthrough tank, local battlefield monster
+  Panhard 178:  Recon and screening
+
+================================================================================
+BALANCE RECOMMENDATIONS
+================================================================================
+
+Infantry Balance:
+- German infantry should win frontal open-ground engagements if MG34 can deploy.
+- French infantry should be resilient in cover and stronger in raw rifle count.
+
+Armor Balance:
+- German armor should feel more numerous and responsive.
+- French armor should feel tougher and more dangerous individually.
+
+Support Balance:
+- Mortars must punish static MG nests.
+- Anti-tank guns must dominate exposed tanks.
+- Recon should be essential for spotting AT guns and mortar positions.
+
+Do not let German tanks beat French tanks in pure frontal duels too easily.
+German success should come from:
+  - flanking
+  - AT gun ambushes
+  - artillery
+  - coordinated multi-unit attacks
+
+French tanks feel individually superior, offset by:
+  - slower reaction
+  - higher cost
+  - fewer units
+  - command/control inefficiency
+
+This creates asymmetry and makes both sides interesting.
+
+================================================================================
+EXAMPLE COST LOGIC
+================================================================================
+
+| Unit            | Relative Cost |
+|-----------------|---------------|
+| Panzer I        | 1             |
+| Panzer II       | 2             |
+| Panzer III      | 4             |
+| Panzer IV       | 4             |
+| H35 / R35       | 3             |
+| Somua S35       | 5             |
+| Char B1 bis     | 8             |
+| Pak 36          | 2             |
+| 25mm Hotchkiss  | 2             |
+| 47mm SA 37      | 4             |
+
+================================================================================
+AI / DESIGN NOTES
+================================================================================
+
+- Machine guns should prioritize suppression over raw kills.
+- Rifles should reward cover and steady aim.
+- SMGs should dominate buildings and hedgerows.
+- Tank HE rounds should be excellent against infantry but not magical.
+- Light AT guns should require flanking against heavy armor.
+
+================================================================================
+FINAL DESIGN SUMMARY — CORE BATTLEFIELD FEEL FOR 1940
+================================================================================
+
+• German infantry MG superiority
+• French armor superiority
+• German tempo and coordination
+• French defensive staying power
+
+================================================================================
+END OF DOCUMENT
+================================================================================

@@ -1,0 +1,11 @@
+# Generated data, weights, and cloned third-party training code
+dataset/
+checkpoints/
+.pix2pixHD/
+.venv/
+node_modules/
+*.onnx
+*.trt
+*.engine
+*.pth
+*.ckpt
