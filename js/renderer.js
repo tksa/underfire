@@ -182,39 +182,54 @@ Game.syncUnitMeshes = (dt) => {
         // Health bar update
         const hb = unit.mesh.userData.healthBar;
         if (hb) {
+            const hasAmmo = unit.maxAmmo > 0;
+            const ammoRatio = hasAmmo ? Game.clamp(unit.ammo / unit.maxAmmo, 0, 1) : 1;
+            const ammoLow = hasAmmo && ammoRatio <= 0.25; // includes empty
             const isSelected = Game.selection.has(unit.id);
             const isDamaged = unit.hp < unit.maxHp;
             const showAll = Game._showAllHealthBars || false;
-            hb.visible = isSelected || isDamaged || showAll;
+            // Show the bar when selected, damaged, debug, OR low/out of ammo so
+            // players can see at a glance why a unit has stopped shooting.
+            hb.visible = isSelected || isDamaged || showAll || ammoLow;
 
             if (hb.visible) {
                 const ratio = Game.clamp(unit.hp / unit.maxHp, 0, 1);
-                // Only redraw if HP changed
-                if (hb._lastRatio !== ratio) {
-                    hb._lastRatio = ratio;
+                // Redraw when HP, ammo, or damage state changes (not just HP).
+                const key = ratio.toFixed(2) + '|' + (hasAmmo ? ammoRatio.toFixed(2) : 'x')
+                    + (unit.tracksDisabled ? 't' : '') + (unit.engineDamaged ? 'e' : '') + (unit.turretDamaged ? 'r' : '');
+                if (hb._lastKey !== key) {
+                    hb._lastKey = key;
                     const canvas = unit.mesh.userData.healthBarCanvas;
                     const ctx = canvas.getContext('2d');
-                    const w = canvas.width, h = canvas.height;
-                    // Background
+                    const w = canvas.width;
+                    ctx.clearRect(0, 0, w, canvas.height);
+                    // ── HP bar (top row) ──
+                    const hpH = 7;
                     ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                    ctx.fillRect(0, 0, w, h);
-                    // Fill
-                    const fillW = Math.round(ratio * (w - 2));
+                    ctx.fillRect(0, 0, w, hpH);
                     ctx.fillStyle = ratio > 0.6 ? '#4a2' : (ratio > 0.3 ? '#da2' : '#d33');
-                    ctx.fillRect(1, 1, fillW, h - 2);
-                    // Status icons (component damage)
-                    let iconX = 1;
-                    ctx.font = '5px sans-serif';
-                    if (unit.tracksDisabled) { ctx.fillStyle = '#f55'; ctx.fillText('T', iconX, h + 6); iconX += 6; }
-                    if (unit.engineDamaged) { ctx.fillStyle = '#f80'; ctx.fillText('E', iconX, h + 6); iconX += 6; }
-                    if (unit.turretDamaged) { ctx.fillStyle = '#f55'; ctx.fillText('⊘', iconX, h + 6); iconX += 6; }
-                    if (unit.entrenched) { ctx.fillStyle = '#8f8'; ctx.fillText('⛏', iconX, h + 6); iconX += 6; }
-                    if (unit.ammo === 0) { ctx.fillStyle = '#ff0'; ctx.fillText('!', iconX, h + 6); iconX += 6; }
-                    if (unit.stance === 'run') { ctx.fillStyle = '#8cf'; ctx.fillText('►', iconX, h + 6); }
-                    // Border
+                    ctx.fillRect(1, 1, Math.round(ratio * (w - 2)), hpH - 2);
                     ctx.strokeStyle = 'rgba(255,255,255,0.3)';
                     ctx.lineWidth = 0.5;
-                    ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+                    ctx.strokeRect(0.5, 0.5, w - 1, hpH - 1);
+                    // ── Ammo bar (bottom row), only for units that use ammo ──
+                    if (hasAmmo) {
+                        const ay = 9, aH = 6;
+                        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                        ctx.fillRect(0, ay, w, aH);
+                        if (unit.ammo === 0) {
+                            // Empty: bright red outline, no fill = unmistakably out
+                            ctx.strokeStyle = '#ff3b30';
+                            ctx.lineWidth = 1;
+                            ctx.strokeRect(0.5, ay + 0.5, w - 1, aH - 1);
+                        } else {
+                            ctx.fillStyle = ammoRatio <= 0.25 ? '#f5a623' : '#3a8fd0'; // amber low / blue ok
+                            ctx.fillRect(1, ay + 1, Math.round(ammoRatio * (w - 2)), aH - 2);
+                            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+                            ctx.lineWidth = 0.5;
+                            ctx.strokeRect(0.5, ay + 0.5, w - 1, aH - 1);
+                        }
+                    }
                     unit.mesh.userData.healthBarTex.needsUpdate = true;
                 }
             }
@@ -816,18 +831,28 @@ Game.updateHUD = () => {
             const hpPct = Math.round(u.hp / u.maxHp * 100);
             const isV = Game.isTank(u.kind);
             const fuelStr = isV ? ` • Fuel ${Math.round(u.fuel)}` : '';
+            const hasAmmo = u.maxAmmo > 0;
+            const ammoPct = hasAmmo ? Math.round(u.ammo / u.maxAmmo * 100) : 100;
+            const ammoOut = hasAmmo && u.ammo === 0;
+            const ammoLow = hasAmmo && u.ammo > 0 && ammoPct <= 25;
+            const ammoColor = ammoOut ? '#ff5a4d' : (ammoLow ? '#f5a623' : '#6fd06f');
             const statusFlags = [];
             if (u.tracksDisabled) statusFlags.push('⚠ TRACKS');
             if (u.engineDamaged) statusFlags.push('🔥 ENGINE');
-            if (u.turretDamaged) statusFlags.push('⚠ TURRET');
-            if (u.ammo === 0) statusFlags.push('⚠ NO AMMO');
+            if (u.turretDamaged) statusFlags.push('⚠ TURRET JAMMED');
+            if (ammoOut) statusFlags.push('⛔ OUT OF AMMO — can\'t fire');
+            else if (ammoLow) statusFlags.push('⚠ LOW AMMO');
+            const ammoText = hasAmmo
+                ? `<span style="color:${ammoColor};font-weight:600">Ammo ${u.ammo}/${u.maxAmmo}</span>`
+                : 'Ammo —';
             Game.hud.selectedPanel.innerHTML = `
         <div class="hud-title">Selected</div>
         <div class="hud-unit-name">${u.label}</div>
         <div class="hud-text">Move: ${(Game.STANCE_LABEL && Game.STANCE_LABEL[u.stance]) || u.stance} • Fire: ${u.orderMode === 'hold' ? 'hold' : 'fire'} • ${u.behavior || 'defensive'}</div>
-        <div class="hud-text">HP ${Math.round(u.hp)} • Ammo ${u.ammo}/${u.maxAmmo}${fuelStr} • XP ${Math.round(u.experience || 0)}</div>
-        ${statusFlags.length ? `<div class="hud-text" style="color:#e44">${statusFlags.join(' ')}</div>` : ''}
+        <div class="hud-text">HP ${Math.round(u.hp)} • ${ammoText}${fuelStr} • XP ${Math.round(u.experience || 0)}</div>
+        ${statusFlags.length ? `<div class="hud-text" style="color:#ff6b5e;font-weight:600">${statusFlags.join(' &nbsp; ')}</div>` : ''}
         <div class="hud-bar"><div class="hud-bar-fill hp" style="width:${hpPct}%"></div></div>
+        ${hasAmmo ? `<div class="hud-bar"><div class="hud-bar-fill" style="width:${ammoPct}%;background:${ammoColor}"></div></div>` : ''}
         <div class="hud-bar"><div class="hud-bar-fill supp" style="width:${Math.round(u.suppressionValue)}%"></div></div>
       `;
         } else {
@@ -835,10 +860,17 @@ Game.updateHUD = () => {
             selected.forEach(u => counts[u.label] = (counts[u.label] || 0) + 1);
             const lines = Object.entries(counts).slice(0, 5).map(([k, v]) => `${k}: ${v}`).join(' • ');
             const avgHp = Math.round(selected.reduce((s, u) => s + u.hp / u.maxHp, 0) / selected.length * 100);
+            const armed = selected.filter(u => u.maxAmmo > 0);
+            const out = armed.filter(u => u.ammo === 0).length;
+            const low = armed.filter(u => u.ammo > 0 && u.ammo <= u.maxAmmo * 0.25).length;
+            const ammoWarn = out || low
+                ? `<div class="hud-text" style="color:#ff6b5e;font-weight:600">${out ? `⛔ ${out} out of ammo` : ''}${out && low ? ' • ' : ''}${low ? `⚠ ${low} low` : ''}</div>`
+                : '';
             Game.hud.selectedPanel.innerHTML = `
         <div class="hud-title">Selected</div>
         <div class="hud-unit-name">${selected.length} units (${avgHp}% avg HP)</div>
         <div class="hud-text">${lines}</div>
+        ${ammoWarn}
       `;
         }
     }

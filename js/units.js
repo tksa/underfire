@@ -705,14 +705,14 @@ Game._createUnitMesh = (unit) => {
     // Health bar sprite
     const hbCanvas = document.createElement('canvas');
     hbCanvas.width = 64;
-    hbCanvas.height = 8;
+    hbCanvas.height = 16; // top row = HP, bottom row = ammo
     const hbTex = new THREE.CanvasTexture(hbCanvas);
     hbTex.minFilter = THREE.LinearFilter;
     const hbMat = new THREE.SpriteMaterial({ map: hbTex, transparent: true, depthTest: false });
     const hbSprite = new THREE.Sprite(hbMat);
     const barY = isVeh ? unit.size * 2.5 + 1.5 : 2.2;
     hbSprite.position.set(0, barY, 0);
-    hbSprite.scale.set(isVeh ? 2.0 : 1.2, isVeh ? 0.25 : 0.18, 1);
+    hbSprite.scale.set(isVeh ? 2.0 : 1.2, isVeh ? 0.5 : 0.36, 1);
     hbSprite.visible = false;
     group.add(hbSprite);
     group.userData.healthBar = hbSprite;

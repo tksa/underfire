@@ -17,6 +17,7 @@ _Last updated: 2026-06-24._
 | 3 | P1 | **Units vanish instantly on death** (no corpse/wreck) | willythemoviemaker | Centralised death handling in `js/renderer.js`: any death now leaves a remnant regardless of cause — infantry fall as a body, vehicles become a charred wreck. Verified. |
 | 4 | P1 | **Shoot through objects (trees/hedges)** | willythemoviemaker | `lineOfSight` (`js/pathfinding.js`) barely reduced LOS through foliage. Now forests/hedges/orchards progressively obscure the line and block when thick enough; walls/buildings remain hard blockers. Verified: a 4-tile forest blocks LOS; open ground stays clear. |
 | 5 | P1 | **No main menu to go back to** | willythemoviemaker | Escape already reopened the menu but there was no visible control. Added an in-game **☰ Menu** button (`index.html`) that pauses and reopens the menu. Verified. |
+| 6 | P2 | **"Tanks don't fire on their own"** | willythemoviemaker (via tksa: it's a UI issue) | Tanks do fire; they were silently **out of ammo**. The old ammo indicator drew off the (8px) health-bar canvas and only redrew on HP change. Added a real overhead **ammo bar** (blue/amber/red) that shows whenever a unit is low/empty, and clear **LOW AMMO / OUT OF AMMO** warnings in the Selected panel (single + group). (`js/renderer.js`, `js/units.js`) |
 
 ## Works as intended / needs polish (not a code bug)
 
