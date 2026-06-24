@@ -63,7 +63,7 @@ This project exists to bring WW2 RTS fans into building the game they want. You 
 - **Where it could go:** [docs/ROADMAP.md](docs/ROADMAP.md) — development paths (Three.js now → engine ports / custom engine / the neural-renderer ideal).
 - **Maintainers / hosting / releases:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-Good first areas: **models, scenery, textures, effects, sound, game mechanics, and historical accuracy.** The systems exist; nearly all of them have room to get better.
+Good first areas: **models, scenery, textures, effects, sound, mechanics, and historical accuracy.** The systems exist; nearly all of them have room to get better.
 
 ---
 
