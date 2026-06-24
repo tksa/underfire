@@ -65,6 +65,16 @@ This project exists to bring WW2 RTS fans into building the game they want. You 
 
 Good first areas: **models, scenery, textures, effects, sound, mechanics, and historical accuracy.** The systems exist; nearly all of them have room to get better.
 
+## Found a bug? Have feedback?
+
+Please report it — it genuinely helps. The game is early and rough, so bug reports are some of the most valuable contributions you can make.
+
+- **Report a bug or request a feature:** [open an issue](https://github.com/tksa/underfire/issues/new/choose) (there are quick templates for both).
+- **Browse known issues first:** [existing issues](https://github.com/tksa/underfire/issues).
+- **Prefer to chat?** Drop it in [Discord](https://discord.gg/jmkh3RDkF) and we'll log it.
+
+When reporting a bug, a sentence on what you did, what you expected, and what happened (plus your browser/OS) is plenty. Screenshots or a clip help a lot.
+
 ---
 
 ## Tech at a glance

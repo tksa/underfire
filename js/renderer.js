@@ -13,22 +13,37 @@ Game.syncUnitMeshes = (dt) => {
     Game.units.forEach(unit => {
         if (!unit.mesh) return;
         if (!unit.alive) {
-            // Tanks disappear immediately on death (for now), but infantry leave dead bodies
-            if (!unit.isDeadBody) {
-                unit.mesh.visible = false;
-                return;
+            const ud = unit.mesh.userData;
+            // Promote any freshly-dead unit to a battlefield remnant ONCE, no
+            // matter what killed it (direct fire, HE/splash, bleed-out, etc.).
+            // Infantry leave a body; vehicles leave a charred wreck. Nothing
+            // just blinks out of existence.
+            if (!unit._deathHandled) {
+                unit._deathHandled = true;
+                if (ud.selectionRing) ud.selectionRing.visible = false;
+                if (ud.healthBar) ud.healthBar.visible = false;
+                unit.speed = 0; unit.currentSpeed = 0;
+                if (Game.isTank(unit.kind)) {
+                    unit._isWreck = true;
+                    unit.mesh.traverse(o => {
+                        if ((o.isMesh || o.isInstancedMesh) && o.material) {
+                            const mats = Array.isArray(o.material) ? o.material : [o.material];
+                            mats.forEach(m => {
+                                if (m.color) m.color.multiplyScalar(0.28);
+                                if ('metalness' in m) m.metalness = 0.1;
+                                if ('roughness' in m) m.roughness = 1.0;
+                            });
+                        }
+                    });
+                } else {
+                    unit.isDeadBody = true;
+                    unit.mesh.rotation.z = Math.PI / 2;        // fall over
+                    unit.mesh.position.y = (unit.y || 0) + 0.1;
+                }
             }
-            
-            // Hide selection ring and health bar for dead bodies
-            if (unit.mesh.userData.selectionRing) unit.mesh.userData.selectionRing.visible = false;
-            if (unit.mesh.userData.healthBar) unit.mesh.userData.healthBar.visible = false;
-            
-            // Still update the animation mixer so the death animation actually plays
-            if (unit.mesh.userData.mixer) {
-                unit.mesh.userData.mixer.update(dt);
-            }
-            // Dead bodies shouldn't run any other rendering logic (like pitch/tracking)
-            return;
+            unit.mesh.visible = true; // corpse / wreck stays on the field
+            if (ud.mixer) ud.mixer.update(dt);
+            return; // dead remnants skip the rest of the per-frame logic
         }
 
         // Drive skeletal animation (clip chosen from unit state) + advance mixer

@@ -98,22 +98,35 @@ Game.findPath = (unit, startX, startZ, endX, endZ) => {
 Game.lineOfSight = (a, b) => {
     const dx = b.x - a.x, dz = b.z - a.z;
     const steps = Math.ceil(Math.max(Math.abs(dx), Math.abs(dz)) / 0.9);
-    let forestPenalty = 1;
+    let vis = 1;
     for (let i = 1; i < steps; i++) {
         const t = i / steps;
         const x = a.x + dx * t, z = a.z + dz * t;
         const tile = Game.getTileAtWorld(x, z);
         if (!tile) return false;
-        if (tile.sightBlock) return false;
-        if (tile.type === 'forest' || tile.type === 'orchard' || tile.type === 'wheat') forestPenalty *= 0.985;
+        if (tile.sightBlock) return false;   // walls + buildings: hard block
+        // Foliage / objects progressively obscure the line; enough of it blocks.
+        switch (tile.type) {
+            case 'dense_forest': vis *= 0.80; break;
+            case 'forest':       vis *= 0.88; break;
+            case 'hedge':        vis *= 0.83; break;
+            case 'orchard':      vis *= 0.93; break;
+            case 'wheat':        vis *= 0.97; break;
+            default: break;
+        }
+        if (vis < 0.18) return 0;            // too obscured to see/shoot through
     }
-    return forestPenalty;
+    return vis;
 };
 
 Game.unitCanSee = (a, b) => {
     if (!a.alive || !b.alive) return false;
-    // Fog of war: can't see enemies in hidden fog tiles
-    if (a.team === Game.TEAM.FRENCH && Game.isFogVisible && !Game.isFogVisible(b.x, b.z)) return false;
+    // NOTE: this is a UNIT's own perception (line-of-sight + its sight range),
+    // used for target acquisition and firing. It must NOT be gated by the
+    // player's fog-of-war grid — otherwise units refuse to engage enemies in
+    // plain sight just because the shared map fog hasn't revealed them (and
+    // would target farther revealed enemies over closer ones). The fog grid is
+    // for the player's display only (see renderer's isFogVisible checks).
     const d = Game.dist(a.x, a.z, b.x, b.z);
     let visRange = a.sight;
     const targetTile = Game.getTileAtWorld(b.x, b.z);

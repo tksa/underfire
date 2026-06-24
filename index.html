@@ -209,6 +209,16 @@
       box-shadow: inset 0 0 0 1px rgba(201, 164, 93, 0.7);
     }
 
+    /* In-game button to reopen the main menu (hidden behind the menu overlay) */
+    .ingame-menu-btn {
+      position: fixed; top: 12px; left: 14px; z-index: 16;
+      padding: 7px 14px; font-size: 12px; font-weight: 600; letter-spacing: 1px;
+      color: #d7dde6; background: rgba(16, 18, 22, 0.7);
+      border: 1px solid rgba(106, 114, 126, 0.45); border-radius: 4px; cursor: pointer;
+      font-family: Inter, system-ui, sans-serif;
+    }
+    .ingame-menu-btn:hover { background: rgba(40, 44, 52, 0.92); border-color: rgba(126, 134, 146, 0.6); }
+
     #welcomeGate .menu-title {
       font-size: 88px;
       margin-bottom: 6px;
@@ -1203,6 +1213,9 @@
     </div>
   </div>
 
+  <!-- In-game: return to main menu (also bound to Esc) -->
+  <button id="btnMenu" class="ingame-menu-btn" title="Pause and open the menu (Esc)">☰ Menu</button>
+
   <!-- ═══ LANGUAGE SELECTOR ═══ -->
   <div id="langBar">
     <button class="lang-btn active" data-lang="en" title="English">🇬🇧</button>
@@ -1372,6 +1385,11 @@
     // ── Menu logo → back to the welcome gate (home) ──
     document.getElementById('menuLogo')?.addEventListener('click', () => {
       document.getElementById('welcomeGate')?.classList.remove('hidden');
+    });
+    // ── In-game "Menu" button → pause + reopen the main menu ──
+    document.getElementById('btnMenu')?.addEventListener('click', () => {
+      document.getElementById('mainMenu')?.classList.remove('hidden');
+      if (window.Game) Game._paused = true;
     });
 
     // ── Build version (CI can replace UNDER_VERSION at deploy time) ──

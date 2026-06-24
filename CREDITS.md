@@ -37,3 +37,11 @@ The game currently uses a curated subset (rifle, MG/SMG bursts, cannon/AT,
 explosions, plus wind/birds ambience and a diesel engine bed); the rest of the
 library is available for reuse.
 
+## Playtesting & bug reports
+
+Thanks to the people kicking the tyres and telling us what's broken:
+
+- **willythemoviemaker** — early playtesting and a detailed run of bug reports
+  (firing, line-of-sight, formations, death handling, menu, and more).
+- **tesserS** — playtesting and feedback.
+
