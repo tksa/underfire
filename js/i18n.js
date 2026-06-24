@@ -45,6 +45,7 @@
       dev_3n: "Custom engine", dev_3d: "Bespoke C++/Rust + WebGPU for massive unit counts.",
       dev_4n: "Neural renderer", dev_4d: "AI image-to-image layer for photorealism on top.",
       dev_ideal: "ideal vision",
+      discord: "Join Discord",
     },
 
     de: {
@@ -83,6 +84,7 @@
       dev_3n: "Eigene Engine", dev_3d: "Eigenbau in C++/Rust + WebGPU für riesige Einheitenzahlen.",
       dev_4n: "Neuronaler Renderer", dev_4d: "KI-Bild-zu-Bild-Schicht für Fotorealismus obendrauf.",
       dev_ideal: "Idealvision",
+      discord: "Discord beitreten",
     },
 
     pl: {
@@ -121,6 +123,7 @@
       dev_3n: "Własny silnik", dev_3d: "Autorski C++/Rust + WebGPU dla ogromnej liczby jednostek.",
       dev_4n: "Renderer neuronowy", dev_4d: "Warstwa AI obraz-do-obrazu dla fotorealizmu.",
       dev_ideal: "idealna wizja",
+      discord: "Dołącz do Discorda",
     },
 
     fr: {
@@ -159,6 +162,7 @@
       dev_3n: "Moteur sur mesure", dev_3d: "C++/Rust + WebGPU sur mesure pour de très nombreuses unités.",
       dev_4n: "Rendu neuronal", dev_4d: "Couche IA image-à-image pour le photoréalisme.",
       dev_ideal: "vision idéale",
+      discord: "Rejoindre le Discord",
     },
 
     es: {
@@ -197,6 +201,7 @@
       dev_3n: "Motor propio", dev_3d: "C++/Rust + WebGPU a medida para muchísimas unidades.",
       dev_4n: "Renderizador neuronal", dev_4d: "Capa de IA imagen-a-imagen para fotorrealismo.",
       dev_ideal: "visión ideal",
+      discord: "Unirse a Discord",
     },
   };
 

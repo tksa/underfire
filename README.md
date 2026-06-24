@@ -1,6 +1,26 @@
-# Under Fire
+<p align="center">
+  <img src="splash.png" alt="Under Fire" width="640">
+</p>
 
-**A free, open, community-built World War II real-time tactics game — vibe coding welcome.**
+<h1 align="center">Under Fire</h1>
+
+<p align="center"><strong>A free, open, community-built World War II real-time tactics game. Built in the browser, with AI.</strong></p>
+
+<p align="center">
+  <a href="https://underfire.io">▶ Play</a>
+  &nbsp;·&nbsp;
+  <a href="https://discord.gg/jmkh3RDkF">💬 Discord</a>
+  &nbsp;·&nbsp;
+  <a href="CONTRIBUTING.md">Contribute</a>
+  &nbsp;·&nbsp;
+  <a href="vision.md">Vision</a>
+</p>
+
+<p align="center">
+  <a href="https://discord.gg/jmkh3RDkF"><img src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white" alt="Join our Discord"></a>
+</p>
+
+---
 
 Under Fire is a browser-based WW2 RTS in active, early development. It runs today: a 3D, individual-unit tactical battle with cover, suppression, line-of-sight, stance, armour penetration, squad AI, and a procedurally generated French-village battlefield. The bigger goal is a historically faithful platoon-to-battalion wargame spanning the whole of the Second World War — and it is being built in the open, by the community, with AI ("vibe") coding.
 
