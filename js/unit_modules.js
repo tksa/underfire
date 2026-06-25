@@ -138,7 +138,28 @@ Game.uMod.scan = (unit, ctx) => {
             unit._pursueAnchor = null;
         }
     }
-    if (!enemy && unit.orderMode !== 'hold') enemy = Game.nearestEnemy(unit);
+    // A holding or retreating unit doesn't go looking for a fight.
+    if (!enemy && unit.orderMode !== 'hold' && unit.orderMode !== 'retreat') {
+        enemy = Game.nearestEnemy(unit);
+    }
+    // Sticky engagement: once a unit acquires a target it commits to it through a
+    // brief sight/LOS flicker, instead of snapping to face it then spinning back
+    // to neutral every frame at the edge of visibility (the "rotation jitter").
+    // Firing is still line-of-sight gated in the fire module, so it won't shoot
+    // blind — this only steadies facing/tracking.
+    if (enemy) {
+        unit._engageId = enemy.id;
+        unit._engageTime = Game.gameClock;
+    } else if (unit._engageId != null && unit.orderMode !== 'retreat'
+        && (Game.gameClock - (unit._engageTime || 0)) < 1.6) {
+        const le = Game.getUnitById(unit._engageId);
+        if (le && le.alive && le.team !== unit.team
+            && Game.dist(unit.x, unit.z, le.x, le.z) <= unit.sight * 1.3) {
+            enemy = le;
+        } else {
+            unit._engageId = null;
+        }
+    }
     unit.fireTargetId = enemy ? enemy.id : null;
     ctx.enemy = enemy;
 };
@@ -377,6 +398,29 @@ Game.uMod.move = (unit, ctx) => {
             const isLastWaypoint = unit.path.length === 1;
 
             if (isVeh) {
+                // Reverse-retreat: a falling-back tank keeps its front toward the
+                // threat and backs away toward the waypoint (only at close range;
+                // farther out it just turns and drives normally).
+                const reverseRetreat = unit.retreating && unit._retreatThreat
+                    && Game.dist(unit.x, unit.z, unit._retreatThreat.x, unit._retreatThreat.z) < 45;
+                if (reverseRetreat) {
+                    const faceAng = Game.angleTo(unit.x, unit.z, unit._retreatThreat.x, unit._retreatThreat.z);
+                    unit.angle = Game.rotateTo(unit.angle, faceAng, unit.rotationSpeed * dt);
+                    const revSpeed = maxSpeed * 0.5;
+                    const step = Math.min(revSpeed * dt, d);
+                    unit.x += Math.cos(ang) * step;
+                    unit.z += Math.sin(ang) * step;
+                    unit.currentSpeed = revSpeed;
+                    unit._reversing = true;
+                    unit.turretAngle = hasTurret ? faceAng : unit.angle;
+                    unit.moving = true;
+                    unit._trackDist = (unit._trackDist || 0) + step;
+                    if (unit._trackDist > 1.2) {
+                        unit._trackDist = 0;
+                        Game.trackMarks = Game.trackMarks || [];
+                        Game.trackMarks.push({ x: unit.x, z: unit.z, angle: unit.angle, size: unit.size, life: 15.0, total: 15.0, mesh: null });
+                    }
+                } else {
                 const angleDelta = Game.angleDiff(unit.angle, ang);
                 const absAngleDelta = Math.abs(angleDelta);
 
@@ -487,6 +531,7 @@ Game.uMod.move = (unit, ctx) => {
                 }
 
                 unit.moving = true;
+                } // end normal differential drive (else of reverseRetreat)
 
             } else {
                 const turnRate = unit.rotationSpeed;
@@ -540,6 +585,13 @@ Game.uMod.move = (unit, ctx) => {
         unit.y = Game.getVehicleHeight(unit.x, unit.z, unit.size, unit.angle);
     } else {
         unit.y = Game.getHeight(unit.x, unit.z);
+    }
+
+    // Retreat ends on arrival: drop the flag; a player retreat settles into hold.
+    if (unit.retreating && (!unit.path || !unit.path.length)) {
+        unit.retreating = false;
+        unit._retreatThreat = null;
+        if (unit.orderMode === 'retreat') unit.orderMode = 'hold';
     }
 };
 

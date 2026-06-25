@@ -83,6 +83,34 @@ Game.orderAttackMove = (x, z) => {
 };
 
 /**
+ * Retreat: force the selected units to break off the fight and fall back to a
+ * point. They stop acquiring targets (no firing), infantry sprint, and tanks
+ * reverse out of contact keeping their front toward the threat.
+ */
+Game.orderRetreat = (x, z) => {
+    const chosen = Game.selectedPlayerUnits();
+    if (!chosen.length) return;
+    const tx = Game.clamp(x, 1, Game.WORLD_W - 1), tz = Game.clamp(z, 1, Game.WORLD_H - 1);
+    chosen.forEach(u => {
+        u.forcedTargetId = null;
+        u.bombardX = null; u.bombardZ = null; u._bombarding = false;
+        u.orderMode = 'retreat';
+        u.retreating = true;
+        const threat = (u._engageId != null ? Game.getUnitById(u._engageId) : null) || Game.nearestEnemy(u);
+        u._retreatThreat = (threat && threat.alive) ? { x: threat.x, z: threat.z } : null;
+        if (!Game.isTank(u.kind)) { u.stance = 'run'; u._autoStance = true; }
+        u.path = Game.findPath(u, u.x, u.z, tx, tz);
+        u.moving = true;
+        u.stopTimer = 0;
+        u.orderDelay = 0;
+    });
+    Game.spawnOrderMarker(x, z, 0x44aaff); // blue = retreat
+    Game.pushMessage('Retreat — break off and fall back!', 1.8);
+    if (Game.Audio) Game.Audio.voice('f_sold_move');
+    Game._clearFormationPreview();
+};
+
+/**
  * Attack Ground: each selected armed unit takes up a firing position within
  * range + line of sight of the spot and pours fire onto it. Mortars/indirect
  * lob shells; direct-fire units (tanks, MGs, rifles) suppress the area. They do
@@ -432,7 +460,16 @@ Game.handleInputEvents = () => {
         } else if (e.button === 2) {
             const ground = Game.screenToGround(e.clientX, e.clientY);
             if (ground) {
-                if (Game._commandMode === 'airstrike') {
+                // Double right-click = RETREAT: force selected units to break off
+                // and fall back here (disengage; infantry sprint, tanks reverse).
+                const now = performance.now();
+                const dbl = Game._lastRC && (now - Game._lastRC.t) < 400
+                    && Math.abs(e.clientX - Game._lastRC.x) < 24
+                    && Math.abs(e.clientY - Game._lastRC.y) < 24;
+                Game._lastRC = { t: now, x: e.clientX, y: e.clientY };
+                if (dbl && !Game._commandMode && !e.shiftKey) {
+                    Game.orderRetreat(ground.x, ground.z);
+                } else if (Game._commandMode === 'airstrike') {
                     Game.callAirStrike(ground.x, ground.z);
                     Game._commandMode = null;
                 } else if (Game._commandMode === 'recon') {

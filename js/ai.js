@@ -88,6 +88,7 @@ Game.updateAI = (unit, dt, enemy) => {
     unit.thinking -= dt;
     if (unit.thinking > 0) return;
     unit.thinking = Game.rand(0.25, 0.5);
+    unit.retreating = false; // re-asserted below only while actually falling back
 
     const isVeh = Game.isTank(unit.kind);
     const supp = unit.suppressionValue || 0;
@@ -111,6 +112,10 @@ Game.updateAI = (unit, dt, enemy) => {
     // ── RETREAT: squad broken or near death — fall back to the rally point ──
     if (posture === 'fallback' || hpPct < 0.22) {
         unit._ai = 'retreat';
+        // Commit to the fall-back: infantry sprint, tanks reverse out of contact
+        // (the move module reads unit.retreating + _retreatThreat).
+        unit.retreating = true;
+        if (threatPos) unit._retreatThreat = { x: threatPos.x, z: threatPos.z };
         // Panic: a broken, heavily-suppressed soldier with no officer near may bolt
         // in a random direction instead of an orderly fall-back (RWM moralerndmove).
         const rally = unit._rally || unit.holdPoint || { x: unit.x, z: unit.z };
@@ -125,7 +130,7 @@ Game.updateAI = (unit, dt, enemy) => {
         if (Game.dist(unit.x, unit.z, rally.x, rally.z) > 3 && (!unit.path || !unit.path.length)) {
             unit.path = Game.findPath(unit, unit.x, unit.z, rally.x, rally.z);
         }
-        setStance('crouch');
+        setStance('run'); // sprint to the rally (infantry); no-op for vehicles
         return;
     }
 
