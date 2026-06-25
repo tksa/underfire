@@ -172,6 +172,25 @@ Game.updateUnit = (unit, dt) => {
         }
     }
 
+    // ── Towed-gun deploy / limber (RWM siege) ──
+    // Crew-served guns must be set up to fire and packed up to move. Limber
+    // automatically when given somewhere to go; re-deploy once stopped. A short
+    // setup delay gates both firing and moving so it reads as a real crew drill.
+    if (unit.deployable) {
+        unit._deployT = Math.max(0, (unit._deployT || 0) - dt);
+        const wantsMove = !!(unit.path && unit.path.length > 0);
+        if (wantsMove && unit.deployed && unit._deployT <= 0) {
+            unit.deployed = false;          // pack up before rolling out
+            unit._deployT = 1.0;
+            if (Game.selection.has(unit.id)) Game.pushMessage(`${unit.label}: limbering up.`, 1.0);
+        } else if (!wantsMove && !unit.deployed && unit._deployT <= 0) {
+            unit.deployed = true;           // set up again once halted
+            unit._deployT = 1.0;
+        }
+        unit._canMove = !unit.deployed && unit._deployT <= 0;
+        unit._canFire = unit.deployed && unit._deployT <= 0;
+    }
+
     // ── Target resolution ──
     // Priority: player-forced target > auto-acquire nearest. A forced target
     // commits the unit until the target dies or it's manually re-ordered.
@@ -282,6 +301,8 @@ Game.updateUnit = (unit, dt) => {
                     ready = true;
                 }
             }
+            // A towed gun can only fire while deployed and set up.
+            if (unit.deployable && !unit._canFire) ready = false;
             if (hasTurret) {
                 // ── Turreted vehicle: rotate turret toward enemy with inertia ──
                 const tRot = Game.rotateWithInertia(
@@ -386,7 +407,8 @@ Game.updateUnit = (unit, dt) => {
         maxSpeed = 0;
     }
 
-    if (unit.path && unit.path.length && unit.stopTimer <= 0 && (unit.orderDelay || 0) <= 0) {
+    if (unit.path && unit.path.length && unit.stopTimer <= 0 && (unit.orderDelay || 0) <= 0
+        && (!unit.deployable || unit._canMove)) {
         let next = unit.path[0];
         let dx = next.x - unit.x;
         let dz = next.z - unit.z;
@@ -917,6 +939,7 @@ Game.updateGroundFire = (unit, dt, weapon) => {
     const aim = Game.angleTo(unit.x, unit.z, tx, tz);
     unit.angle = aim;
     unit.turretAngle = aim;
+    if (unit.deployable && !unit._canFire) return; // still setting up
     if (unit.cooldownLeft <= 0) {
         Game.fireAtGround(unit, tx, tz, weapon);
         const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;

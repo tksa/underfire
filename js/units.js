@@ -1084,6 +1084,12 @@ Game.makeUnit = (team, kind, x, z, opts = {}) => {
         turretAngVel: 0,  // current turret angular velocity (rad/s)
         recoilTime: 0,    // remaining recoil animation time (s)
         hasTurret: !!base.turret,
+        // RWM-style towed-gun deploy (siege): AT guns must be set up to fire and
+        // packed up to move. They start deployed; the update loop limbers them
+        // automatically when ordered to move and re-deploys them once stopped.
+        deployable: ['at25', 'at47', 'pak36', 'hmg'].includes(base.kind || kind),
+        deployed: true,
+        _deployT: 0,
         mesh: null,
     };
 

@@ -37,6 +37,14 @@ The game currently uses a curated subset (rifle, MG/SMG bursts, cannon/AT,
 explosions, plus wind/birds ambience and a diesel engine bed); the rest of the
 library is available for reuse.
 
+## Game logic reference (RWM, RWM-Zero public-domain dedication)
+RWM's game logic was reverse-engineered from its binaries/config (unit attribute
+schema, unit types & engine modules, orders & controls, AI behaviors, mission
+scripting, UI) and documented in `docs/reference/rwm/`. We use it as a design
+reference to bring worthwhile mechanics into Under Fire. First port: towed-gun
+**deploy / limber (siege)** for AT guns and heavy MGs. Same public-domain
+dedication as the RWM sound bank above.
+
 ## Playtesting & bug reports
 
 Thanks to the people kicking the tyres and telling us what's broken:
