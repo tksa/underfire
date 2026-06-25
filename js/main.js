@@ -263,7 +263,23 @@ Game.updateUnit = (unit, dt) => {
     if (canFire && enemy && Game.unitCanSee(unit, enemy)) {
         const d = Game.dist(unit.x, unit.z, enemy.x, enemy.z);
 
-        if (d <= unit.range && unit.stopTimer <= 0) {
+        // Fire whenever the target is in range + LOS. (stopTimer pauses MOVEMENT
+        // during an assault-move engage; it must NOT also block firing, or units
+        // ordered to attack-move would freeze next to an enemy without shooting.)
+        if (d <= unit.range) {
+            // Combat readiness: a unit relocating on a plain Move order travels with
+            // weapons stowed and needs a moment to react to contact. Attack-move,
+            // defending, and idle units (_combatReady !== false) engage on contact.
+            // The turret/hull still tracks the threat during ready-up; only the shot
+            // waits, so the player sees the unit "bring weapons to bear" first.
+            let ready = unit._combatReady !== false;
+            if (!ready) {
+                unit._readyTimer = (unit._readyTimer || 0) + dt;
+                if (unit._readyTimer >= (Game.isTank(unit.kind) ? 1.8 : 1.2)) {
+                    unit._combatReady = true;
+                    ready = true;
+                }
+            }
             if (hasTurret) {
                 // ── Turreted vehicle: rotate turret toward enemy with inertia ──
                 const tRot = Game.rotateWithInertia(
@@ -284,7 +300,7 @@ Game.updateUnit = (unit, dt) => {
                     unit.hullAngVel = hRot.angVel;
                 }
 
-                if (turretAligned && unit.cooldownLeft <= 0) {
+                if (turretAligned && ready && unit.cooldownLeft <= 0) {
                     Game.applyShot(unit, enemy);
                     const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;
                     unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
@@ -300,7 +316,7 @@ Game.updateUnit = (unit, dt) => {
                 unit.turretAngle = unit.angle;
                 const hullAligned = Math.abs(Game.angleDiff(unit.angle, aimAngleToEnemy)) < 0.15;
 
-                if (hullAligned && unit.cooldownLeft <= 0) {
+                if (hullAligned && ready && unit.cooldownLeft <= 0) {
                     Game.applyShot(unit, enemy);
                     const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;
                     unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
@@ -309,7 +325,7 @@ Game.updateUnit = (unit, dt) => {
                 // ── Infantry / support: instant snap (as before) ──
                 unit.angle = aimAngleToEnemy;
                 unit.turretAngle = unit.angle;
-                if (unit.cooldownLeft <= 0) {
+                if (ready && unit.cooldownLeft <= 0) {
                     Game.applyShot(unit, enemy);
                     const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;
                     unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
@@ -2130,11 +2146,13 @@ Game.boot = async () => {
 
     // Command button click handlers
     const cmdHandlers = {
-        cmdAttack: () => { Game._commandMode = 'assault'; Game.pushMessage('Assault move — right-click target.', 2.0); },
+        cmdAttack: () => { Game.setOrderStance('attack'); },
+        stanceMove: () => { Game.setOrderStance('move'); },
+        stanceAttack: () => { Game.setOrderStance('attack'); },
         cmdStop: () => { Game.selectedPlayerUnits().forEach(u => { u.path = []; u.moving = false; u.orderMode = 'hold'; u.forcedTargetId = null; u.bombardX = null; u.bombardZ = null; u._bombarding = false; }); Game.pushMessage('Units stopped.', 1.0); },
         cmdHold: () => { Game.selectedPlayerUnits().forEach(u => { u.orderMode = u.orderMode === 'hold' ? 'aggressive' : 'hold'; }); },
         cmdGrenade: () => { Game._commandMode = 'grenade'; Game.pushMessage('Grenade — right-click target.', 2.0); },
-        cmdMove: () => { Game._commandMode = null; Game.pushMessage('Move mode.', 1.0); },
+        cmdMove: () => { Game.setOrderStance('move'); },
         cmdSmoke: () => { Game._commandMode = 'smoke'; Game.pushMessage('Smoke — right-click target.', 2.0); },
         cmdAirStrike: () => { if (Game.airStrikesAvailable > 0) { Game._commandMode = 'airstrike'; Game.pushMessage('Click target for air strike...', 3.0); } else { Game.pushMessage('No air strikes available!', 2.0); } },
         cmdRotate: () => { Game._commandMode = 'rotate'; Game.pushMessage('Rotate — right-click direction.', 2.0); },

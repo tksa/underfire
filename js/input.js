@@ -31,12 +31,20 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null) => {
         unit.targetX = tx;
         unit.targetZ = tz;
         unit.path = Game.findPath(unit, unit.x, unit.z, tx, tz);
-        unit.orderMode = mode === 'hold' ? 'hold' : unit.orderMode;
+        // Attack-move: advance to the area but stop to engage any enemy that comes
+        // into range, then push on. A plain move keeps the unit's current stance;
+        // hold stays put-and-defend.
+        if (mode === 'attack') unit.orderMode = 'assault';
+        else if (mode === 'hold') unit.orderMode = 'hold';
+        // Combat readiness: a plain Move travels "weapons stowed" — the unit needs
+        // a moment to react to contact. Attack-move advances already ready.
+        if (mode === 'move') { unit._combatReady = false; unit._readyTimer = 0; }
+        else unit._combatReady = true;
         unit.moving = true;
         unit.stopTimer = 0;
         unit.orderDelay = Game.commandDelay(unit);
-        // Pulsing destination marker where this unit will end up
-        Game.spawnOrderMarker(tx, tz);
+        // Pulsing destination marker: red for an attack-move, green for a plain move.
+        Game.spawnOrderMarker(tx, tz, mode === 'attack' ? 0xff5544 : 0x88cc66);
     });
     Game.pushMessage(mode === 'attack' ? 'Attack-move ordered.' : 'Move ordered.', 1.8);
     if (Game.Audio) {
@@ -46,6 +54,38 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null) => {
 
     // Clear preview markers
     Game._clearFormationPreview();
+};
+
+/**
+ * Set the persistent right-click order stance ('move' or 'attack') and reflect
+ * it in the HUD switch + the battlefield cursor.
+ */
+Game.setOrderStance = (stance) => {
+    Game.orderStance = stance === 'attack' ? 'attack' : 'move';
+    document.querySelectorAll('.stance-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.stance === Game.orderStance));
+    const vp = document.getElementById('viewport');
+    if (vp) vp.classList.toggle('cmd-attack', Game.orderStance === 'attack');
+    Game.pushMessage(Game.orderStance === 'attack'
+        ? 'Attack-move: units advance ready and engage.'
+        : 'Move: units relocate without seeking combat.', 1.6);
+};
+
+/**
+ * Attack-move to a ground spot: mortars/indirect bombard the position, everyone
+ * else assault-moves there (advancing and stopping to engage en route).
+ */
+Game.orderAttackMove = (x, z) => {
+    const chosen = Game.selectedPlayerUnits();
+    if (!chosen.length) return;
+    const indirect = chosen.filter(u => Game.WEAPONS[u.weaponKey]?.fireType === 'indirect');
+    const movers = chosen.filter(u => !indirect.includes(u));
+    indirect.forEach(u => { u.bombardX = x; u.bombardZ = z; u.forcedTargetId = null; });
+    if (indirect.length) {
+        Game.spawnOrderMarker(x, z, 0xff8844); // orange = bombard
+        Game.pushMessage('Bombarding position!', 1.5);
+    }
+    if (movers.length) Game.issueCommand(x, z, 'attack', movers);
 };
 
 /**
@@ -97,6 +137,7 @@ Game.orderAttackTarget = (target) => {
         u.forcedTargetId = target.id;
         u.bombardX = null; u.bombardZ = null;
         u.orderMode = 'aggressive';
+        u._combatReady = true; // explicit attack — engage on contact
         const d = Game.dist(u.x, u.z, target.x, target.z);
         if (d > u.range * 0.9) {
             // Close to within weapon range, approaching from our side
@@ -396,23 +437,6 @@ Game.handleInputEvents = () => {
                         u.turretAngle = u.angle;
                     });
                     Game._commandMode = null;
-                } else if (Game._commandMode === 'assault') {
-                    // Attack command: mortars bombard the spot; everyone else attack-moves.
-                    const chosen = Game.selectedPlayerUnits();
-                    const indirect = chosen.filter(u =>
-                        Game.WEAPONS[u.weaponKey]?.fireType === 'indirect');
-                    const movers = chosen.filter(u => !indirect.includes(u));
-                    indirect.forEach(u => {
-                        u.bombardX = ground.x; u.bombardZ = ground.z;
-                        u.forcedTargetId = null;
-                    });
-                    if (indirect.length) {
-                        Game.spawnOrderMarker(ground.x, ground.z, 0xff8844); // orange = bombard
-                        Game.pushMessage('Bombarding position!', 1.5);
-                    }
-                    movers.forEach(u => { u.orderMode = 'assault'; });
-                    if (movers.length) Game.issueCommand(ground.x, ground.z, 'attack', movers);
-                    Game._commandMode = null;
                 } else {
                     // Shift+right-click = queue waypoint
                     if (e.shiftKey) {
@@ -424,19 +448,21 @@ Game.handleInputEvents = () => {
                             Game.spawnOrderMarker(ground.x, ground.z);
                         }
                     } else {
-                        // Plain right-click: force-fire an enemy under the cursor, else MOVE
-                        // everyone (mortars included — bombarding ground is the Attack command).
-                        // Pick by the actual mesh first (parallax-proof: a tall tank body
-                        // sits "above" the ground point behind it), then fall back to a
-                        // world-radius search around the ground hit.
+                        // Plain right-click. Clicking an enemy ALWAYS attacks it. On open
+                        // ground, obey the current order stance: 'attack' = attack-move
+                        // (advance + engage), otherwise a plain Move (relocate, stowed).
+                        // Pick by the actual mesh first (parallax-proof), then fall back
+                        // to a world-radius search around the ground hit.
                         const picked = Game.unitAtScreen(e.clientX, e.clientY);
                         const enemyUnit = (picked && picked.team !== Game.TEAM.FRENCH)
                             ? picked
                             : Game.enemyAtWorld(ground.x, ground.z);
                         if (enemyUnit) {
                             Game.orderAttackTarget(enemyUnit);
+                        } else if (Game.orderStance === 'attack') {
+                            Game.orderAttackMove(ground.x, ground.z);
                         } else {
-                            Game.issueCommand(ground.x, ground.z, 'attack');
+                            Game.issueCommand(ground.x, ground.z, 'move');
                         }
                     }
                 }
@@ -592,10 +618,9 @@ Game.handleInputEvents = () => {
             }
         }
 
-        // Assault move (E key)
+        // Toggle Move / Attack-move stance (E key)
         if (e.code === 'KeyE') {
-            Game._commandMode = 'assault';
-            Game.pushMessage('Assault move — right-click target.', 2.0);
+            Game.setOrderStance(Game.orderStance === 'attack' ? 'move' : 'attack');
         }
 
         // Rotate (R key)

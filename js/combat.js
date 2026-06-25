@@ -7,8 +7,16 @@
 Game.nearestEnemy = (unit) => {
     let best = null;
     let bestD = Infinity;
+    // Player units only AUTO-engage enemies the team has actually spotted (lit in
+    // the fog of war). Otherwise units fire at targets the player can't even see
+    // (e.g. a mortar shelling an enemy hidden in fog). The AI has no player fog,
+    // so it acquires by its own sight + LOS. This gates auto-acquisition only — a
+    // player-FORCED target (right-clicked) still engages via its commitment path,
+    // and firing itself is still gated by unitCanSee (line of sight).
+    const fogGated = unit.team === Game.TEAM.FRENCH && Game.isFogVisible;
     for (const other of Game.units) {
         if (!other.alive || other.team === unit.team) continue;
+        if (fogGated && !Game.isFogVisible(other.x, other.z)) continue;
         const d = Game.distSq(unit.x, unit.z, other.x, other.z);
         if (d < bestD && Game.unitCanSee(unit, other)) {
             bestD = d;

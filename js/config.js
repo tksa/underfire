@@ -66,6 +66,11 @@ Game.nextUnitId = 1;
 // HUD elements (set during boot)
 Game.hud = {};
 
+// Default right-click order stance: 'move' (relocate, weapons stowed) or
+// 'attack' (attack-move: advance ready, stop to engage). Toggled from the
+// Orders switch in the HUD. Right-clicking an enemy always attacks it.
+Game.orderStance = 'move';
+
 // Which status bars to draw above units (player-toggleable from the bottom bar).
 // All off by default — a clean battlefield; the player opts in. Fuel only
 // applies to vehicles; ammo only to units that carry ammo.
