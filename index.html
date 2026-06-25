@@ -1525,26 +1525,25 @@
   }
   </script>
 
-  <!-- Game scripts (classic, loaded in dependency order) -->
-  <script src="js/config.js"></script>
-  <script src="js/i18n.js"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/engine.js"></script>
-  <script src="js/weapons.js"></script>
-  <script src="js/terrain.js"></script>
-  <script src="js/units.js"></script>
-  <script src="js/pathfinding.js"></script>
-  <script src="js/combat.js"></script>
-  <script src="js/ai.js"></script>
-  <script src="js/camera.js"></script>
-  <script src="js/input.js"></script>
-  <script src="js/renderer.js"></script>
-  <script src="js/audio.js"></script>
-  <script src="js/mission.js"></script>
-  <script src="js/neural_export.js"></script>
-
-  <!-- main.js is a module — imports THREE, sets it globally, then boots -->
-  <script type="module" src="js/main.js"></script>
+  <!-- Game scripts. Loaded via a tiny inline loader that appends a per-load
+       cache-buster, so a fresh deploy is always picked up immediately (no stale
+       browser/CDN cache). index.html itself is served no-cache. Classic scripts
+       are written in dependency order with document.write so they execute in
+       order; main.js (ES module) is written last. No build step. -->
+  <script>
+    (function () {
+      var v = Date.now(); // changes every load => always fresh
+      var classic = [
+        'config', 'i18n', 'utils', 'engine', 'weapons', 'terrain', 'units',
+        'pathfinding', 'combat', 'ai', 'camera', 'input', 'renderer', 'audio',
+        'mission', 'neural_export'
+      ];
+      classic.forEach(function (f) {
+        document.write('<script src="js/' + f + '.js?v=' + v + '"><\/script>');
+      });
+      document.write('<script type="module" src="js/main.js?v=' + v + '"><\/script>');
+    })();
+  </script>
 </body>
 
 </html>
