@@ -1,0 +1,577 @@
+/**
+ * Under Fire — unit_modules.js
+ * The per-unit update loop, factored into modules (mirrors the RWM engine's
+ * unit-module split: frame / morale / health / supply / deploy / scan / fire /
+ * move, with the AI "brain" living in ai.js). `Game.updateUnit` is a thin
+ * orchestrator that runs a unit through these in order, passing a shared `ctx`.
+ *
+ * This is a behavior-preserving extraction of the former monolithic updateUnit:
+ * each module is a verbatim block of that function. Adding a unit type is now a
+ * matter of adding/overriding a module rather than editing one giant function.
+ *
+ * Loaded before main.js, which calls Game.updateUnit from the game loop.
+ */
+
+Game.uMod = {};
+
+// Per-frame upkeep: cover value + decay the short-lived timers.
+Game.uMod.frame = (unit, ctx) => {
+    unit.coverBonus = Game.computeCover(unit);
+    unit.cooldownLeft = Math.max(0, unit.cooldownLeft - ctx.dt);
+    unit.underFire = Math.max(0, unit.underFire - ctx.dt);
+    unit.shaken = Math.max(0, unit.shaken - ctx.dt);
+    unit.stopTimer = Math.max(0, unit.stopTimer - ctx.dt);
+    unit.orderDelay = Math.max(0, (unit.orderDelay || 0) - ctx.dt);
+};
+
+// Morale: a nearby friendly officer steadies the troops (RWM officerradius) —
+// faster suppression recovery; suppression escalates stance under fire.
+Game.uMod.morale = (unit, ctx) => {
+    unit._steadied = Game.nearOfficer(unit);
+    const recovery = (unit.underFire > 0 ? 4 : 11) * (unit._steadied ? 1.8 : 1);
+    unit.suppressionValue = Math.max(0, unit.suppressionValue - recovery * ctx.dt);
+    if (!Game.isTank(unit.kind)) {
+        if (unit.suppressionValue > 88) {
+            if (unit.stance !== 'prone') { unit.stance = 'prone'; unit._autoStance = true; }
+        } else if (unit.suppressionValue > 62) {
+            if (unit.stance === 'stand' || unit.stance === 'run') { unit.stance = 'crouch'; unit._autoStance = true; }
+        } else if (unit.suppressionValue < 30 && unit._autoStance) {
+            unit.stance = 'stand';
+            unit._autoStance = false;
+        }
+    }
+};
+
+// Health: engine-damage burn, and the green/yellow/red HP-status system with its
+// speed effects. May set unit.alive=false (the orchestrator returns after).
+Game.uMod.health = (unit, ctx) => {
+    const dt = ctx.dt;
+    const isVeh = ctx.isVeh;
+    if (unit.engineDamaged && unit.alive) {
+        unit.hp -= dt * 1.0;
+        if (unit.hp <= 0) {
+            unit.alive = false;
+            unit.hp = 0;
+            Game.pushMessage(`${unit.label} burned out!`, 2.0);
+            if (unit.mesh) unit.mesh.visible = false;
+        }
+    }
+
+    const hpPct = unit.hp / unit.maxHp;
+    const base = Game.UNIT_STATS[unit.statKey];
+
+    if (hpPct > 0.5) {
+        unit._hpStatus = 'green';
+        if (isVeh && unit._yellowDisabled && !unit.tracksDisabled) {
+            unit.speed = base ? base.speed : unit.speed;
+            unit._yellowDisabled = false;
+        }
+        if (!isVeh && unit._yellowSlow) {
+            unit.speed = base ? base.speed : unit.speed;
+            unit._yellowSlow = false;
+        }
+    } else if (hpPct > 0.2) {
+        unit._hpStatus = 'yellow';
+        unit.hp += dt / 3.0;
+        if (unit.hp > unit.maxHp * 0.5) unit.hp = unit.maxHp * 0.5;
+        if (isVeh && !unit._yellowDisabled) {
+            unit._yellowDisabled = true;
+            unit.speed = 0;
+        }
+        if (!isVeh && !unit._yellowSlow && base) {
+            unit._yellowSlow = true;
+            unit.speed = base.speed * 0.5;
+        }
+    } else if (unit.hp > 0) {
+        unit._hpStatus = 'red';
+        unit.hp -= dt / 3.0;
+        if (unit.hp <= 0) {
+            unit.alive = false;
+            unit.hp = 0;
+            Game.pushMessage(`${unit.label} bled out.`, 2.0);
+            if (unit.mesh) unit.mesh.visible = false;
+        }
+    }
+};
+
+// Supply: infantry scavenge a little ammo while on the move.
+Game.uMod.supply = (unit, ctx) => {
+    if (!ctx.isVeh && unit.moving && unit.ammo >= 0) {
+        unit._scavengeTimer = (unit._scavengeTimer || 0) + ctx.dt;
+        if (unit._scavengeTimer >= 8) {
+            unit._scavengeTimer = 0;
+            unit.ammo++;
+        }
+    }
+};
+
+// Deploy / limber (RWM siege): crew-served guns set up to fire, pack up to move.
+Game.uMod.deploy = (unit, ctx) => {
+    if (!unit.deployable) return;
+    unit._deployT = Math.max(0, (unit._deployT || 0) - ctx.dt);
+    const wantsMove = !!(unit.path && unit.path.length > 0);
+    if (wantsMove && unit.deployed && unit._deployT <= 0) {
+        unit.deployed = false;
+        unit._deployT = 1.0;
+        if (Game.selection.has(unit.id)) Game.pushMessage(`${unit.label}: limbering up.`, 1.0);
+    } else if (!wantsMove && !unit.deployed && unit._deployT <= 0) {
+        unit.deployed = true;
+        unit._deployT = 1.0;
+    }
+    unit._canMove = !unit.deployed && unit._deployT <= 0;
+    unit._canFire = unit.deployed && unit._deployT <= 0;
+};
+
+// Scan: pick a target — player-forced first, else auto-acquire the nearest the
+// team can see. A dead/gone forced target releases the commitment and halts.
+// Sets ctx.enemy.
+Game.uMod.scan = (unit, ctx) => {
+    let enemy = null;
+    if (unit.forcedTargetId != null) {
+        const ft = Game.getUnitById(unit.forcedTargetId);
+        if (ft && ft.alive && ft.team !== unit.team) {
+            enemy = ft;
+        } else {
+            unit.forcedTargetId = null;
+            unit.path = [];
+            unit.moving = false;
+            unit._pursueAnchor = null;
+        }
+    }
+    if (!enemy && unit.orderMode !== 'hold') enemy = Game.nearestEnemy(unit);
+    unit.fireTargetId = enemy ? enemy.id : null;
+    ctx.enemy = enemy;
+};
+
+// Attack-ground: fire on a commanded spot (mortars lob; direct-fire units take a
+// firing position and suppress). Returns true when the unit is set and firing on
+// the spot, so the orchestrator stops (no chasing/moving).
+Game.uMod.bombard = (unit, ctx) => {
+    const weaponDef0 = ctx.weaponDef0;
+    if (weaponDef0 && unit.bombardX != null) {
+        if (weaponDef0.fireType === 'indirect') Game.updateBombard(unit, ctx.dt, weaponDef0);
+        else Game.updateGroundFire(unit, ctx.dt, weaponDef0);
+        if (unit._bombarding) {
+            unit.coverBonus = Game.computeCover(unit);
+            return true;
+        }
+    }
+    return false;
+};
+
+// Engage: close on a player-forced target until LOS+range (forced-target
+// pursuit), and the assault-move "stop to engage, resume when clear" posture.
+Game.uMod.engage = (unit, ctx) => {
+    const enemy = ctx.enemy;
+    const weaponDef0 = ctx.weaponDef0;
+    const dt = ctx.dt;
+
+    if (enemy && unit.forcedTargetId === enemy.id
+        && weaponDef0 && weaponDef0.fireType !== 'indirect') {
+        const dft = Game.dist(unit.x, unit.z, enemy.x, enemy.z);
+        const canHit = dft <= unit.range && Game.unitCanSee(unit, enemy);
+        if (canHit) {
+            unit.path = [];
+            unit.moving = false;
+            unit.stopTimer = 0;
+        } else {
+            unit._pursueTimer = (unit._pursueTimer || 0) - dt;
+            const targetMoved = !unit._pursueAnchor
+                || Game.distSq(unit._pursueAnchor.x, unit._pursueAnchor.z, enemy.x, enemy.z) > 9;
+            if (!unit.moving || unit._pursueTimer <= 0 || targetMoved) {
+                unit._pursueTimer = 0.5;
+                unit._pursueAnchor = { x: enemy.x, z: enemy.z };
+                const goalDist = Math.max(2, Math.min(unit.range * 0.85, dft * 0.6));
+                const ang = Game.angleTo(enemy.x, enemy.z, unit.x, unit.z);
+                const gx = Game.clamp(enemy.x + Math.cos(ang) * goalDist, 1, Game.WORLD_W - 1);
+                const gz = Game.clamp(enemy.z + Math.sin(ang) * goalDist, 1, Game.WORLD_H - 1);
+                unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
+                unit.moving = true;
+                unit.stopTimer = 0;
+            }
+        }
+    }
+
+    if (unit.orderMode === 'assault' && enemy && unit.path && unit.path.length) {
+        const d = Game.dist(unit.x, unit.z, enemy.x, enemy.z);
+        if (d <= unit.range) {
+            unit.moving = false;
+            unit.stopTimer = 0.5;
+        }
+    }
+};
+
+// Fire: turret/weapon tracking and shooting. Sets ctx.hasTurret /
+// ctx.aimAngleToEnemy (the move module reads them for turret tracking on the go).
+Game.uMod.fire = (unit, ctx) => {
+    const enemy = ctx.enemy;
+    const dt = ctx.dt;
+    const isVeh = ctx.isVeh;
+    const canFire = !(Game.isTank(unit.kind) && unit.turretDamaged);
+    const hasTurret = isVeh && unit.hasTurret;
+    const aimAngleToEnemy = enemy ? Game.angleTo(unit.x, unit.z, enemy.x, enemy.z) : null;
+    ctx.hasTurret = hasTurret;
+    ctx.aimAngleToEnemy = aimAngleToEnemy;
+
+    if (canFire && enemy && Game.unitCanSee(unit, enemy)) {
+        const d = Game.dist(unit.x, unit.z, enemy.x, enemy.z);
+
+        if (d <= unit.range) {
+            let ready = unit._combatReady !== false;
+            if (!ready) {
+                unit._readyTimer = (unit._readyTimer || 0) + dt;
+                if (unit._readyTimer >= (Game.isTank(unit.kind) ? 1.8 : 1.2)) {
+                    unit._combatReady = true;
+                    ready = true;
+                }
+            }
+            if (unit.deployable && !unit._canFire) ready = false;
+            if (hasTurret) {
+                const tRot = Game.rotateWithInertia(
+                    unit.turretAngle, unit.turretAngVel, aimAngleToEnemy,
+                    unit.turretRotSpeed, unit.turretAccel, dt
+                );
+                unit.turretAngle = tRot.angle;
+                unit.turretAngVel = tRot.angVel;
+                const turretAligned = Math.abs(Game.angleDiff(unit.turretAngle, aimAngleToEnemy)) < 0.15;
+
+                if (!unit.moving) {
+                    const hRot = Game.rotateWithInertia(
+                        unit.angle, unit.hullAngVel, aimAngleToEnemy,
+                        unit.rotationSpeed * 0.3, unit.hullTurnAccel * 0.3, dt
+                    );
+                    unit.angle = hRot.angle;
+                    unit.hullAngVel = hRot.angVel;
+                }
+
+                if (turretAligned && ready && unit.cooldownLeft <= 0) {
+                    Game.applyShot(unit, enemy);
+                    const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;
+                    unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
+                }
+            } else if (isVeh) {
+                const hRot = Game.rotateWithInertia(
+                    unit.angle, unit.hullAngVel, aimAngleToEnemy,
+                    unit.rotationSpeed * 0.5, unit.hullTurnAccel * 0.5, dt
+                );
+                unit.angle = hRot.angle;
+                unit.hullAngVel = hRot.angVel;
+                unit.turretAngle = unit.angle;
+                const hullAligned = Math.abs(Game.angleDiff(unit.angle, aimAngleToEnemy)) < 0.15;
+
+                if (hullAligned && ready && unit.cooldownLeft <= 0) {
+                    Game.applyShot(unit, enemy);
+                    const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;
+                    unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
+                }
+            } else {
+                unit.angle = aimAngleToEnemy;
+                unit.turretAngle = unit.angle;
+                if (ready && unit.cooldownLeft <= 0) {
+                    Game.applyShot(unit, enemy);
+                    const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;
+                    unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
+                }
+            }
+        }
+    } else if (hasTurret && !unit.moving) {
+        const tRot = Game.rotateWithInertia(
+            unit.turretAngle, unit.turretAngVel, unit.angle,
+            unit.turretRotSpeed * 0.5, unit.turretAccel * 0.5, dt
+        );
+        unit.turretAngle = tRot.angle;
+        unit.turretAngVel = tRot.angVel;
+    }
+};
+
+// Move: speed modifiers, path-following, vehicle differential drive + reverse,
+// infantry locomotion, fuel, separation, world clamp, blocked-tile revert, and
+// terrain-height follow.
+Game.uMod.move = (unit, ctx) => {
+    const dt = ctx.dt;
+    const isVeh = ctx.isVeh;
+    const enemy = ctx.enemy;
+    const hasTurret = ctx.hasTurret;
+    const aimAngleToEnemy = ctx.aimAngleToEnemy;
+    const prevX = ctx.prevX, prevZ = ctx.prevZ;
+
+    let maxSpeed = unit.speed;
+
+    if (!isVeh) {
+        const speedFactor = Game.clamp(1 - unit.suppressionValue / 135, 0.3, 1);
+        const STANCE_SPEED = { prone: 0.28, crouch: 0.55, stand: 1.0, run: 1.5 };
+        maxSpeed *= 0.6 * speedFactor * (STANCE_SPEED[unit.stance] ?? 1.0);
+
+        const tile = Game.getTileAtWorld(unit.x, unit.z);
+        if (tile) {
+            if (tile.type === 'road') maxSpeed *= 1.2;
+            else if (tile.type === 'mud' || tile.type === 'forest') maxSpeed *= 0.7;
+            else if (tile.type === 'wheat') maxSpeed *= 0.9;
+            else if (tile.type === 'dense_forest') maxSpeed *= 0.3;
+            else if (tile.type === 'swamp') maxSpeed *= 0.4;
+        }
+
+        if (Game.getWeatherSpeedMod) maxSpeed *= Game.getWeatherSpeedMod();
+    }
+
+    if (isVeh && (unit.fuel === 0 || unit.tracksDisabled)) {
+        maxSpeed = 0;
+    }
+
+    if (isVeh && Game.getTerrainSlope) {
+        const slope = Game.getTerrainSlope(unit.x, unit.z);
+        maxSpeed *= Game.clamp(1 - slope * 1.5, 0.45, 1);
+    }
+
+    if (unit.entrenched) {
+        maxSpeed = 0;
+    }
+
+    if (unit.path && unit.path.length && unit.stopTimer <= 0 && (unit.orderDelay || 0) <= 0
+        && (!unit.deployable || unit._canMove)) {
+        let next = unit.path[0];
+        let dx = next.x - unit.x;
+        let dz = next.z - unit.z;
+        let d = Math.hypot(dx, dz);
+
+        const arrivalDist = isVeh ? 1.5 : 0.4;
+
+        while (unit.path.length && d < arrivalDist) {
+            unit.path.shift();
+
+            if (isVeh) {
+                while (unit.path.length > 1) {
+                    const peek = unit.path[0];
+                    const peekDx = peek.x - unit.x;
+                    const peekDz = peek.z - unit.z;
+                    const peekD = Math.hypot(peekDx, peekDz);
+                    const peekAng = Math.atan2(peekDz, peekDx);
+
+                    const next2 = unit.path[1];
+                    const n2Dx = next2.x - unit.x;
+                    const n2Dz = next2.z - unit.z;
+                    const n2Ang = Math.atan2(n2Dz, n2Dx);
+
+                    if (Math.abs(Game.angleDiff(peekAng, n2Ang)) < 0.4 && peekD < 6) {
+                        unit.path.shift();
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            if (!unit.path.length) {
+                unit.moving = false;
+                unit.currentSpeed = Math.max(0, unit.currentSpeed - maxSpeed * 0.8 * dt);
+                break;
+            }
+
+            next = unit.path[0];
+            dx = next.x - unit.x;
+            dz = next.z - unit.z;
+            d = Math.hypot(dx, dz);
+        }
+
+        if (unit.path.length) {
+            const ang = Math.atan2(dz, dx);
+            const isLastWaypoint = unit.path.length === 1;
+
+            if (isVeh) {
+                const angleDelta = Game.angleDiff(unit.angle, ang);
+                const absAngleDelta = Math.abs(angleDelta);
+
+                const speedRatio = unit.currentSpeed / (maxSpeed || 1);
+                const turnMomentumFactor = Game.clamp(1.0 - (speedRatio * 0.6), 0.4, 1.0);
+                const pivotBoost = (absAngleDelta > 0.5 && speedRatio < 0.2) ? 1.3 : 1.0;
+                const turnSpeed = unit.rotationSpeed * turnMomentumFactor * pivotBoost;
+
+                unit.angle = Game.rotateTo(unit.angle, ang, turnSpeed * dt);
+
+                let targetSpeed = 0;
+
+                if (absAngleDelta < Math.PI / 2) {
+                    const cosA = Math.cos(absAngleDelta);
+                    const alignment = Math.max(0, Math.pow(cosA, 3));
+                    targetSpeed = maxSpeed * alignment;
+                } else {
+                    targetSpeed = 0;
+                }
+
+                const accelRate = maxSpeed * 0.5;
+                const brakeRate = maxSpeed * 1.2;
+
+                if (unit.currentSpeed < targetSpeed) {
+                    unit.currentSpeed = Math.min(targetSpeed, unit.currentSpeed + accelRate * dt);
+                } else {
+                    unit.currentSpeed = Math.max(targetSpeed, unit.currentSpeed - brakeRate * dt);
+                }
+
+                if (isLastWaypoint && d < 3.0) {
+                    unit.currentSpeed = Math.min(
+                        unit.currentSpeed, maxSpeed * (d / 3.0));
+                }
+
+                const step = Math.min(unit.currentSpeed * dt, d);
+                if (step > 0.001) {
+                    unit.x += Math.cos(unit.angle) * step;
+                    unit.z += Math.sin(unit.angle) * step;
+
+                    unit._trackDist = (unit._trackDist || 0) + step;
+                    if (unit._trackDist > 1.2) {
+                        unit._trackDist = 0;
+                        Game.trackMarks = Game.trackMarks || [];
+                        Game.trackMarks.push({
+                            x: unit.x, z: unit.z,
+                            angle: unit.angle,
+                            size: unit.size,
+                            life: 15.0, total: 15.0,
+                            mesh: null
+                        });
+                    }
+                }
+
+                unit._reversing = false;
+                if (absAngleDelta > 2.0 && d < 5 && step < 0.001) {
+                    unit._reversing = true;
+                    const revSpeed = maxSpeed * 0.25;
+                    const revStep = Math.min(revSpeed * dt, d);
+                    unit.x += Math.cos(ang) * revStep;
+                    unit.z += Math.sin(ang) * revStep;
+                    unit.currentSpeed = revSpeed;
+
+                    unit._trackDist = (unit._trackDist || 0) + revStep;
+                    if (unit._trackDist > 1.2) {
+                        unit._trackDist = 0;
+                        Game.trackMarks = Game.trackMarks || [];
+                        Game.trackMarks.push({
+                            x: unit.x, z: unit.z,
+                            angle: unit.angle,
+                            size: unit.size,
+                            life: 15.0, total: 15.0,
+                            mesh: null
+                        });
+                    }
+                }
+
+                if (hasTurret && enemy && aimAngleToEnemy !== null
+                    && Game.unitCanSee(unit, enemy)) {
+                    const enemyDist = Game.dist(
+                        unit.x, unit.z, enemy.x, enemy.z);
+                    const tTarget = enemyDist <= unit.range
+                        ? aimAngleToEnemy : unit.angle;
+                    const tSpeed = enemyDist <= unit.range
+                        ? unit.turretRotSpeed
+                        : unit.turretRotSpeed * 0.5;
+                    const tAccel = enemyDist <= unit.range
+                        ? unit.turretAccel
+                        : unit.turretAccel * 0.5;
+                    const tRot = Game.rotateWithInertia(
+                        unit.turretAngle, unit.turretAngVel,
+                        tTarget, tSpeed, tAccel, dt);
+                    unit.turretAngle = tRot.angle;
+                    unit.turretAngVel = tRot.angVel;
+                } else if (hasTurret) {
+                    const turretOff = Math.abs(Game.angleDiff(unit.turretAngle, unit.angle));
+                    if (turretOff < 0.08) {
+                        unit.turretAngle = unit.angle;
+                        unit.turretAngVel = 0;
+                    } else {
+                        const tRot = Game.rotateWithInertia(
+                            unit.turretAngle, unit.turretAngVel, unit.angle,
+                            0.8, 0.4, dt);
+                        unit.turretAngle = tRot.angle;
+                        unit.turretAngVel = tRot.angVel;
+                    }
+                } else {
+                    unit.turretAngle = unit.angle;
+                }
+
+                unit.moving = true;
+
+            } else {
+                const turnRate = unit.rotationSpeed;
+                unit.angle = Game.lerpAngle(unit.angle, ang, Game.clamp(turnRate * dt, 0, 1));
+
+                unit.turretAngle = unit.angle;
+
+                unit.currentSpeed = maxSpeed;
+
+                const step = Math.min(unit.currentSpeed * dt, d);
+                unit.x += Math.cos(unit.angle) * step;
+                unit.z += Math.sin(unit.angle) * step;
+                unit.moving = true;
+            }
+
+            if (unit.fuel > 0 && unit.currentSpeed > 0) {
+                const fuelUse = unit.currentSpeed * dt * 0.15;
+                unit.fuel = Math.max(0, unit.fuel - fuelUse);
+                if (unit.fuel === 0) {
+                    Game.pushMessage(`${unit.label} out of fuel!`, 2.5);
+                }
+            }
+        }
+    } else {
+        unit.moving = false;
+        if (unit.currentSpeed > 0.01) {
+            const coastRate = isVeh ? maxSpeed * 0.8 : maxSpeed * 3.0;
+            unit.currentSpeed = Math.max(0, unit.currentSpeed - coastRate * dt);
+            if (isVeh) {
+                unit.x += Math.cos(unit.angle) * unit.currentSpeed * dt;
+                unit.z += Math.sin(unit.angle) * unit.currentSpeed * dt;
+            }
+        } else {
+            unit.currentSpeed = 0;
+        }
+    }
+
+    Game.applySeparation(unit, dt);
+
+    unit.x = Game.clamp(unit.x, 0.5, Game.WORLD_W - 0.5);
+    unit.z = Game.clamp(unit.z, 0.5, Game.WORLD_H - 0.5);
+
+    const tileNow = Game.getTileAtWorld(unit.x, unit.z);
+    if (tileNow && (tileNow.blocked || (isVeh && tileNow.vehicleBlocked))) {
+        unit.x = prevX;
+        unit.z = prevZ;
+        unit.currentSpeed = 0;
+    }
+
+    if (isVeh && Game.getVehicleHeight) {
+        unit.y = Game.getVehicleHeight(unit.x, unit.z, unit.size, unit.angle);
+    } else {
+        unit.y = Game.getHeight(unit.x, unit.z);
+    }
+};
+
+/**
+ * Per-unit update — the orchestrator. Runs the modules in order through a shared
+ * ctx. (Towed guns and passengers are driven by their tower/carrier, so skip.)
+ */
+Game.updateUnit = (unit, dt) => {
+    if (!unit.alive) return;
+    if (unit._towed || unit._inVehicle != null) return;
+
+    const M = Game.uMod;
+    const ctx = {
+        dt,
+        prevX: unit.x, prevZ: unit.z,
+        isVeh: Game.isTank(unit.kind),
+        enemy: null,
+        weaponDef0: Game.WEAPONS[unit.weaponKey],
+        hasTurret: false,
+        aimAngleToEnemy: null,
+    };
+
+    M.frame(unit, ctx);
+    M.morale(unit, ctx);
+    M.health(unit, ctx);
+    if (!unit.alive) return;
+    M.supply(unit, ctx);
+    M.deploy(unit, ctx);
+    M.scan(unit, ctx);
+    if (M.bombard(unit, ctx)) return;
+    M.engage(unit, ctx);
+    if (unit.team === Game.TEAM.GERMAN) Game.updateAI(unit, dt, ctx.enemy);
+    M.fire(unit, ctx);
+    M.move(unit, ctx);
+};
