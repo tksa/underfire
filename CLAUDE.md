@@ -31,7 +31,7 @@ Everything is attached to the global `Game` object (`js/config.js`). Files load 
 | `js/utils.js` | Math/grid helpers (`rand`, `clamp`, `dist`, `getTile`, LOS) |
 | `js/engine.js` | Three.js scene, camera, lighting, fog, loaders |
 | `js/terrain.js` | Map gen, heightmap, terrain mesh, buildings, props |
-| `js/units.js` | `UNIT_STATS`, `makeUnit`, unit meshes, model loading |
+| `js/units.js` | `UNIT_STATS` baseline, `makeUnit`, unit meshes, model loading; **data-driven roster loader** (`loadUnitsCSV`/`applyUnitsCSV`, `unitsForYear`) that merges `data/units.csv` over the baseline |
 | `js/weapons.js` | `WEAPONS` table (range, damage, penetration, suppression) |
 | `js/combat.js` | `applyShot`, damage/penetration model, hit effects |
 | `js/ai.js` | Per-unit FSM + squad coordination + threat propagation |
@@ -41,7 +41,16 @@ Everything is attached to the global `Game` object (`js/config.js`). Files load 
 | `js/renderer.js` | Per-frame mesh sync, tracers, smoke, animation, minimap, HUD |
 | `js/audio.js` | Pooled SFX, ambient loops, voice barks (`Game.Audio`) |
 | `js/mission.js` | Scenario: spawns, objective, win/lose, reinforcements |
-| `js/main.js` | Boot, game loop, fog of war, menu → game start |
+| `js/unit_modules.js` | The per-unit update loop (`Game.uMod`): `frame · morale · health · supply · deploy · scan · bombard · engage · fire · move`, plus the `Game.updateUnit` orchestrator. (Was the monolithic `updateUnit` in `main.js`.) |
+| `js/main.js` | Boot, game loop, fog of war, menu → game start, supply/towing/mines/deploy helpers (`updateUnit` now lives in `unit_modules.js`) |
+
+## Data
+
+| Path | What |
+|------|------|
+| `data/units.csv` | Editable unit roster (~614 units incl. the full RWM library). Merged over the `UNIT_STATS` baseline at boot. Each unit has a `year` for per-map era gating (`Game.unitsForYear`). See `data/README.md`. |
+| `data/changelog.json` | Generated from git (`scripts/gen-changelog.mjs`) for the menu's "Latest Updates". |
+| `docs/reference/rwm/` | Public-domain RWM (Sudden Strike) logic/asset reference + mechanics-code RE. |
 
 ## Where to add things → use a skill
 
@@ -53,9 +62,11 @@ Everything is attached to the global `Game` object (`js/config.js`). Files load 
 
 ## Conventions for new code
 
-- New file in `js/`? Add a `<script>` tag to `index.html` in dependency order (after `config.js`/`utils.js`, before `main.js`).
+- New file in `js/`? Add its basename to the **inline script loader array** in `index.html` (the `classic = [...]` list), in dependency order, before `main.js`. (The loader appends a per-load `?v=` cache-buster — that's why deploys are picked up immediately. No `<script>` tags by hand.)
 - New tile type? Update `Game.TILE_COLORS` and `Game.makeTile` in `js/terrain.js` **and** the minimap palette in `js/renderer.js`.
-- New unit? Key `Game.UNIT_STATS` as `"{team}_{kind}"` (e.g. `french_hmg`) and make sure its `weapon` exists in `Game.WEAPONS`.
+- New unit? Prefer **adding a row to `data/units.csv`** (key `"{team}_{kind}"`, e.g. `french_hmg`; reference a `Game.WEAPONS` key or synthesize one via the `w_*` columns; set a `year`). The `UNIT_STATS` table in `js/units.js` is the built-in fallback. See `data/README.md`.
+- New per-unit behavior? Add/extend a module in `js/unit_modules.js` (`Game.uMod.*`) rather than growing `updateUnit`.
+- Refresh the menu's "Latest Updates" before deploy: `node scripts/gen-changelog.mjs`.
 - Test before you finish: run the game, watch the console, and run `node scripts/smoke-test.mjs` if you can.
 
 See `CONTRIBUTING.md` for the human-facing version and the PR workflow, and `vision.md` for direction.

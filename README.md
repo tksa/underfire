@@ -45,12 +45,19 @@ Any static file server works (`npx serve`, `php -S`, nginx, etc.). Opening `inde
 | Input | Action |
 |-------|--------|
 | Left click / drag | Select units |
-| Right click | Move / attack-move |
+| Right click | Order: **Move** or **Attack-Move** per the stance switch (Orders panel); right-clicking an enemy attacks it |
+| Double right-click | **Retreat** — break off and fall back (infantry sprint, tanks reverse) |
+| `E` | Toggle Move / Attack-Move stance |
+| `F` | Attack ground (suppress a spot) |
+| `Ctrl+0–9` / `0–9` | Assign / recall control groups |
+| `V` / `H` | Stop / Hold fire |
+| `U` / `M` / `K` | Sapper: build sandbags / lay mine / TNT |
+| `O` / `L` | Tow a gun / Load–unload troops (vehicles & trucks) |
 | `Space` | Tactical pause (issue orders while paused; press again to resume) |
-| `C` | Toggle crouch / stand |
-| Crawl button | Go prone (harder to hit) |
-| `WASD` / screen edge | Pan camera |
-| Mouse wheel | Zoom |
+| `C` | Cycle stance (run / walk / crouch / crawl) |
+| `WASD` / screen edge | Pan camera · Mouse wheel zoom |
+
+Towed guns (AT guns, heavy MGs) deploy/limber automatically: they set up to fire and pack up when ordered to move.
 
 ---
 
@@ -81,6 +88,8 @@ When reporting a bug, a sentence on what you did, what you expected, and what ha
 
 - **Three.js** (r0.180, via CDN importmap) for 3D rendering
 - Vanilla JS — a global `Game` namespace of classic scripts plus one ES-module entry (`js/main.js`)
+- **Per-unit logic split into modules** (`js/unit_modules.js`: move/fire/scan/health/morale/deploy/…) behind a thin `updateUnit` orchestrator
+- **Data-driven units** — `data/units.csv` is the editable roster (614 units, with per-unit `year` for era gating), merged over the built-in table at boot
 - Procedural terrain, meshes, animation, and effects; no asset pipeline required to run
 - All bundled art/audio is **CC0 / public-domain** (see [CREDITS.md](CREDITS.md))
 
@@ -89,6 +98,7 @@ When reporting a bug, a sentence on what you did, what you expected, and what ha
 ```
 index.html        Game shell: menu, HUD, CSS, script/importmap wiring
 js/               Game code (see CONTRIBUTING.md for the per-file map)
+data/             Editable game data: units.csv (roster), changelog.json
 models/           3D models (.glb)
 textures/         Textures (textures/oga/ = CC0 OpenGameArt)
 sounds/           Audio (sounds/rwm/ = public-domain clips + manifest)

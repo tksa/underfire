@@ -1488,28 +1488,35 @@
       });
     });
 
-    // ── Build version (CI can replace UNDER_VERSION at deploy time) ──
-    const UNDER_VERSION = 'v0.5.0-dev';
+    // ── Version + recent changes ──
+    // data/changelog.json is generated from the git commit log at deploy time
+    // (scripts/gen-changelog.mjs) and fetched here — no build step. Falls back to
+    // a short built-in list if it can't be loaded.
+    const UNDER_VERSION = 'v0.6.0-dev';
     const vEl = document.getElementById('menuVersion');
+    const upEl = document.getElementById('menuUpdates');
     if (vEl) vEl.textContent = UNDER_VERSION;
 
-    // ── Latest updates (keep in sync with CHANGELOG.md; newest first) ──
-    const UNDER_CHANGELOG = [
-      {
-        version: 'v0.5.0-dev', date: 'Initial build', notes: [
-          'First public, community-buildable release.',
-          'Procedural French-village battlefield: fields, church, windmill, river + bridge.',
-          'Squad AI now alerts the whole squad when a unit is hit.',
-        ]
-      },
+    const FALLBACK_NOTES = [
+      'Full 614-unit roster (data/units.csv) with per-unit year for era gating.',
+      'Deploy/limber guns, morale + chain of command, mines, sandbags, transport & towing.',
+      'Smarter enemy infantry (break for cover/armor), retreat order, per-unit module refactor.',
     ];
-    const upEl = document.getElementById('menuUpdates');
-    if (upEl) {
-      upEl.innerHTML = UNDER_CHANGELOG.map(e =>
-        `<div class="update-entry"><div class="update-ver">${e.version}<span class="ud-date">${e.date}</span></div>`
-        + `<ul class="update-notes">${e.notes.map(n => `<li>${n}</li>`).join('')}</ul></div>`
-      ).join('');
-    }
+    const renderUpdates = (version, date, notes) => {
+      if (!upEl) return;
+      upEl.innerHTML =
+        `<div class="update-entry"><div class="update-ver">${version}<span class="ud-date">${date || ''}</span></div>`
+        + `<ul class="update-notes">${notes.map(n => `<li>${n}</li>`).join('')}</ul></div>`;
+    };
+    fetch('data/changelog.json?v=' + Date.now())
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('no changelog')))
+      .then(data => {
+        const ver = data.version || UNDER_VERSION;
+        if (vEl) vEl.textContent = ver + (data.build ? ' · ' + data.build : '');
+        const notes = (data.commits || []).slice(0, 12).map(c => c.subject).filter(Boolean);
+        renderUpdates(ver, data.generated, notes.length ? notes : FALLBACK_NOTES);
+      })
+      .catch(() => renderUpdates(UNDER_VERSION, '', FALLBACK_NOTES));
   </script>
 
   <!-- WW2 Film grain overlay -->

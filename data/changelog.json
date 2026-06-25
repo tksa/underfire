@@ -1,0 +1,77 @@
+{
+ "version": "v0.6.0-dev",
+ "build": "8f9e747",
+ "generated": "2026-06-26",
+ "commits": [
+  {
+   "hash": "8f9e747",
+   "date": "2026-06-26",
+   "subject": "stop edge-of-sight rotation jitter"
+  },
+  {
+   "hash": "c80ca75",
+   "date": "2026-06-26",
+   "subject": "split monolithic updateUnit into per-unit modules"
+  },
+  {
+   "hash": "a583198",
+   "date": "2026-06-26",
+   "subject": "import all RWM units (614)"
+  },
+  {
+   "hash": "8deaa3f",
+   "date": "2026-06-26",
+   "subject": "data-driven unit roster (data/units.csv) + full RWM roster import"
+  },
+  {
+   "hash": "16e6d8f",
+   "date": "2026-06-26",
+   "subject": "engineer sandbags, troop transport, towing (RWM)"
+  },
+  {
+   "hash": "6f76464",
+   "date": "2026-06-26",
+   "subject": "morale officer-aura, chain of command, mine warfare refinement"
+  },
+  {
+   "hash": "8499c41",
+   "date": "2026-06-26",
+   "subject": "towed-gun deploy/limber (RWM siege) + RWM logic reference"
+  },
+  {
+   "hash": "917d364",
+   "date": "2026-06-25",
+   "subject": "separate Attack Ground order"
+  },
+  {
+   "hash": "c3235e9",
+   "date": "2026-06-25",
+   "subject": "always-fresh JS via per-load cache-buster on script URLs"
+  },
+  {
+   "hash": "13798d3",
+   "date": "2026-06-25",
+   "subject": "Move vs Attack-Move stance switch + smarter target engagement"
+  },
+  {
+   "hash": "c870260",
+   "date": "2026-06-25",
+   "subject": "order units to close in and engage"
+  },
+  {
+   "hash": "d449114",
+   "date": "2026-06-24",
+   "subject": "clear low/out-of-ammo indicators (the 'tanks don't fire' report)"
+  },
+  {
+   "hash": "815aa04",
+   "date": "2026-06-24",
+   "subject": "core gameplay bugs from playtest (firing, LOS, death, menu)"
+  },
+  {
+   "hash": "70331e4",
+   "date": "2026-06-24",
+   "subject": "rename 'Game mechanics' to 'Mechanics' (chip + i18n + README)"
+  }
+ ]
+}
