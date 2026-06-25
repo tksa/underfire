@@ -59,6 +59,18 @@ Game.findCoverPosition = (unit, threatX, threatZ) => {
     return best;
 };
 
+// Nearest living friendly tank within radius — used by infantry to shelter in
+// the lee of armor (mobile cover).
+Game.nearestFriendlyTank = (unit, radius = 20) => {
+    let best = null, bd = radius * radius;
+    for (const a of Game.units) {
+        if (!a.alive || a.team !== unit.team || !Game.isTank(a.kind)) continue;
+        const d = Game.distSq(unit.x, unit.z, a.x, a.z);
+        if (d < bd) { bd = d; best = a; }
+    }
+    return best;
+};
+
 /**
  * Spread a threat to a unit's squad-mates and nearby allies so the whole
  * group reacts when one of them is fired on, instead of standing idle while a
@@ -147,22 +159,42 @@ Game.updateAI = (unit, dt, enemy) => {
         return;
     }
 
-    // ── REACT TO INCOMING FIRE (even from an unseen shooter) ──
-    // Exposed and taking fire: turn toward the fire, get to cover if any is
-    // near, otherwise hit the dirt — never just stand with your back turned.
-    if (threatPos && !inCover && (supp > 25 || unit.underFire > 0) && role !== 'maneuver') {
-        // Face the incoming fire so troops don't stand backs-turned
+    // ── REACT TO CONTACT: exposed infantry don't stand and trade shots — they
+    //    break for terrain cover, a tree line, or the lee of a nearby friendly
+    //    tank (mobile cover), then crouch and fire from there. Triggers on a live
+    //    enemy too (not only once suppressed), so troops take cover proactively.
+    //    Maneuver elements keep bounding. ──
+    if (threatPos && !inCover && role !== 'maneuver'
+        && (enemy || supp > 15 || unit.underFire > 0)) {
+        // Face the fire even from an unseen shooter.
         if (!enemy) {
             unit.angle = Game.angleTo(unit.x, unit.z, threatPos.x, threatPos.z);
             unit.turretAngle = unit.angle;
         }
-        const cov = Game.findCoverPosition(unit, threatPos.x, threatPos.z);
-        if (cov && Game.dist(unit.x, unit.z, cov.x, cov.z) > 1.2) {
-            unit._ai = 'seekcover';
-            unit.path = Game.findPath(unit, unit.x, unit.z, cov.x, cov.z);
+        // Already moving to a refuge — keep going instead of re-planning each tick.
+        if ((unit._ai === 'seekcover' || unit._ai === 'shelter')
+            && unit.path && unit.path.length) {
+            setStance('crouch');
+            return;
+        }
+        // Candidate refuges: terrain cover, and the far side of a friendly tank.
+        let refuge = Game.findCoverPosition(unit, threatPos.x, threatPos.z);
+        let kind = refuge ? 'seekcover' : '';
+        const tank = Game.nearestFriendlyTank(unit, 20);
+        if (tank) {
+            const a = Game.angleTo(threatPos.x, threatPos.z, tank.x, tank.z); // past the tank, away from fire
+            const ax = Game.clamp(tank.x + Math.cos(a) * 2.8, 1, Game.WORLD_W - 1);
+            const az = Game.clamp(tank.z + Math.sin(a) * 2.8, 1, Game.WORLD_H - 1);
+            if (!refuge || Game.dist(unit.x, unit.z, ax, az) < Game.dist(unit.x, unit.z, refuge.x, refuge.z)) {
+                refuge = { x: ax, z: az }; kind = 'shelter';
+            }
+        }
+        if (refuge && Game.dist(unit.x, unit.z, refuge.x, refuge.z) > 1.2) {
+            unit._ai = kind;
+            unit.path = Game.findPath(unit, unit.x, unit.z, refuge.x, refuge.z);
             setStance('crouch');
         } else {
-            // No cover available — go to ground; crawl clear if heavily pinned
+            // Nothing close — go to ground and fight from the dirt; crawl clear if pinned.
             unit._ai = 'pinned';
             setStance(supp > 45 ? 'prone' : 'crouch');
             if (supp > 55) {
