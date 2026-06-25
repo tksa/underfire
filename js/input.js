@@ -64,28 +64,52 @@ Game.setOrderStance = (stance) => {
     Game.orderStance = stance === 'attack' ? 'attack' : 'move';
     document.querySelectorAll('.stance-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.stance === Game.orderStance));
-    const vp = document.getElementById('viewport');
-    if (vp) vp.classList.toggle('cmd-attack', Game.orderStance === 'attack');
+    // Cursor is synced each frame in the game loop (covers stance + targeting modes).
     Game.pushMessage(Game.orderStance === 'attack'
         ? 'Attack-move: units advance ready and engage.'
         : 'Move: units relocate without seeking combat.', 1.6);
 };
 
 /**
- * Attack-move to a ground spot: mortars/indirect bombard the position, everyone
- * else assault-moves there (advancing and stopping to engage en route).
+ * Attack-move to a ground spot: EVERY selected unit advances to the area and
+ * engages enemies it meets along the way. Mortars move too (they do not bombard
+ * the spot here — deliberate area fire is the separate "Attack Ground" order).
  */
 Game.orderAttackMove = (x, z) => {
     const chosen = Game.selectedPlayerUnits();
     if (!chosen.length) return;
-    const indirect = chosen.filter(u => Game.WEAPONS[u.weaponKey]?.fireType === 'indirect');
-    const movers = chosen.filter(u => !indirect.includes(u));
-    indirect.forEach(u => { u.bombardX = x; u.bombardZ = z; u.forcedTargetId = null; });
-    if (indirect.length) {
-        Game.spawnOrderMarker(x, z, 0xff8844); // orange = bombard
-        Game.pushMessage('Bombarding position!', 1.5);
+    chosen.forEach(u => { u.bombardX = null; u.bombardZ = null; u._bombarding = false; });
+    Game.issueCommand(x, z, 'attack', chosen);
+};
+
+/**
+ * Attack Ground: each selected armed unit takes up a firing position within
+ * range + line of sight of the spot and pours fire onto it. Mortars/indirect
+ * lob shells; direct-fire units (tanks, MGs, rifles) suppress the area. They do
+ * NOT walk onto the spot — they shoot AT it.
+ */
+Game.orderAttackGround = (x, z) => {
+    const chosen = Game.selectedPlayerUnits();
+    if (!chosen.length) return;
+    let any = false;
+    chosen.forEach(u => {
+        const w = Game.WEAPONS[u.weaponKey];
+        if (!w || w.fireType === 'none' || (w.gameRange || 0) <= 0) return; // unarmed
+        any = true;
+        u.bombardX = x; u.bombardZ = z;
+        u.forcedTargetId = null;
+        u.orderMode = 'aggressive';
+        u._bombarding = false;
+        u._combatReady = true;
+        u.stopTimer = 0;
+        u.orderDelay = Game.commandDelay(u);
+    });
+    if (any) {
+        Game.spawnOrderMarker(x, z, 0xff8844); // orange = fire on ground
+        Game.pushMessage('Attack ground — suppressing the area.', 1.6);
+        if (Game.Audio) Game.Audio.voice('f_sold_attack');
     }
-    if (movers.length) Game.issueCommand(x, z, 'attack', movers);
+    Game._clearFormationPreview();
 };
 
 /**
@@ -437,6 +461,9 @@ Game.handleInputEvents = () => {
                         u.turretAngle = u.angle;
                     });
                     Game._commandMode = null;
+                } else if (Game._commandMode === 'attackground') {
+                    Game.orderAttackGround(ground.x, ground.z);
+                    Game._commandMode = null;
                 } else {
                     // Shift+right-click = queue waypoint
                     if (e.shiftKey) {
@@ -621,6 +648,12 @@ Game.handleInputEvents = () => {
         // Toggle Move / Attack-move stance (E key)
         if (e.code === 'KeyE') {
             Game.setOrderStance(Game.orderStance === 'attack' ? 'move' : 'attack');
+        }
+
+        // Attack ground — fire on a spot (F key)
+        if (e.code === 'KeyF') {
+            Game._commandMode = 'attackground';
+            Game.pushMessage('Attack ground — right-click a spot to suppress.', 2.0);
         }
 
         // Rotate (R key)

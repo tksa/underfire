@@ -193,11 +193,13 @@ Game.updateUnit = (unit, dt) => {
     if (!enemy && unit.orderMode !== 'hold') enemy = Game.nearestEnemy(unit);
     unit.fireTargetId = enemy ? enemy.id : null;
 
-    // ── Indirect bombardment (mortars): fire on a commanded ground spot ──
+    // ── Attack-ground: fire on a commanded spot. Mortars lob; direct-fire units
+    //    take up a firing position within range + LOS and suppress the area. ──
     const weaponDef0 = Game.WEAPONS[unit.weaponKey];
-    if (weaponDef0 && weaponDef0.fireType === 'indirect' && unit.bombardX != null) {
-        Game.updateBombard(unit, dt, weaponDef0);
-        // Bombarding units don't also direct-fire; skip the rest of combat/movement targeting
+    if (weaponDef0 && unit.bombardX != null) {
+        if (weaponDef0.fireType === 'indirect') Game.updateBombard(unit, dt, weaponDef0);
+        else Game.updateGroundFire(unit, dt, weaponDef0);
+        // Once in position and firing on the spot, don't also chase units or move.
         if (unit._bombarding) {
             unit.coverBonus = Game.computeCover(unit);
             return;
@@ -877,6 +879,108 @@ Game.updateBombard = (unit, dt, weapon) => {
         const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;
         unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
     }
+};
+
+/**
+ * Direct-fire "attack ground": take up a firing position within range + line of
+ * sight of the commanded spot, then suppress it. Unlike a mortar, the unit does
+ * not lob over cover — it needs LOS, and it stops short rather than walking onto
+ * the point.
+ */
+Game.updateGroundFire = (unit, dt, weapon) => {
+    const tx = unit.bombardX, tz = unit.bombardZ;
+    const d = Game.dist(unit.x, unit.z, tx, tz);
+    const losClear = Game.lineOfSight(unit, { x: tx, z: tz }) !== false;
+    const canHit = d <= unit.range && losClear;
+
+    if (!canHit) {
+        // Move into a firing position (within range + LOS), re-pathing periodically.
+        unit._bombarding = false;
+        unit._gfTimer = (unit._gfTimer || 0) - dt;
+        if (!unit.moving || unit._gfTimer <= 0) {
+            unit._gfTimer = 0.6;
+            const ang = Game.angleTo(tx, tz, unit.x, unit.z);
+            const standoff = Math.max(2, Math.min(unit.range * 0.8, d * 0.6));
+            const gx = Game.clamp(tx + Math.cos(ang) * standoff, 1, Game.WORLD_W - 1);
+            const gz = Game.clamp(tz + Math.sin(ang) * standoff, 1, Game.WORLD_H - 1);
+            unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
+            unit.moving = true;
+        }
+        return;
+    }
+
+    // In position — stop, face the spot, and fire on it.
+    unit._bombarding = true;
+    unit.path = [];
+    unit.moving = false;
+    unit.currentSpeed = 0;
+    const aim = Game.angleTo(unit.x, unit.z, tx, tz);
+    unit.angle = aim;
+    unit.turretAngle = aim;
+    if (unit.cooldownLeft <= 0) {
+        Game.fireAtGround(unit, tx, tz, weapon);
+        const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;
+        unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
+    }
+};
+
+/**
+ * One direct round onto a ground point: tracer + dust, suppression (and, for HE,
+ * light wounding + a crater) to anything caught near the impact.
+ */
+Game.fireAtGround = (unit, tx, tz, weapon) => {
+    if (unit.ammo === 0) {
+        unit.bombardX = null; unit.bombardZ = null; unit._bombarding = false;
+        Game.pushMessage(`${unit.label} out of ammo.`, 1.5);
+        return;
+    }
+    if (unit.ammo > 0) unit.ammo--;
+
+    const isTank = Game.isTank(unit.kind);
+    const acc = (weapon.accuracy?.medium ?? 0.6) + (unit.experience || 0) / 600;
+    const scatter = Game.clamp((1 - acc) * 2.0, 0.3, 2.5);
+    const ix = tx + Game.rand(-scatter, scatter);
+    const iz = tz + Game.rand(-scatter, scatter);
+    const mx = unit.x + Math.cos(unit.angle) * (unit.size || 1);
+    const mz = unit.z + Math.sin(unit.angle) * (unit.size || 1);
+    const d = Game.dist(mx, mz, ix, iz);
+
+    Game.tracers.push({
+        x: mx, z: mz, tx: ix, tz: iz,
+        life: 0.1 + d / 90, total: 0.1 + d / 90,
+        team: unit.team, big: isTank, mesh: null,
+    });
+    Game.smoke.push({
+        x: ix, z: iz, r: 0.6, life: 0.5, total: 0.5,
+        vx: Game.rand(-0.3, 0.3), vz: Game.rand(-0.5, -0.2), mesh: null,
+    });
+
+    // Area effect: suppress (HE also lightly wounds) enemies near the impact.
+    const blastR = weapon.heBlast ? weapon.heBlast : (isTank ? 2.0 : 1.2);
+    Game.units.forEach(u => {
+        if (!u.alive || u.team === unit.team) return;
+        const bd = Game.dist(ix, iz, u.x, u.z);
+        if (bd >= blastR) return;
+        const fall = 1 - bd / blastR;
+        u.suppressionValue = Game.clamp((u.suppressionValue || 0) + (weapon.suppression || 12) * fall, 0, 100);
+        u.shaken = Math.max(u.shaken || 0, 0.3);
+        if (weapon.heBlast) {
+            const armorMult = (typeof u.armor === 'number' && u.armor === 0) ? 1.0 : 0.2;
+            u.hp -= (weapon.damage || 25) * fall * armorMult * 0.5;
+            if (u.hp <= 0) {
+                u.alive = false; u.hp = 0;
+                if (u.mesh) u.mesh.visible = false;
+                if (Game.selection.has(u.id)) Game.selection.delete(u.id);
+            }
+        }
+    });
+
+    if (isTank && weapon.heBlast) {
+        Game.craters.push({ x: ix, z: iz, r: Game.rand(0.4, 0.8) });
+        if (Game.addBlastFlash) Game.addBlastFlash(ix, iz, 1.0);
+    }
+    if (Game.addBlastFlash) Game.addBlastFlash(mx, mz, isTank ? 1.2 : 0.4);
+    Game.cameraShake = Math.max(Game.cameraShake || 0, 0.3);
 };
 
 Game.fireBombard = (unit, tx, tz, weapon) => {
@@ -2108,6 +2212,15 @@ Game.tick = (now) => {
     // Sync 3D meshes with game state
     Game.syncUnitMeshes(dt);
 
+    // Targeting cursor: red reticle when attack-move stance is set or a one-shot
+    // target mode (attack-ground, grenade, smoke, air strike, rotate) is armed.
+    const wantAtkCursor = Game.orderStance === 'attack' || !!Game._commandMode;
+    if (wantAtkCursor !== Game._lastAtkCursor) {
+        Game._lastAtkCursor = wantAtkCursor;
+        const vp = document.getElementById('viewport');
+        if (vp) vp.classList.toggle('cmd-attack', wantAtkCursor);
+    }
+
     // Update HUD
     Game.updateHUD();
     Game.updateSelectionBox();
@@ -2149,6 +2262,7 @@ Game.boot = async () => {
         cmdAttack: () => { Game.setOrderStance('attack'); },
         stanceMove: () => { Game.setOrderStance('move'); },
         stanceAttack: () => { Game.setOrderStance('attack'); },
+        cmdAttackGround: () => { Game._commandMode = 'attackground'; Game.pushMessage('Attack ground — right-click a spot to suppress.', 2.0); },
         cmdStop: () => { Game.selectedPlayerUnits().forEach(u => { u.path = []; u.moving = false; u.orderMode = 'hold'; u.forcedTargetId = null; u.bombardX = null; u.bombardZ = null; u._bombarding = false; }); Game.pushMessage('Units stopped.', 1.0); },
         cmdHold: () => { Game.selectedPlayerUnits().forEach(u => { u.orderMode = u.orderMode === 'hold' ? 'aggressive' : 'hold'; }); },
         cmdGrenade: () => { Game._commandMode = 'grenade'; Game.pushMessage('Grenade — right-click target.', 2.0); },
