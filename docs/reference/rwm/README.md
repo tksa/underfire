@@ -20,11 +20,14 @@ to, plus terrain tiles, shared objects, and (partial) unit sprite sheets.
 
 | File | What |
 |---|---|
+| `units_roster.csv` / `units_roster.md` | The full ~580-unit roster (all nations) with HP, armor, speed, crew, weapons. **Imported into the game** via `data/units.csv` (see `data/README.md`). |
+| `loadout_groups.md` | Pre-built composite squad/loadout groups, per nation. |
 | `unit_attributes.md` | The 593-field unit attribute schema, grouped by system. |
 | `unit_types_and_modules.md` | Unit taxonomy + the per-unit engine modules (move/fire/scan/health/commands/container). |
 | `orders_and_controls.md` | The player order set and the keyboard map. |
 | `ai_and_scripting.md` | The autonomous combat loop, group AI behaviors, and the mission-trigger condition/function vocabulary. |
 | `ui.md` | Menu screens and the in-game HUD/widget set. |
+| `code/` | Game-mechanics RE: code-structure map + worked deep-dives (movement, bridge building). The full 20 MB DLL disassembly stays in the RWM distribution, not the repo. |
 
 ## How this maps to Under Fire (status)
 

@@ -2459,6 +2459,10 @@ Game.boot = async () => {
     // Init Three.js
     Game.initEngine();
 
+    // Merge the editable unit roster (data/units.csv) over the built-in table
+    // before anything spawns. Falls back to the built-in roster if unavailable.
+    if (Game.loadUnitsCSV) await Game.loadUnitsCSV();
+
     // Load heightmap from depth image (async)
     await Game.loadHeightmap();
 

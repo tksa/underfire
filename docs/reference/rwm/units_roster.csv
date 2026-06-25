@@ -1,0 +1,581 @@
+nation,type,name,shortname,health,armor_pierce_front,armor_explosive_front,movespeed,crew_unit,crew_number,sight,ammo1,ammo2,shot1_id,shot1_damage,shot1_range,shot1_reload,shot1_accuracy,shot1_burst,shot2_id,shot2_damage,shot2_range,shot2_reload,shot2_accuracy,shot2_burst,shot3_id,shot3_damage,shot3_range,targettype,scoretype,file,block
+american,antiaircraft,20mm Oerlikon AA gun,20mmaa,300,40,40,0.49,,,20,200,,zenith_ac,59,831,12,90,20,,,,,,,,,,gun,aa,20mmaa_us,19
+american,antiaircraft,Browning AA-Gun cal.50 (4x cal.50),cal.50 AA,250,40,40,0.19,,,20,1800,,zenith,31,840,1,285,40,,,,,,,,,,gun,aa,50calquad,41
+american,antiaircraft,GMC M19 (2x 40mm Bofors M2 L/56),GMC M19,500,30,0,1.65,atankist,6,17,352,,flak37,140,600,6,100,12,zenith_ac,100,1100,6,134,12,,,,medtank,aa,KI_TO,320
+american,antiaircraft,MGMC M16 AA (4x Browning HMG cal.50),M16 AA,120,12,0,2.5,atankist,4,19,1200,,man_machine_us,100,530,2,96,17,zenith,20,850,1,285,40,,,,apc,aa,m-16,345
+american,antiaircraft,US 90mm AA-Gun Gun M2 L/52,90mmAA,600,40,40,0.16,,,20,30,0,zenith_new,700,2500,100,240,1,,,,,,,,,,gun,aa,FLAK90,60
+american,apc,M3 Halftrack (75mm Infantry-Gun),M3 75mm,100,15,0,2.0,atankist,4,19,100,,minomet,200,650,140,120,1,,,,,,,,,,apc,car,m3,352
+american,apc,M3 Halftrack APC (HMG M2 Cal.50),M3,100,15,0,2.0,atankist,2,19,2010,,man_machine_us,60,450,4,50,5,,,,,,,,,,apc,car,m-3,348
+american,apc,M8 Greyhound (37mm gun m6),Greyhound,300,16,0,3.0,atankist,4,18,80,1500,37mm,110,575,140,50,,man_machine_us,20,450,4,30,5,,,,lighttank,car,M-8,253
+american,apc,Willys MB Jeep (M2 cal.50 MG),Willy 50cal,100,10,1,4.0,atankist,2,20,1200,,cal.50,60,520,2,50,40,,,,,,,,,,apc,car,Willys_Jeep50,637
+american,at,37mm At Gun M1A1 L/57,US 37mm Atg,400,40,40,0.49,,,20,50,0,,,,,,,,,,,,,,,,gun,gun,GUN100,351
+american,at,57mm Anti-Tank Gun M1,57mm ATG,450,40,40,0.38,,,20,45,0,,,,,,,,,,,,,,,,gun,gun,75mm_gorn_Japan,47
+american,at,"US 3.00 inch AT-Gun M5 L/53 (76,2mm)","US 76,2mm",500,40,40,0.32,,,20,20,0,,,,,,,,,,,,,,,,gun,gun,atg9,97
+american,at,US GI (M1A1 Bazooka),BAZOOKA,100,100,40,0.45,,,20,4,,bazooka,1100,416,250,35,1,,,,,,,,,,man,sold,aFaus,108
+american,at,US Ranger (M1A1 Bazooka),(AR)Bazooka,100,100,40,0.8,,,20,4,,bazooka,1100,450,250,35,1,,,,,,,,,,man,sold,aFaus,85
+american,car,US WLA 45 Harley (1x Browning Cal.30),HD BIKE,50,20,0,4.4,atankist,2,25,400,,man_machine_us,55,520,4,28,12,,,,,,,,,,smallgear,car,ussr_motik,256
+american,car,Willys MB Jeep,(US) Jeep,70,20,0,5.0,atankist,1,17,,,,,,,,,,,,,,,,,,car,car,UJEEP,642
+american,crew,US Crew (M1A1 Thompson .45),US Crew,40,100,40,0.5,,,18,96,,man_machine1,40,350,1,48,10,,,,,,,,,,man,sold,RUSALTAN,96
+american,crew,US Pilot (M1911 Colt .45),US Pilot,100,100,40,0.6,,,18,56,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,pilot,84
+american,fortification,M2 Browning .50CAL,US hmg,30,42,40,,,,19,2000,0,,,,,,,,,,,,,,,,smallgear,gun,MACHGUN,378
+american,furg,Dodge 1.25ton Truck,Dodge 1.25t,190,20,0,2.9,atankist,2,12,,,,,,,,,,,,,,,,,,car,car,br_tg_HO_KI,618
+american,furg,GMC CCKW-353 6X6 Jimmy (mobile hospital),US Medic truck,190,20,0,2.6,atankist,2,12,,,,,,,,,,,,,,,,,,car,car,DOUGM,248
+american,furg,GMC CCKW-353 6X6 Jimmy-Truck,GMC 6X6 Jimmy,190,20,0,2.6,atankist,2,12,,,,,,,,,,,,,,,,,,car,car,DOUG,249
+american,furg,GMC DUKW Amphibious Truck,DUKW,180,20,0,1.8,atankist,2,12,,,,,,,,,,,,,,,,,,car,car,dukw_amphi,196
+american,furg,M4 High-speed artillery tractor,(A)M4 Tractor,280,20,0,2.0,atankist,2,12,,,,,,,,,,,,,,,,,,car,car,agit_USA,254
+american,furg,Mack NR 6X6 truck,Mack 6X6,450,20,0,2.6,atankist,2,12,,,,,,,,,,,,,,,,,,car,car,MACK6_6,362
+american,mortar,105mm Field Howitzer M2A1 L/22.5,M2A1,380,40,40,0.14,,,20,16,0,htw1200,0,3200,650,370,1,,,,,,,,,,gun,gun,m2a1,347
+american,mortar,75mm Pack Howitzer M1A1 L/16,M1A1,450,40,40,0.18,,,20,20,0,he_75mmHow,0,2650,650,180,1,,,,,,,,,,gun,gun,GUNM1A1,346
+american,mortar,HMC M40 (155mm Gun M1A1 L/45 Long Tom),M40,800,50,0,1.2,atankist,5,17,20,0,,,,,,,,,,,,,,,,medtank,gun,m40,353
+american,mortar,M4 Sherman Calliope (60x4.50 inch Rockets),Calliope,550,128,0,1.4,atankist,3,17,60,,,,,,,,,,,,,,,,,medtank,car,SHERMRL,143
+american,mortar,M59 howitzer 'LONG TOM' 155mm,M59 155mm,350,40,40,0.09,,,20,12,0,,,,,,,,,,,,,,,,gun,gun,GUNM59H,359
+american,mortar,"M7 HMC Priest (105mm Howitzer L/22,5)",Priest,450,50,0,1.38,atankist,6,12,69,300,htw1200,0,2500,100,350,1,man_machine,60,490,4,50,5,,,,medtank,gun,m-7_priest,424
+american,plane,(US)Boeing B-17 Flying Fortress,(US)B-17,2050,20,0,7.93,apilot,3,10,,,,,,,,,,,,,,,,,,soft,avia,b-17_new,419
+american,plane,(US)Douglas A-20 G Boston,(US)A-20 G,2050,20,0,7.93,apilot,3,10,,,,,,,,,,,,,,,,,,soft,avia,p_b17,102
+american,plane,Aeronca L-3 (light Recon-Plane),(A)Aeronca,180,20,0,9.80,apilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_aerocna,142
+american,plane,Douglas C-47 (Skytrain) Cargo-Plane,(A)C-47,800,20,0,9.19,apilot,2,10,,,,,,,,,,,,,,,,,,soft,avia,p_Li_2_amer,134
+american,plane,Douglas C-47 (Skytrain) Transport-Plane,(A) C-47,800,20,0,9.19,apilot,2,10,,,,,,,,,,,,,,,,,,soft,avia,p_Li_2_amer,140
+american,plane,Lockheed P-38 J Lightning (Recon-Plane),(US)P-38,200,20,0,9.75,apilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_o52,398
+american,plane,Lockheed P-38 Lighting (Bomber),(US)P-38,2050,20,0,7.93,apilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_b17,103
+american,plane,"P-38 Lightning (10x HVAR Rockets 12,7mm)",(US)P-38,700,20,0,9.68,apilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p-38,402
+american,plane,P-47 D Thunderbolt (2x 250kg bomb),(US)P-47 D,300,20,0,9.68,apilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p-47,403
+american,plane,P-51 D MUSTANG Fighter,(US)P-51 D,300,20,0,9.68,apilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_51_mustang,404
+american,plane,Republic P-47 C Thunderbold - Fighter,(US)P-47 C,500,20,0,9.48,apilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_warhawk,168
+american,ship,AMERIKANISCHES LANDUNGSSCHIFF,BOOT,270,20,0,1.2,atankist,1,9,,,,,,,,,,,,,,,,,,boat,car,k_desamer2,623
+american,ship,AMERIKANISCHES LANDUNGSSCHIFF (Jeeps),BOOT,270,20,0,1.2,wyllis.mb.jeep,8,9,,,,,,,,,,,,,,,,,,boat,car,k_desamer2,294
+american,ship,AMERIKANISCHES LANDUNGSSCHIFF (M10),BOOT,270,20,0,1.2,wolverine,4,9,,,,,,,,,,,,,,,,,,boat,car,k_desamer2,641
+american,ship,AMERIKANISCHES LANDUNGSSCHIFF (M3 Halftrack),BOOT,270,20,0,1.2,m3,5,9,,,,,,,,,,,,,,,,,,boat,car,k_desamer2,349
+american,ship,AMERIKANISCHES LANDUNGSSCHIFF (M8),BOOT,270,20,0,1.2,greyhound,5,9,,,,,,,,,,,,,,,,,,boat,car,k_desamer2,361
+american,ship,AMERIKANISCHES LANDUNGSSCHIFF (Sherman 105),BOOT,270,20,0,1.2,sherman105,4,9,,,,,,,,,,,,,,,,,,boat,car,k_desamer2,511
+american,ship,AMERIKANISCHES LANDUNGSSCHIFF (Sherman V),BOOT,270,20,0,1.2,sherman.v,4,9,,,,,,,,,,,,,,,,,,boat,car,k_desamer2,514
+american,ship,AMERIKANISCHES LANDUNGSSCHIFF (Sherman flame),BOOT,270,20,0,1.2,shermanfl,4,9,,,,,,,,,,,,,,,,,,boat,car,k_desamer2,513
+american,ship,AMERIKANISCHES LANDUNGSSCHIFF (Sherman3),BOOT,270,20,0,1.2,sherman.LLL,4,9,,,,,,,,,,,,,,,,,,boat,car,k_desamer2,512
+american,ship,AMERIKANISCHES LANDUNGSSCHIFF (Stuart),BOOT,270,20,0,1.2,stuart,5,9,,,,,,,,,,,,,,,,,,boat,car,k_desamer2,566
+american,ship,AMERIKANISCHES LANDUNGSSCHIFF (Supplytrucks,BOOT,270,20,0,1.2,asupply,4,9,,,,,,,,,,,,,,,,,,boat,car,k_desamer2,88
+american,sold,US Colonel (M1911 Colt .45),US Colonel,50,100,40,0.4,,,20,64,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,GENERAL,67
+american,sold,US GI (Browning Automatic Rifle M1918A2),US BAR,60,100,40,0.6,,,20,200,,man_machine1,55,544,4,65,20,,,,,,,,,,man,sold,a_bar,99
+american,sold,US GI (Browning Cal.30),US HMG,60,100,40,0.6,,,20,200,,man_machine_us,55,544,1,75,35,,,,,,,,,,man,sold,HMGunet,70
+american,sold,US GI (Flamethrower M2-2),US Flamer,75,100,40,0.6,,,20,150,,flamethrower1,70,170,12,30,6,,,,,,,,,,man,sold,A-4,66
+american,sold,"US GI (M1 Garand 7,62mm)",(US) M1,45,100,40,0.65,,,19,120,2,man_sniper,100,475,53,38,8,grenade,250,200,75,19,1,,,,man,sold,A-2CASQ,69
+american,sold,US GI (M1A1 Thompson .45),US smg,50,100,40,0.6,,,20,240,2,man_machine1,40,350,1,40,30,grenade,250,200,75,19,1,,,,man,sold,A-1,93
+american,sold,US GI (Mortar M19 60mm),US mortar,60,100,40,0.35,,,20,10,,mortar60,40,800,150,290,1,,,,,,,,,,man,sold,DM,78
+american,sold,US GI (Thompson .45 & Satchel Charge),(US)Smg-AT,50,100,40,0.6,,,20,320,1,man_machine1,40,350,1,40,30,grenade,2619,30,80,2,,,,,man,sold,A-1,94
+american,sold,US MG-Team (M1919A4 Browning Cal.30),US MG-Team,120,100,40,0.46,,,20,1000,,man_machine_us,75,530,1,82,50,,,,,,,,,,man,sold,dmg42_team,71
+american,sold,US Officer (M1911 Colt .45),US Officer,50,100,40,0.7,,,23,56,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,AOfice,80
+american,sold,US Ranger (Browning Cal.30),Ranger HMG,60,100,40,0.6,,,20,200,,man_machine_us,55,530,1,75,35,,,,,,,,,,man,sold,HMGunet,86
+american,sold,"US Ranger (M1 Garand 7,62mm)",Ranger,100,100,40,0.7,,,19,120,4,man_sniper,100,475,53,38,8,grenade,150,150,200,52,1,,,,man,sold,us_ranger,456
+american,sold,US Ranger (Thompson .45 & Satchel Charge),Ranger smg,120,100,40,0.9,,,20,320,1,man_machine1,90,350,1,20,30,grenade,2619,30,80,2,,,,,man,sold,A-1,82
+american,sold,US Ranger Major (M1911 Colt .45),US Major,50,100,40,0.4,,,20,64,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,GENERAL,68
+american,sold,US Ranger Officer (M1911 Colt .45),(A)Officer,120,100,40,0.9,,,25,64,,man_machine1,60,350,29,10,8,,,,,,,,,,man,sold,AOfice,101
+american,sold,US Ranger Sergeant (M1A1 Thompson .45),Ranger Serg,120,100,40,0.9,,,23,320,,man_machine1,90,350,1,20,30,,,,,,,,,,man,sold,asergeant,83
+american,sold,"US Ranger Sniper (Springfield M1903 7,62mm)",(US) Sniper,50,100,40,0.5,,,21,80,,professional,114,740,375,15,1,,,,,,,,,,man,sold,ElitsniperG,95
+american,sold,US Sapper (2x Mines - explosive charges),Sapper,100,100,40,0.5,,,20,64,2,man_sniper,100,500,50,35,8,,,,,,,,,,man,sold,sapper,100
+american,sold,US Sergeant (M1A1 Thompson .45),US Sergeant,60,100,40,0.65,,,23,274,,man_machine1,40,350,1,40,30,,,,,,,,,,man,sold,asergeant,92
+american,sold,US medic (M1 Garand 7.62mm),(US)Medic,70,100,40,0.6,,,20,64,350,man_sniper,100,500,50,35,8,none,1,28,4,,,,,,man,sold,ALRUSMED,73
+american,support,M31B2 (T2) recovery-tank,T2 recovery,580,37,37,1.28,dtankist,3,12,8000,0,,,,,,,,,,,,,,,,car,car,berge_t2,114
+american,tank,GMC M-10 Wolverine (76.2mm M7 L/53),M-10,670,50,0,1.57,atankist,5,8,54,,88mm,1090,640,180,60,1,,,,,,,,,,medtank,tank,M-10,640
+american,tank,GMC M18 Hellcat (76mm Gun M1A1),Hellcat,400,25,0,2.2,atankist,5,8,45,0,88mm,840,640,140,65,1,,,,,,,,,,lighttank,tank,HELLCAT,258
+american,tank,GMC M36 Jackson (90mm Gun M3 L/50),Jackson,690,50,50,1.4,atankist,5,8,47,,88mm,1300,768,180,60,1,,,,,,,,,,medtank,tank,M36,350
+american,tank,M24 Chaffee (75mm Gun M6 L/39),Chaffee,600,30,0,2.0,atankist,4,8,48,3750,75mm,530,600,170,65,1,man_machine_us,20,450,4,30,5,,,,lighttank,tank,CHAFFI,147
+american,tank,M26E3 Pershing (90mm M3 L/50 (T7)),Pershing,1400,100,70,1.48,atankist,5,8,70,5000,88mm,1300,768,180,60,1,man_machine_us,20,450,4,30,5,,,,heavytank,tank,M26PERS,420
+american,tank,M3 Lee I (37mm m6 /75mm m2),Lee,580,37,37,1.28,atankist,6,8,128,65,37mm,110,575,88,50,1,75mm,530,600,170,65,1,,,,"medtank		- targettypes type, used also in attackpref",tank,grant,251
+american,tank,M4 Sherman 1 mine-clearer (75mm Gun M3),Sherman mine,750,50,0,1.06,atankist,5,8,97,4750,75mm,500,590,170,65,1,man_machine_us,20,450,4,30,5,,,,medtank,tank,m4mine,358
+american,tank,M4 Sherman I (75mm Gun M3 L/40),(US)Sherman I,750,50,0,1.25,atankist,5,8,97,4750,75mm,500,590,170,65,1,man_machine_us,20,450,4,30,5,,,,medtank,tank,SHERM-3,516
+american,tank,M4 Sherman I (75mm M3 & Flamethrower),Sherman Flame,750,50,0,1.25,atankist,5,8,97,350,75mm,500,590,170,65,1,flamethrower1,70,225,6,25,6,,,,medtank,tank,SHERM-3,519
+american,tank,M4(105)HVSS Sherman IBY (105mm Howi. L/23),Sherman 105mm,760,50,0,1.25,atankist,5,8,60,4750,stuh,760,704,100,65,1,man_machine_us,20,450,4,30,5,,,,medtank,tank,SH105,518
+american,tank,M4A1(76)W Sherman IIA (76mm M1A1 L/55),M4A1(76)W,765,50,0,1.25,atankist,6,8,71,3100,88mm,990,640,180,65,1,man_machine_us,20,450,4,30,5,,,,medtank,tank,m4a4,357
+american,tank,M4A2(76)W Sherman IIIA (76mm M1A1 L/55),M4A2 76(W),765,160,0,1.6,atankist,5,8,71,6250,88mm,990,640,180,65,1,man_machine_us,20,450,4,30,5,,,,medtank,tank,m4a2_76w,354
+american,tank,M4A3 Sherman IV  (75mm Gun M3),Sherman IV,750,50,0,1.61,atankist,5,8,97,2375,75mm,500,590,180,65,1,man_machine_us,20,450,4,30,5,,,,medtank,tank,SHERM-5,517
+american,tank,M4A3E2 Sherman Jumbo (75mm m3 l/40),Jumbo,760,75,75,1.19,atankist,5,8,104,6250,75mm,500,590,170,50,1,man_machine_us,20,450,4,30,5,,,,"MEDTANK 		- targettypes type, used also in attackpref",tank,m4a3e2,355
+american,tank,M4A3E8 Sherman Easy8 (76mm m1a2 l/52),Easy 8,750,75,36,1.6,atankist,5,8,71,6250,88mm,990,640,180,60,1,man_machine_us,20,450,3,30,5,,,,"medtank		- targettypes type, used also in attackpref",tank,m4a3e8,356
+american,tank,M5A1 Stuart IV (37mm Gun M6 L/57),M5A1 Stuart,250,63,0,1.85,atankist,4,14,147,5000,37mm,110,576,88,50,1,man_machine_us,20,450,4,30,5,,,,lighttank,tank,STEWART,565
+american,tank,M8 75mm M2 Howitzer Motor Carriage,M8,250,63,0,1.85,atankist,4,8,46,400,stuh,760,704,100,65,1,man_machine_us,60,490,4,50,5,,,,medtank,tank,m6,360
+british,antiaircraft,3.70'' (94mm) Ordnance QF AA Mk.II L/45,94mm AA,600,40,40,0.16,,,20,30,0,zenith_new,700,2500,100,240,1,,,,,,,,,,gun,aa,94mm_aa,61
+british,antiaircraft,40mm Ordnance QF Bofors L/56 AA-GUN,Bofors AA,300,40,40,0.16,,,20,60,0,zenith_ac,140,1200,20,125,8,,,,,,,,,,gun,aa,bofors_40mm,123
+british,antiaircraft,A15 Crusader Mk. I AA (40mm Bofors Mk.I),Crusader I AA,300,25,0,1.5,etankist,4,17,300,,flak37,140,600,12,50,8,zenith_ac,140,1100,16,130,8,,,,lighttank,aa,AA_Mk_I,166
+british,antiaircraft,A15 Crusader Mk. II AA (2x20mm Oerlikon),Crusader II AA,300,25,0,1.5,etankist,4,17,1500,,20mm,65,565,5,50,14,zenith_ac,59,831,4,100,20,,,,lighttank,aa,AA_Mk_II,167
+british,antiaircraft,Chevrolet LRDG AA-truck (2x0.50 Vickers MG),,120,12,0,2.5,etankist,3,19,2000,,man_machine,80,480,2,96,20,zenith,31,812,1,95,10,,,,apc,aa,e_aatruck,339
+british,apc,"Bren Carrier (7,62mm Bren MG)",Carrier,100,20,0,1.79,etankist,2,19,2000,,man_machine,60,450,4,50,10,,,,,,,,,,car,car,CARRIER,621
+british,apc,Bren Carrier (Flamethrower & Piat),Carrierflame,200,20,0,1.79,etankist,2,19,1000,10,flamethrower1,70,250,6,25,6,panzerschreck,650,500,300,21,1,,,,car,car,CARRIER,127
+british,apc,Daimler Dingo Mk.I (2-Pdr (40mm) L/50),Dingo,270,30,0,3.5,etankist,2,18,100,2000,37mm,110,575,130,50,1,man_machine,20,450,4,30,5,,,,lighttank,car,Daimler_mk_I,170
+british,apc,Humber Armored Car Mk.IV (37mm M6 L/57),Humber MK.IV,270,30,0,3.5,etankist,3,18,100,2000,37mm,110,575,130,50,1,man_machine,20,450,4,30,5,,,,lighttank,car,Humer_agit,269
+british,at,17-Pounder (76mm) Ordnance QF Mk.I L/55,17-pdr,450,40,40,0.18,,,20,24,0,,,,,,,,,,,,,,,,gun,gun,FUNT17,17
+british,at,2-Pounder(40mm) Ordnance QF Mk.IX L/50,2-pdr,400,40,40,0.49,,,20,50,0,,,,,,,,,,,,,,,,gun,gun,2pdr,37
+british,at,6-Pounder(57mm) Ordnance QF Mk.II L/43,6-pdr,450,40,40,0.38,,,20,45,0,,,,,,,,,,,,,,,,gun,gun,6PDR,44
+british,at,British private (AT Rocket PIAT 77mm),P.I.A.T,70,100,40,0.47,,,20,4,,panzerschreck,1100,416,300,35,1,,,,,,,,,,man,sold,eFaus,422
+british,at,Paratrooper (AT Rocket PIAT 77mm),P.I.A.T,100,100,40,0.8,,,20,4,,panzerschreck,1100,416,300,35,1,,,,,,,,,,man,sold,eFaus,222
+british,car,AEC armoured command vehicle,(UK)AEC,120,14,16,2.7,etankist,2,14,,,,,,,,,,,,,,,,,,car,car,Humber_Mk_I,268
+british,car,Daimler Dingo Mk. II recon car,Dingo Mk. II,110,16,0,3.5,etankist,2,25,,,,,,,,,,,,,,,,,,car,car,Daimler_Mk_II,179
+british,car,Norton 16H Big Four (1x Bren MG Mk.I),Norton,50,20,0,4.4,etankist,2,25,400,,man_machine,55,520,4,28,12,,,,,,,,,,smallgear,car,japan_motik,122
+british,crew,British PILOT (Enfield No.2 Mk.I),UK PILOT,100,100,40,0.6,,,18,32,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,pilot,215
+british,crew,British crew (9mm Sten SMG),GB crew,40,100,40,0.5,,,18,96,,man_machine1,40,350,1,48,10,,,,,,,,,,man,sold,ecrew,219
+british,fortification,UK heavy MG (Vickers Mk.V cal.50),(UK) hMG Vickers,30,42,40,,,,19,2000,0,,,,,,,,,,,,,,,,smallgear,gun,MACHGUN,627
+british,furg,Albion BY3N 6x4 3-ton,Albion,240,20,0,2.6,etankist,2,12,,,,,,,,,,,,,,,,,,car,car,albion_truck,72
+british,furg,Bedford truck QLD,BEDFORD,240,20,0,2.6,etankist,2,12,,,,,,,,,,,,,,,,,,car,car,Bedford_QLD,111
+british,furg,Ford WOT6 (mobile hospital),UK Medic truck,190,20,0,2.6,etankist,2,12,,,,,,,,,,,,,,,,,,car,car,br_2598_SO_DA,33
+british,furg,Morris Artillery Tractor C8 4x4 4-tons,Morris,240,20,0,2.6,etankist,2,12,,,,,,,,,,,,,,,,,,car,car,morris_truck,384
+british,mortar,25-Pounder Ordnance QF Mk.II L/28,25-pdr,130,40,40,0.16,,,20,16,0,htw1200,0,3200,650,370,1,,,,,,,,,,gun,gun,FUNT25,35
+british,mortar,5.5 inch Ordnance BL Mk.III L/30,"5,5 inch",500,40,40,0.11,,,20,12,0,,,,,,,,,,,,,,,,gun,gun,5.5_howitzer,40
+british,mortar,Bishop Mk.I (25pdr OQF Mk.III L/28),Bishop,650,,0,0.9,etankist,4,8,32,500,stuh_heavy,1450,832,370,80,1,man_machine,50,450,4,50,5,,,,lighttank,tank,Bishop,119
+british,mortar,"Sexton Mk.II (25 pounder OQF L/28,8)",Sexton,650,,1,1.1,etankist,6,10,112,900,htw1200,0,2500,100,350,1,man_machine,60,490,4,50,5,,,,lighttank,tank,sexton,510
+british,plane,Bristol Beaufighter F MK IV (Bomber),Beaufighter,800,20,0,9.2,epilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_g3m,240
+british,plane,Gloster Gladiator (Recon-Plane),(UK)Gladiator,150,20,0,9.80,epilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_audax,98
+british,plane,Hawker Huricane Mk.IV (250Kg Bomb),(UK)Hurricane,400,20,0,9.7,epilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_hurrican,271
+british,plane,Hawker Hurricane Mk.IIB (Fighter),(UK) Hurricane,300,20,0,9.7,epilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_hurrican,272
+british,plane,Hawker Typhoon 1b (8x HVAR Rockets),Typhoon,400,20,0,9.57,epilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_typhoon,620
+british,plane,MK-IV MOSQUITO-BOMBER,MOSQUITO,1150,20,0,8.82,epilot,2,10,,,,,,,,,,,,,,,,,,soft,avia,p_mosquito,380
+british,plane,SPITFIRE MK-XVIII (FIGHTER),SPITFIRE,400,20,0,9.57,epilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_spitfire,557
+british,ship,British Speedboat (1x37mm 1x20mm),(UK)Speedboat,600,20,0,2.0,etankist,7,20,4200,100,20mm,65,530,5,70,10,flak37,110,570,12,100,12,,,,boat,car,k_katamer1,622
+british,ship,"EREBUS, MARINEAUFKLÃRUNGSSCHIFF",EREBUS,12000,76,91,,etankist,28,12,,,,,,,,,,,,,,,,,,cruiser,huge,k_erebus4,520
+british,sold,Airborne Major (.38 Webley Mk IV),UK Major,50,100,40,0.4,,,20,64,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,GENERAL,296
+british,sold,Airborne Marksman (.303 Lee Enfield),(UK) Sniper,50,100,40,0.5,,,21,80,,professional,114,740,375,15,1,,,,,,,,,,man,sold,ElitsniperG,218
+british,sold,Airborne Officer (.38 Webley Mk IV),ParaOffi.,120,100,40,0.9,,,25,64,,man_machine1,60,350,29,10,8,,,,,,,,,,man,sold,AOfice,302
+british,sold,Airborne Sergeant (9mm Sten SMG),UK para Serg,120,100,40,0.9,,,23,256,,man_machine1,40,350,1,40,32,,,,,,,,,,man,sold,asergeant,214
+british,sold,"British Machinegunner (7.62mm Bren MK.II)
+*name British Machinegunner (7.62mm Bren MK.II)
+shortname",(UK) HMG,60,100,40,0.6,,,20,200,,man_machine,55,530,1,75,35,,,,,,,,,,man,sold,ehmg,118
+british,sold,British Medic (Lee Enfield No.4 Mk.I),UK medic,70,100,40,0.6,,,20,64,350,man_sniper,100,500,100,35,8,none,1,28,4,,,,,,man,sold,ALRUSMED,121
+british,sold,British Officer (Webley .38 Mk.IV),(B)Officer,50,100,40,0.5,,,23,56,,man_machine1,60,350,29,25,8,,,,,,,,,,man,sold,DOficer,212
+british,sold,British Rifleman (Lee Enfield No.4 Mk.I),UK Rifle,50,100,40,0.65,,,19,50,2,man_sniper,100,475,100,38,7,grenade,250,200,75,19,1,,,,man,sold,ENGL_SN,208
+british,sold,British Sapper (2x Mines - explosive charges),Sapper,100,100,40,0.5,,,20,64,2,man_sniper,100,480,100,35,7,,,,,,,,,,man,sold,sapper,220
+british,sold,British Seargeant (9mm Sten MP),UK Serg,60,100,40,0.65,,,23,274,,man_machine1,55,350,1,40,32,,,,,,,,,,man,sold,asergeant,216
+british,sold,British private (9mm Sten SMG & explosives),(B)AT-para,50,100,40,0.65,,,20,340,1,man_machine1,90,350,1,20,32,grenade,2619,30,80,2,,,,,man,sold,A-1,132
+british,sold,British private (9mm Sten SMG),UK smg,50,100,40,0.65,,,20,256,2,man_machine1,55,350,1,40,32,grenade,150,150,200,52,1,,,,man,sold,ENGL_AVT,217
+british,sold,British private (Anti-Tank Rifle Boys Mk.I),(B)AT-Rifle,45,100,40,0.45,,,20,30,,atrifle,120,530,200,28,1,,,,,,,,,,man,sold,datg,128
+british,sold,British private (Flamethrower No.2 Lifebuoy),(B)Flamer,75,100,40,0.6,,,20,150,,flamethrower1,70,170,12,30,6,,,,,,,,,,man,sold,A-4,206
+british,sold,British private (ML 2.00 Inch Mortar),(B)Mortar,60,100,40,0.35,,,20,10,,mortar60,40,800,150,290,1,,,,,,,,,,man,sold,DM,211
+british,sold,Britsih Colonel (Webley .38 Mk.IV),(B)Colonel,50,100,40,0.4,,,20,64,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,GENERAL,207
+british,sold,Canadian Officer (.38 Webley Mk IV),(C) Offi,50,100,40,0.65,,,23,56,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,AOfice,145
+british,sold,Canadian Rifleman (.303 Lee Enfield No.4),(C)Rifleman,45,100,40,0.6,,,20,50,2,man_sniper,75,480,100,35,7,grenade,250,200,75,19,1,,,,man,sold,JGuner,146
+british,sold,Paratrooper (.303 Lee Enfield No.4),Red Devil,80,100,40,0.9,,,19,50,4,man_sniper,100,480,90,20,1,grenade,200,150,,52,1,,,,man,sold,BParaRif,109
+british,sold,Paratrooper (9mm Sten SMG & explosives),(B)SMG Para,120,100,40,0.9,,,20,340,1,man_machine1,90,350,1,20,32,grenade,2619,30,80,2,,,,,man,sold,A-1,129
+british,sold,Paratrooper MG-guner (7.62mm Bren MK.II),(UK)HMG para,60,100,40,0.6,,,20,200,,man_machine,55,544,1,75,35,,,,,,,,,,man,sold,ehmg,221
+british,stug,Archer Mk.I (17pdr OQF Mk.II L/55),Archer,300,60,0,0.8,etankist,4,8,52,,88mm,1300,736,200,56,1,,,,,,,,,,medtank,tank,archer,87
+british,tank,A11 Matilda Mk I (.303 MG Vickers Mk.VI),Matilda I,310,150,0,0.75,etankist,2,8,4000,0,man_machine,60,555,3,50,16,,,,,,,,,,medtank,tank,church_bp,151
+british,tank,A22 Churchill Croc Mk.IV (75mm & Flamethr),Churchill croc,900,79,100,0.75,etankist,5,8,50,740,75mm,500,608,170,65,1,flamethrower1,70,225,6,25,6,,,,medtank,tank,church_75,149
+british,tank,A22 Churchill Mine-Clearer(75mm & 2-pdr),churchill,900,79,100,0.7,etankist,5,8,50,100,75mm,500,608,170,65,1,37mm,110,550,130,20,1,,,,medtank,tank,churchill_mine,152
+british,tank,A22 Churchill Mk.IV (6pdr OQF Mk.V L/50),Churchill4,810,79,100,0.83,etankist,5,8,80,3500,50mm,350,508,130,60,1,man_machine,20,450,4,30,5,,,,medtank,tank,CHURCHI,148
+british,tank,A30 Challenger (77mm ROQF Mk.II),Challenger,765,70,0,1.69,etankist,5,8,42,2500,88mm,1300,736,200,65,1,man_machine,20,450,4,30,5,,,,medtank,tank,a30_challenger,63
+british,tank,A34 Comet (77mm ROQF Mk. II),Comet,900,160,0,1.69,etankist,5,8,61,2600,88mm,1150,704,180,65,1,man_machine,20,450,4,30,5,,,,medtank,tank,COMET,160
+british,tank,A4 Vickers Mk.VI B (Vickers HMG cal.50),(UK)A4,120,20,0,2.0,etankist,3,8,400,2500,man_machine,60,555,3,50,16,man_machine,25,490,3,30,16,,,,medtank,tank,bron2595_HO_GI,28
+british,tank,Achilles IC (17-Pounder OQF Mk.V L/55),Achilles,650,50,0,1.52,etankist,5,8,50,450,88mm,1300,736,200,65,1,man_machine,20,450,4,30,5,,,,medtank,tank,ach,65
+british,tank,Churchill Avre Petard (290mm Petard Mk.I),Petard,900,128,62,0.75,etankist,5,8,30,4000,sturmtiger,4250,360,426,43,1,man_machine,20,450,4,30,5,,,,medtank,tank,petard,421
+british,tank,"Cromwell IV (75mm OQF Mk.V L/36,5)",Cromwell,650,65,0,1.73,etankist,5,8,64,2475,75mm,500,640,170,65,1,man_machine,20,450,4,30,5,,,,lighttank,tank,cromwell,164
+british,tank,Crusader MK III (A15) (ROQF 6-pounder),Crusader III,480,25,0,1.5,etankist,3,8,65,5000,zis2,400,508,130,60,1,man_machine,20,450,4,30,5,,,,lighttank,tank,CRUZADE,165
+british,tank,MATILDA Mk II (2-pounder Mk IX),MATILDA,650,160,8,0.85,etankist,4,8,93,2925,37mm,110,540,130,45,1,man_machine,20,450,4,30,5,,,,medtank,tank,MATILDA,365
+british,tank,MK VII Tetrarch (2-pounder(40mm) QFSA),Tetrarch,200,14,0,2.2,etankist,3,14,50,2025,37mm,110,576,140,50,1,man_machine,20,450,4,30,5,,,,lighttank,tank,TETRARC,599
+british,tank,Sherman VC Firefly (17-pounder Mk.IV),Firefly,700,50,0,1.5,etankist,4,8,56,5250,88mm,1300,736,200,65,1,man_machine,20,450,4,30,5,,,,medtank,tank,firefly,228
+british,tank,"Valentine MK XI (75mm OQF Mk.V L/36,5)",VALENTIN,500,65,0,0.85,etankist,4,8,79,3150,75mm,500,625,170,65,1,man_machine,20,450,4,30,5,,,,lighttank,tank,VALENTI,626
+french,at,47mm Canon de 47 Antichar SA-L L/53,47mm atg,430,40,40,0.38,,,20,30,0,,,,,,,,,,,,,,,,gun,gun,47mm_tip_01,614
+french,crew,"Equipage (Mas-38 7,65mm)",(F)crew,40,100,40,0.5,,,18,96,,man_machine1,55,350,1,48,10,,,,,,,,,,man,sold,RUSALTAN,233
+french,fortification,"Hotchkiss 1930 (13,2mm)",French MG,30,42,40,,,,19,2000,0,,,,,,,,,,,,,,,,smallgear,gun,MACHGUN,266
+french,mortar,Canon de 75 mle. 1897,75m mmle.,450,40,40,0.18,,,20,20,0,he_75mmHow,0,2650,650,180,1,,,,,,,,,,gun,gun,150mm_gaub_japan,14
+french,sold,Capitaine (Saint-Etienne 7.65mm),fofficer,50,100,40,0.7,,,23,56,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,AOfice,239
+french,sold,Chasseur de char (Swiss Oerlikon 20mm),(F) AT Gunner,45,100,40,0.45,,,20,30,,atrifle,120,530,200,32,1,,,,,,,,,,man,sold,datg,223
+french,sold,"Fusilier (Mas-36 7,50mm)",(F)rifleman,45,100,40,0.65,,,19,120,2,man_sniper,100,475,120,35,5,grenade,250,200,75,19,1,,,,man,sold,A-2,226
+french,sold,"Infirmier (Mas-36 7,50mm)",(F)Medic,70,100,40,0.6,,,20,64,350,man_sniper,100,500,120,35,3,none,1,28,4,,,,,,man,sold,japmed,300
+french,sold,Lance-Flamme (Flamethrower M2-2),(F) Flamer,75,100,40,0.6,,,20,150,,flamethrower1,70,170,12,30,6,,,,,,,,,,man,sold,A-4,295
+french,sold,"Mitrailleur (Mas-38 7,65mm)",frenchsmg,50,100,40,0.6,,,20,120,2,man_machine1,55,350,1,40,30,grenade,150,150,200,52,1,,,,man,sold,A-1,232
+french,sold,"Mitrailleuse Lourde (Mac 24/29 7,50mm)",(F) HMG,60,100,40,0.6,,,20,200,,man_machine,55,544,1,75,35,,,,,,,,,,man,sold,HMGunet,227
+french,sold,Mortier (60mm),(F)Mortar,100,100,40,0.5,,,20,10,,mortar60,40,800,150,290,1,,,,,,,,,,man,sold,JM,301
+french,sold,"sous-officier (Mas-38 7,65mm)",(F) Serg,60,100,40,0.65,,,23,274,,man_machine1,40,350,1,40,30,,,,,,,,,,man,sold,asergeant,304
+french,tank,AMR-35 ZT2 (25mm SA35),,220,20,0,1.8,ftankist,2,8,78,0,20mm,75,530,11,70,10,,,,,,,,,,medtank,tank,amr35,79
+french,tank,Char Leger FT-17 C (37mm SA18 L/21),FT-17 C,120,20,0,1.12,ftankist,2,8,100,0,37mm,110,575,88,50,1,,,,,,,,,,medtank,tank,Ci_nu,619
+french,tank,Char Lourd B-1 bis (75mm SA35 L/18),B1 Bis,750,,,0.8,ftankist,4,8,100,0,75mm,400,590,170,70,1,45mm,150,570,130,60,8,,,,medtank,tank,B1,104
+french,tank,"Char Lourd F.C.M.2C (75mm APX1897 L/36,3)",Char 2c,850,,,0.5,ftankist,12,8,45,3000,75mm,480,580,170,70,1,man_machine,20,450,4,30,5,,,,medtank,tank,c2,139
+french,tank,S 35 Somua (47mm SA35 L/34),S35,420,30,0,1.39,ftankist,3,8,118,3000,50mm,200,580,130,50,1,man_machine,20,450,4,30,5,,,,lighttank,tank,tank_S_35,489
+german,antiaircraft,Deutsche 88mm FlaK-36 L/56,88mm FlaK,600,40,40,0.16,,,20,30,0,zenith_new,700,2500,100,240,1,,,,,,,,,,gun,aa,flak18,56
+german,antiaircraft,FlaK-37 L/98 (37mm),37mm Flak,300,40,40,0.16,,,20,80,0,zenith_ac,72,1000,13,134,12,,,,,,,,,,gun,aa,37mm,38
+german,antiaircraft,Flak-38 (20mm),20mm Flak-38,300,40,40,0.49,,,20,200,,zenith_ac,59,831,12,90,20,,,,,,,,,,gun,aa,20mmaa,18
+german,antiaircraft,"Flakpanzer IV Moebelwagen (3,7-cm-Flak 43)",Moebelwagen 37mm,500,50,60,1.29,dtankist,7,17,3200,,flak37,110,550,4,100,12,zenith_ac,72,1000,13,134,12,,,,medtank,aa,mebel,376
+german,antiaircraft,Flakpanzer IV Moebelwagen (37mm Flak 43),Moebelw. 37mm,500,50,60,1.29,dtankist,7,17,416,,flak37,110,550,11,100,12,zenith_ac,72,1000,13,134,12,,,,medtank,aa,mebel,382
+german,antiaircraft,"Flakpanzer IV Moebelwagen(4x20mm Flak-38)
+*name Flakpanzer IV Moebelwagen(4x20mm Flak-38)
+shortname",Moebelw.20mm,500,50,60,1.29,dtankist,5,17,1800,,20mm,65,565,4,70,20,zenith_ac,59,831,4,100,40,,,,medtank,aa,20mm_moebelw,21
+german,antiaircraft,Flakpanzer IV Wirbelwind (4x20mm Flak-38),Wirbelwind,550,50,0,1.29,dtankist,5,17,3200,,20mm,65,565,4,70,20,zenith_ac,59,831,4,100,40,,,,medtank,aa,wirdelowind,638
+german,antiaircraft,Flakvierling-38 (4x20mm),20mmquad,300,40,40,0.19,,,20,800,,zenith_ac,59,831,6,100,40,,,,,,,,,,gun,aa,20mmquad,20
+german,antiaircraft,Opel Blitz 3.6 (20mm Flakvierling-38),Opel-Flak,110,8,0,2.0,dtankist,4,19,500,,20mm,65,540,4,70,20,zenith_ac,59,831,4,90,40,,,,car,aa,aatruck,64
+german,antiaircraft,Sd.Kfz. 7/1 (20mm Flakvierling-38),7/1 Flak,120,8,0,2.0,dtankist,4,19,800,,20mm,65,530,4,70,20,zenith_ac,59,831,4,100,40,,,,car,aa,MOBZEN,504
+german,antiaircraft,Sd.Kfz. 7/2 (37mm Flak-43),7/2 FLAK,120,8,0,2.0,dtankist,4,19,100,,flak37,110,550,11,100,12,zenith_ac,72,1000,13,134,12,,,,car,aa,37,505
+german,apc,"Sd.Kfz. 221 (MG-34 7,92mm)",Sd.Kfz. 221,100,15,0,2.7,dtankist,2,18,1050,0,man_machine,55,430,2,50,40,,,,,,,,,,apc,car,gjeep,247
+german,apc,Sd.Kfz. 222 (20mm KwK30 L/55),Sd.Kfz. 222,100,15,0,2.7,dtankist,2,18,170,1200,20mm,65,530,6.5,65,5,man_machine,20,450,4,30,5,,,,apc,car,20mm_sdkfz222,22
+german,apc,Sd.Kfz. 231 8-Rad (20mm KwK38 L/55),Sd.Kfz. 231,250,50,0,3.00,dtankist,4,19,180,1500,20mm,65,530,5,65,5,man_machine,20,450,4,30,5,,,,apc,car,SHIAUTO,494
+german,apc,Sd.Kfz. 232 8-Rad (20mm KwK38 L/55),Sd.Kfz.232-8,250,50,0,3.00,dtankist,4,19,180,1500,20mm,65,530,5,65,5,man_machine,20,450,4,30,5,,,,apc,car,sdkfz232,495
+german,apc,Sd.Kfz. 234/2 PUMA (50mm KwK 39/1 L/60),Puma,250,50,0,3.00,dtankist,4,18,50,1200,50mm,450,608,160,50,1,man_machine,20,450,4,30,5,,,,apc,car,puma,426
+german,apc,Sd.Kfz. 250/1 (MG-34 7.92mm),Sd.Kfz.250/1,100,15,0,2.1,dtankist,2,19,1010,,man_machine,55,450,2,50,8,,,,,,,,,,apc,car,GREIF,496
+german,apc,Sd.Kfz. 250/9 le. Spw (20mm KwK38 L/55),Sd.Kfz.250/9,100,15,0,2.1,dtankist,2,19,100,1200,20mm,65,530,5,65,5,man_machine,55,450,2,50,8,,,,apc,car,sdkfz250-20mm,497
+german,apc,Sd.Kfz. 251 SPW (MG-34 7.92mm),Sd.Kfz. 251,100,15,0,2.00,dtankist,2,19,2010,,man_machine,60,450,2,50,8,,,,,,,,,,apc,car,kette,498
+german,apc,Sd.Kfz. 251/10 (Pak 35/36 37mm),Sd.Kfz. 251/10,100,15,0,2.00,dtankist,5,19,168,1100,37mm,110,555,120,50,1,man_machine,60,450,2,50,8,,,,apc,car,sdkfz.251-10,499
+german,apc,Sd.Kfz. 251/16 mitt. Flammpanzerwagen(Flammwerfer 42),251 flamer,100,15,0,2.00,dtankist,5,19,1200,,flamethrower1,70,265,6,25,10,,,,,,,,,,apc,car,kette,500
+german,apc,Sd.Kfz. 251/22 (75mm Pak-40 L/48),75mm HT,100,15,0,2.0,dtankist,5,17,22,1005,75mm,600,704,180,65,1,man_machine,55,450,2,50,8,,,,apc,car,sdkfz251-22,506
+german,apc,Sd.Kfz. 251/9 (75mm KwK37 L/24),Infantrygun,100,15,0,2.0,dtankist,4,17,52,1005,75mm_short,400,576,170,58,1,man_machine,55,450,2,50,8,,,,apc,car,greif2,316
+german,apc,Sd.Kfz.231 6-Rad (20mm KwK30 L/55),Sd.Kfz.231,100,15,0,3.00,dtankist,4,18,200,1500,20mm,65,530,6.5,65,5,man_machine,20,450,4,30,5,,,,apc,car,bron,493
+german,at,Fallschirmjaeger (Panzerfaust 100),(D)Para PzFst,90,100,40,0.8,,,20,4,,panzerschreck,1000,418,200,35,1,,,,,,,,,,man,sold,d_para_pzfst,203
+german,at,German 37mm Pak (ATG in house simulation),,100,100,40,0.3,,,11,60,,pierce05-1k,40,555,88,41,1,,,,,,,,,,man,sold,A-4,184
+german,at,PAK-38 L/60 (50mm),50mm Pak,450,40,40,0.38,,,20,30,0,,,,,,,,,,,,,,,,gun,gun,GUN45NEM,407
+german,at,PAK-40 L/46 (75mm),75mm Pak,450,40,40,0.18,,,20,24,0,,,,,,,,,,,,,,,,gun,gun,GUNP40,408
+german,at,PaK 35/36 L/45 (37mm),37mm Pak,400,40,40,0.49,,,20,50,0,,,,,,,,,,,,,,,,gun,gun,GUNP37,406
+german,at,PaK-43 L/71 (88mm),Pak-43,600,40,40,0.10,,,20,20,0,,,,,,,,,,,,,,,,gun,gun,pak43,409
+german,at,Panzerjaeger (Panzerfaust 100),PzFst100,100,100,40,0.5,,,20,4,,panzerschreck,1000,416,200,35,1,,,,,,,,,,man,sold,DFaus,416
+german,at,RPzB 43 Pueppchen (88mm),Pueppchen,150,40,40,0.52,,,20,20,0,,,,,,,,,,,,,,,,gun,gun,pueppchen,425
+german,at,"Volkssturm (Kar-98k 7,92mm & PzFst-100)",(D)Volks-PzFst,40,100,40,0.44,,,18,35,2,man_sniper,100,416,100,38,5,panzerschreck,1100,440,200,45,1,,,,man,sold,volks_gun,631
+german,at,Volkssturm (Pzfst-60 & Brandflasche),(D)Volks-AT,40,100,40,0.44,,,18,2,4,panzerschreck,1100,384,200,45,1,molotov,170,185,200,52,1,,,,man,sold,volks_at,630
+german,at,Waffen-SS Grenadier (Panzerschreck 88mm),SSPzSchreck,90,100,40,0.8,,,20,4,,panzerschreck,950,480,400,35,,,,,,,,,,,man,sold,DFaus,558
+german,car,Horch 180 Typ 40,Horch 180,100,25,30,3.0,dtankist,2,12,,,,,,,,,,,,,,,,,,car,car,horch108,636
+german,car,Kfz. 1 VW Typ 82 Kuebelwagen,VW Kuebel,70,50,0,5.0,dtankist,1,17,,,,,,,,,,,,,,,,,,car,car,VWKUBEL,632
+german,car,Kradschuetze KS-750 (7.62mm MG-34),(D)Motorcycle,50,20,0,4.4,dtankist,2,25,1000,,man_machine,55,520,4,28,12,,,,,,,,,,smallgear,car,BIKE,649
+german,car,Sd.Kfz. 2 Kettenkrad,Kettenkrad,100,50,0,3.00,dtankist,1,16,0,0,,,,,,,,,,,,,,,,smallgear,car,2593sumida,27
+german,car,Volkswagen Typ 166 Schwimmwagen,VW Schwimmer,70,50,0,3.5,dtankist,1,17,,,,,,,,,,,,,,,,,,car,car,vw_schwimm,633
+german,crew,Besatzung (MP-40 9mm),(G)crew,40,100,40,0.5,,,18,96,,man_machine1,55,350,1,48,10,,,,,,,,,,man,sold,Dcrew,195
+german,crew,Flugzeugfuehrer (Walther P-38 9mm),GPILOT,100,100,40,0.6,,,18,32,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,pilot,185
+german,fortification,Deutsche 88mm FlaK-36 L/56 (Kreuzlafette),FLAK 88KLF,600,40,40,0.16,,,20,30,0,zenith_new,700,2500,100,240,1,,,,,,,,,,gun,aa,flak88-,57
+german,fortification,"MG-34 auf Feldlafette (7,92mm)",MG-34,30,42,40,,,,19,2000,0,,,,,,,,,,,,,,,,smallgear,gun,static_hmg_new,377
+german,fortification,Pantherturm (75mm KwK42 L/70),Pantherturm,750,160,,0.0,dtankist,3,20,70,2400,88mm,1200,704,180,65,1,man_machine,20,450,4,30,5,,,,lighttank,tank,pantherturm,412
+german,furg,Kfz 81 Krupp Protze L2H143,Krupp Protze,160,20,0,2.9,dtankist,2,12,,,,,,,,,,,,,,,,,,car,car,agit_SdKfs222,492
+german,furg,Kfz. 61 Einheitsdiesel 1937,Diesel,160,20,0,2.6,dtankist,2,12,,,,,,,,,,,,,,,,,,car,car,einheitsdiesel,209
+german,furg,Opel Blitz 3.6,Blitz,160,20,0,2.6,dtankist,2,12,,,,,,,,,,,,,,,,,,car,car,opel_blitz,399
+german,furg,Sd.Kfz. 10 leichter Zugkraftwagen (1t),Sd.kfz.10,280,20,0,2.0,dtankist,2,12,,,,,,,,,,,,,,,,,,car,car,sdkfz.10,490
+german,furg,Sd.Kfz. 11 leichter Zugkraftwagen (3t),Sd.Kfz. 11,240,20,0,2.2,dtankist,2,12,,,,,,,,,,,,,,,,,,car,car,sdkfz11_t,491
+german,furg,Sd.Kfz. 3 Opel Maultier (2t),Opel Maultier,240,20,0,2.6,dtankist,2,12,,,,,,,,,,,,,,,,,,car,car,FLAKGUS,366
+german,furg,Sd.Kfz. 3 Opel Maultier (Feldlazarett),Maultier Sani,240,20,0,2.6,dtankist,2,12,,,,,,,,,,,,,,,,,,car,car,FLAKGUM,367
+german,furg,Sd.Kfz. 7 mittlerer Zugkraftwagen (8t),SDKFZ.7,280,20,0,2.0,dtankist,2,12,,,,,,,,,,,,,,,,,,car,car,gtruck,255
+german,furg,Steyr Raupenschlepper Ost (RSO),RSO,200,20,0,1.9,dtankist,2,12,,,,,,,,,,,,,,,,,,car,car,d_rso,205
+german,mortar,150mmm schwere Feldhaubitze 18 L/30,sFH18 15cm,500,40,40,0.11,,,20,12,0,,,,,,,,,,,,,,,,gun,gun,LEFELDG,314
+german,mortar,170mm K 18 L/50,170mm,600,40,40,0.14,,,20,8,0,he_280mm,0,4500,1400,370,1,,,,,,,,,,gun,gun,k18_170mm,311
+german,mortar,28/32cm Nebelwerfer 41 (6x 32-cm-WK-Flamm),Nebel Flamm,250,10,12,0.42,,,20,6,0,,,,,,,,,,,,,,,,gun,gun,nebel,389
+german,mortar,75mm leichtes IG 18,75mm le.IG 18,450,40,40,0.49,,,20,20,0,he_75mmHow,0,2650,650,180,1,,,,,,,,,,gun,gun,75mm_ig18,46
+german,mortar,Deutscher 80mm Granatwerfer GrW34,(D)Moerser,60,42,40,,,,17,16,0,,,,,,,,,,,,,,,,smallgear,gun,MORTAR,58
+german,mortar,Nebelwerfer 41 (6x 150mm Rockets),Nebelwerfer,250,10,12,0.42,,,20,6,0,,,,,,,,,,,,,,,,gun,gun,nebel,387
+german,mortar,SF(SD.KFZ.4/1) Nebelwerfer,Nebel,300,10,12,1.5,dtankist,4,12,10,,,,,,,,,,,,,,,,,apc,car,nebelverfer,388
+german,mortar,SIG 33 L/12 (150mm Infanteriegeschuetz),sig33,250,40,40,0.11,,,20,16,0,,,,,,,,,,,,,,,,gun,gun,sig33,550
+german,mortar,Sd.Kfz. 124 Wespe (105mm leFH 18 L/28),Wespe,220,20,0,1.4,dtankist,4,17,32,0,,,,,,,,,,,,,,,,medtank,gun,wespe,635
+german,mortar,Sd.Kfz. 165 Hummel (150mm Haub18 L/30),Hummel,480,50,0,1.39,dtankist,5,17,18,0,,,,,,,,,,,,,,,,medtank,gun,HUMMEL,270
+german,mortar,Sd.Kfz.251 schwerer Wurfrahmen 40,Stukazufuss,100,10,12,1.5,dtankist,4,14,6,,,,,,,,,,,,,,,,,apc,car,fuss,234
+german,mortar,StuPz IV Brummbaer (150mm StuH43 L/12),StuPz IV,600,172,100,1.2,dtankist,5,8,38,600,stuh_heavy,1450,832,370,80,1,man_machine,20,450,4,30,5,,,,heavytank,tank,brum,130
+german,mortar,Sturmhaubitze 42 (105mm StuH42 L/28),Stuh 42,550,160,0,1.39,dtankist,4,8,36,600,stuh,770,704,100,65,1,man_machine,20,450,4,30,5,,,,medtank,tank,stuh42,575
+german,mortar,Sturmtiger (380mm StuM RW61 L/5.4),Sturmtiger,1400,160,,1.2,dtankist,5,8,14,600,sturmtiger,4250,1425,1600,230,1,man_machine,20,450,4,30,5,,,,heavytank,tank,STURM,576
+german,mortar,leichte Feldhaubitze 18 (105mm L/28),105mm,350,40,40,0.14,,,20,16,0,htw1200,0,3200,650,370,1,,,,,,,,,,gun,gun,GUN_GN1,224
+german,mortar,leichte Feldkanone 18 (75mm L/26),(D)lFk18-75mm,450,40,40,0.18,,,20,20,0,he_75mmHow,0,3500,650,180,1,,,,,,,,,,gun,gun,krepost_150mm_gun,15
+german,mortar,s.I.G. 33 auf Pz. I B (150mm L/12)(indirect fire),s.I.G. 33,200,20,0,1.0,dtankist,4,8,25,0,htw1200,0,2500,100,350,1,man_machine,20,450,4,30,5,,,,heavytank,tank,300mm_mortira,551
+german,mortar,s.I.G. 33 auf Pz. I B (150mm sIG33 L/12),s.I.G. 33,200,20,0,1.0,dtankist,4,8,25,0,stuh_heavy,1450,850,370,80,1,man_machine,20,450,4,30,5,,,,heavytank,tank,300mm_mortira,317
+german,othertypes,V2-STARTRAMPE,V2,80,20,0,,,0,,1000,,waitforme,0,16384,1,100,1,,,,,,,,,,,misc,v2base,625
+german,plane,FW 190 F-8 Jagdbomber (1x 250kg Bombe),(D)FW190 F-8,450,20,0,9.51,dpilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_fw190-f8,238
+german,plane,Fieseler Fi-156 Storch (light Recon-Plane),(G)Storch,150,20,0,7.0,dpilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_ki76,319
+german,plane,Focke Wulf Fw-189 A2 Uhu (Aufklaerer),(D)Fw-189,400,20,0,9.58,dpilot,3,10,,,,,,,,,,,,,,,,,,soft,avia,p_fw189,235
+german,plane,Focke-Wulf FW-190 A-1 Jaeger,FW-190 A-1,450,20,0,9.51,dpilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_fw190,237
+german,plane,Focke-Wulf FW-190 D-9 Jaeger,FW-190 D-9,450,20,0,9.51,dpilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_fw190d-9,236
+german,plane,Heinkel He-111 Bomber,(D)He-111,1350,20,0,8.65,dpilot,4,10,,,,,,,,,,,,,,,,,,soft,avia,p_li2japan,136
+german,plane,Henschel HS-129 B-2/R2 (30mm Mk 103),(D)HS-129,500,20,0,9.49,dpilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_ki27,318
+german,plane,Henschel HS-129 B-2/R3 (BK 75mm PaK 40L),HS-129-75mm,1400,20,0,8.65,dpilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_n1k1,385
+german,plane,JU-52-TRANSPORTFLUGZEUG,JU-52,1100,20,0,8.89,dpilot,4,10,,,,,,,,,,,,,,,,,,soft,avia,p_ju52,137
+german,plane,Junkers Ju-52 (Tante Ju) Transporter,(D)JU-52,1100,20,0,8.89,dpilot,4,10,,,,,,,,,,,,,,,,,,soft,avia,p_ju52,307
+german,plane,Junkers Ju-87 Rudelstuka (2x37mm),(D)Stuka,500,20,0,9.49,dpilot,2,10,,,,,,,,,,,,,,,,,,soft,avia,p_ju87_37mm,309
+german,plane,Junkers Ju-87 Stuka (3x250kg Bomben),(D)Ju-87,500,20,0,9.42,dpilot,2,10,,,,,,,,,,,,,,,,,,soft,avia,p_ju87,308
+german,plane,Junkers Ju-88 Bomber,(D)Ju-88,1350,20,0,8.65,dpilot,4,10,,,,,,,,,,,,,,,,,,soft,avia,p_ju88,310
+german,plane,Me 262A-1a Schwalbe (4x30mm Mk 108),Me 262A-1a,450,20,0,9.51,dpilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_me-262a-1a,374
+german,plane,Me-109 E Jagdbomber (1x 250kg Bombe),(D)Me-109E,300,20,0,9.69,dpilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_bf109e,116
+german,plane,Me-109 F Jaeger,(D)Me-109F,300,20,0,9.69,dpilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_bf109,115
+german,plane,Me-110E Jagdbomber (Fighter-Bomber),BF-110E,900,20,0,9.24,dpilot,2,10,,,,,,,,,,,,,,,,,,soft,avia,p_bf-110,117
+german,plane,Me-323'Gigant'(Transport''Plane),Me-323,600,1,5,9.60,dpilot,6,10,,,,,,,,,,,,,,,,,,soft,avia,p_me323,375
+german,ship,DEUTSCHES LANDUNGSSCHIFF,BOOT,270,40,40,1.2,dtankist,1,9,,,,,,,,,,,,,,,,,,boat,car,k_desgerman,245
+german,ship,DEUTSCHES LANDUNGSSCHIFF (Krads),BOOT,270,40,40,1.2,zundapp.ks750,8,9,,,,,,,,,,,,,,,,,,boat,car,k_desgerman,322
+german,ship,DEUTSCHES LANDUNGSSCHIFF (Stug40),BOOT,270,40,40,1.2,stug40g,5,9,,,,,,,,,,,,,,,,,,boat,car,k_desgerman,568
+german,ship,DEUTSCHES LANDUNGSSCHIFF (Versorger),BOOT,270,40,40,1.2,sdkfz.11,5,9,,,,,,,,,,,,,,,,,,boat,car,k_desgerman,458
+german,ship,DEUTSCHES LANDUNGSSCHIFF (pz2),BOOT,270,40,40,1.2,pzkpfw.LL,5,9,,,,,,,,,,,,,,,,,,boat,car,k_desgerman,428
+german,ship,DEUTSCHES LANDUNGSSCHIFF (pz38),BOOT,270,40,40,1.2,pzkpfw.38(t),5,9,,,,,,,,,,,,,,,,,,boat,car,k_desgerman,430
+german,ship,DEUTSCHES LANDUNGSSCHIFF (pz3fl),BOOT,270,40,40,1.2,pz3fl,4,9,,,,,,,,,,,,,,,,,,boat,car,k_desgerman,432
+german,ship,DEUTSCHES LANDUNGSSCHIFF (pz3j),BOOT,270,40,40,1.2,pzkpfw.LLL,4,9,,,,,,,,,,,,,,,,,,boat,car,k_desgerman,433
+german,ship,DEUTSCHES LANDUNGSSCHIFF (pz3n),BOOT,270,40,40,1.2,pz3n,4,9,,,,,,,,,,,,,,,,,,boat,car,k_desgerman,429
+german,ship,DEUTSCHES LANDUNGSSCHIFF (pz4d),BOOT,270,40,40,1.2,pzkpfw.Lv.f,4,9,,,,,,,,,,,,,,,,,,boat,car,k_desgerman,440
+german,ship,DEUTSCHES LANDUNGSSCHIFF (pz4g),BOOT,270,40,40,1.2,pzkpfw.Lv.j,4,9,,,,,,,,,,,,,,,,,,boat,car,k_desgerman,437
+german,ship,DEUTSCHES LANDUNGSSCHIFF (pz4h),BOOT,270,40,40,1.2,pz4s,4,9,,,,,,,,,,,,,,,,,,boat,car,k_desgerman,436
+german,ship,Deutsches Schnellboot S100 (1x37mm 1x20mm),(G)Boat,600,20,0,2.0,dtankist,7,20,4200,100,20mm,65,530,5,70,10,flak37,110,570,12,100,12,,,,boat,car,k_katgerman,244
+german,ship,"KLAUS VON BEVERN, ZERSTÃRER",KLAUS,7800,80,96,,dtankist,31,30,,,,,,,,,,,,,,,,,,cruiser,huge,k_klaus4,543
+german,sold,Deutscher Schuetze (Gewehr G-43 7.92mm),(D)G-43,50,100,40,0.6,,,20,120,,man_sniper,100,500,50,35,10,,,,,,,,,,man,sold,d_g43,312
+german,sold,Deutscher Schuetze (Granatwerfer-36 50mm),G mortar,100,100,40,0.5,,,20,10,,mortar60,40,800,150,290,1,,,,,,,,,,man,sold,DM,181
+german,sold,Deutscher Schuetze (MP-40 & Haftmine),(D)Smg-AT,50,100,40,0.6,,,20,240,1,man_machine1,55,350,1,40,32,grenade,2619,30,80,2,,,,,man,sold,ss,189
+german,sold,Deutscher Schuetze (MP-40 9mm),(D)MP-40,50,100,40,0.6,,,20,240,4,man_machine1,55,350,1,40,32,grenade,250,200,75,19,1,,,,man,sold,DMGun,188
+german,sold,Deutscher Schuetze (Mauser 98k 7.92mm),(D)Schuetze,50,100,40,0.6,,,19,60,2,man_sniper,100,475,100,38,5,grenade,250,200,75,19,1,,,,man,sold,DGuner,177
+german,sold,Fallschirmjaeger (Gewehr G-43 7.92mm),(D)Para-G43,80,100,40,0.9,,,19,120,4,man_sniper,100,475,53,38,10,grenade,250,150,75,19,1,,,,man,sold,d_para_g43,200
+german,sold,"Fallschirmjaeger (Kar-98k 7,92mm)",(D)Para-98k,80,100,40,0.9,,,19,50,4,man_sniper,100,475,90,25,1,grenade,250,200,75,19,1,,,,man,sold,d_para_98k,199
+german,sold,Fallschirmjaeger (MP-40 - geballte Ladung,(D)Para AT,50,100,40,0.6,,,20,240,2,man_machine1,55,350,1,40,32,geballte_ladung,300,110,180,50,,,,,man,sold,d_para_mp40,201
+german,sold,Fallschirmjaeger (STG-44-Panzerwurfmine),(D)Para STG-44,120,100,40,0.9,,,20,400,1,man_machine1,90,350,1,20,30,grenade,2619,120,80,48,,,,,man,sold,d_para_stg44,204
+german,sold,Fallschirmjaeger Unteroffizier (MP-40 9mm),(D)Para Offi,120,100,40,0.9,,,23,274,,man_machine1,40,350,1,40,32,,,,,,,,,,man,sold,d_para_offi,202
+german,sold,MG-Schuetze (MG-34 7.92mm),(D)MG34,60,100,40,0.6,,,20,200,,man_machine,55,544,1,75,35,,,,,,,,,,man,sold,dhmg2,197
+german,sold,MG-Schuetze (MG-42 7.92mm),(D)HMG,60,100,40,0.6,,,20,200,,man_machine,55,530,1,75,35,,,,,,,,,,man,sold,mg42,178
+german,sold,MG-Trupp (MG-42 7.92mm),(D)MG-Team,120,100,40,0.46,,,20,1000,,man_machine,55,544,1,75,50,,,,,,,,,,man,sold,dmg42_team,180
+german,sold,Oberst (Walther P-38 9mm),(D) Major,50,,,0.4,,,20,64,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,GENERAL,175
+german,sold,Offizier (Walther P-38 9mm),(D)Offi,50,100,40,0.65,,,23,64,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,DOficer,182
+german,sold,"Panzerbuechsenschuetze (PzB-39 7,92mm)",(D)PzB,45,100,40,0.45,,,20,30,,atrifle,120,530,200,28,1,,,,,,,,,,man,sold,d_atg,242
+german,sold,"Sanitaeter (Kar-98k 7,92mm)",(D)Sani,70,100,40,0.6,,,20,64,350,man_sniper,100,500,100,35,5,none,1,28,4,,,,,,man,sold,dmed,155
+german,sold,Sturmpionier (2x Minen - Sprengladungen),PIO,100,100,40,0.5,,,20,64,2,man_sniper,100,500,100,35,5,,,,,,,,,,man,sold,d_miner,198
+german,sold,Sturmpionier (Flammenwerfer-41),(D)Flamer,100,100,40,0.6,,,20,150,,flamethrower1,70,170,12,30,6,,,,,,,,,,man,sold,A-4,173
+german,sold,Unteroffizier (MP-40 9mm),(D)Feldwebel,60,100,40,0.65,,,23,274,,man_machine1,40,350,1,40,32,,,,,,,,,,man,sold,dfeld,172
+german,sold,"Volkssturm (Kar-98k 7,92mm)",(D)Volks-98k,45,100,40,0.45,,,20,35,,man_sniper,100,500,100,38,5,,,,,,,,,,man,sold,volks_98k,629
+german,sold,"Waffen-SS Grenadier (Kar-98k 7,92mm)",(D)WSS-98k,80,100,40,0.9,,,19,50,4,man_sniper,100,475,90,25,1,grenade,250,200,75,19,1,,,,man,sold,wss_98k,481
+german,sold,Waffen-SS Grenadier (MP40 & Haftmine),(D)WSS-AT,120,100,40,0.9,,,20,224,1,man_machine1,55,350,1,40,32,grenade,2619,30,80,2,,,,,man,sold,ss,192
+german,sold,Waffen-SS Grenadier (STG-44 & Haftmine),(D)MP-44,120,100,40,0.9,,,20,300,1,man_machine1,55,380,1,40,30,grenade,2619,30,80,2,,,,,man,sold,mp44_gunner,191
+german,sold,Waffen-SS MG-Schuetze (MG-34 7.92mm),(WSS)MG34,60,100,40,0.6,,,20,200,,man_machine,55,530,1,75,35,,,,,,,,,,man,sold,dhmg2,193
+german,sold,Waffen-SS Oberscharfuehrer (MP-40 9mm),(D)WSS-Feldw,120,100,40,0.9,,,23,274,,man_machine1,40,350,1,40,32,,,,,,,,,,man,sold,dfeld,187
+german,sold,Waffen-SS Offizier (Walther P-38 9mm),(D)WSS Offi,120,100,40,0.9,,,25,64,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,DOficer,194
+german,sold,Waffen-SS Scharfschuetze (Kar-98k mit ZF),(D)Sniper,50,100,40,0.5,,,21,80,,professional,114,740,375,15,1,,,,,,,,,,man,sold,ElitsniperG,190
+german,sold,Waffen-SS Sturmbannfuehrer (Walther P-38),(D)WSS-Geni,50,100,40,0.4,,,20,64,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,GENERAL,176
+german,special,8CM.SMOKE,,60,42,40,,,,8,16,0,,,,,,,,,,,,,,,,smallgear,gun,MORTAR,59
+german,special,WALKING.STUKA,,180,1,1,1.6,dtankist,2,9,6,,,,,,,,,,,,,,,,,car,car,WURFKOR,634
+german,stug,Jgd.Pz. IV (75mm PaK39 L/48),Jgd.Pz. IV,650,160,8,1.16,dtankist,4,8,79,600,75mm,600,640,170,65,1,man_machine,20,450,4,30,5,,,,"heavytank		- targettypes type, used also in attackpref",tank,Ho_ni_III,263
+german,stug,Jgd.Pz. IV/70 (V) (75mm PaK42 L/70),Jgd.Pz IV/70,650,46,46,1.12,dtankist,4,8,55,600,88mm,1200,704,180,65,1,man_machine,20,450,4,30,5,,,,"heavytank		- targettypes type, used also in attackpref",tank,jagp4,289
+german,stug,Jgd.Pz. VI/B Jagdtiger (128mm KwK44 L/55),Jagdtiger,1800,120,250,1.1,dtankist,6,8,40,1500,at_88mm,2800,800,250,65,1,man_machine,20,450,4,30,5,,,,heavytank,tank,JAGD,288
+german,stug,Jgd.Pz.38(t) Hetzer (75mm Pak39 L/48),Hetzer,500,128,0,1.31,dtankist,4,8,41,1200,75mm,600,640,170,65,1,man_machine,20,450,4,30,5,,,,lighttank,tank,hetzer,259
+german,stug,Jgd.Pz.V Jagdpanther (88mm KwK43 L/71),Jagdpanther,900,172,90,1.84,dtankist,5,8,57,600,at_88mm,1800,768,180,60,1,man_machine,20,450,4,30,5,,,,heavytank,tank,PZ-V,286
+german,stug,Panzerjaeger I (47mm PaK36(t) L/43),Pzj. I,120,80,0,1.39,dtankist,3,8,86,,zis2,465,600,170,55,1,,,,,,,,,,medtank,tank,Ho_ni,261
+german,stug,Pz.Jg. Marder II F (75mm Pak 40 L/48),Marder II F,210,30,0,1.29,dtankist,4,8,30,600,75mm,600,640,180,65,1,man_machine,20,450,4,30,5,,,,"medtank		- targettypes type, used also in attackpref",tank,marder2g,363
+german,stug,Pz.Jg. Marder III H (76.2mm pak36(r) L/55),Marder III,260,6,6,1.44,dtankist,4,8,30,1200,75mm,500,640,170,50,1,man_machine,20,450,4,30,5,,,,"medtank		- targettypes type, used also in attackpref",tank,marderiii,364
+german,stug,Pz.Jg. Nashorn (88mm PaK43 L/71),Nashorn,500,60,0,1.39,dtankist,4,8,40,,at_88mm,1800,768,180,56,1,,,,,,,,,,medtank,tank,nas,386
+german,stug,PzJg. VI Tiger(P) (88mm PaK 43/2 L/71),Ferdinand,1200,160,250,0.7,dtankist,6,8,50,,at_88mm,1800,768,180,70,1,,,,,,,,,,heavytank,tank,ELE,225
+german,stug,StuG III B (75mm StuK37 L/24),StuG III B,450,80,0,1.39,dtankist,4,8,44,,75mm_short,430,576,170,65,1,,,,,,,,,,medtank,tank,stug3b,569
+german,stug,StuG III G (75mm StuK40 L/48),StuG III G,550,160,0,1.39,dtankist,4,8,54,,75mm,600,640,170,65,1,,,,,,,,,,medtank,tank,STUG40G,572
+german,stug,StuG III G Saukopf (75mm StuK40 L/48),StuG III G,600,160,0,1.39,dtankist,4,8,54,600,75mm,600,640,170,65,1,man_machine,20,450,4,30,5,,,,medtank,tank,stug3g_late,571
+german,stug,StuG III G late (75mm StuK40 L/48),StuG III G,600,160,0,1.39,dtankist,4,8,54,600,75mm,600,640,170,65,1,man_machine,20,450,4,30,5,,,,medtank,tank,stug3gs,570
+german,stug,StuG IV (75mm StuK40 L/48),StuG IV,595,160,0,1.39,dtankist,4,8,63,600,75mm,600,640,170,60,1,man_machine,20,450,4,30,5,,,,medtank,tank,stugIV,573
+german,support,Bergepanzerwagen Panther,Bergepanhter,780,160,,1.74,dtankist,3,12,8000,0,,,,,,,,,,,,,,,,heavytank,car,bergepanther,112
+german,support,Sd.Kfz. 251/7 Pionierpanzerwagen,251/7 Pionier,780,15,0,1.7,dtankist,2,12,15000,5000,,,,,,,,,,,,,,,,car,car,sdkfz.251_pio,502
+german,tank,Armoured Turret (75mm PAK-40 L/46),Pak-Turret,750,24,100,0.0,dtankist,4,20,70,2400,75mm,590,625,150,65,1,man_machine,25,380,4,50,5,,,,lighttank,tank,turret_pak,158
+german,tank,Aufklaerungspanzer 38(t) (20mm KwK38 L/55),38t recon,225,20,0,1.45,dtankist,3,14,180,1100,20mm,65,530,5,65,5,man_machine,20,450,4,30,5,,,,lighttank,tank,2592_TK,25
+german,tank,MG Turret,MG,900,24,100,0.0,dtankist,2,20,5000,5000,man_machine,57,380,2,50,8,man_machine,57,380,2,50,8,,,,"medtank		- targettypes type, used also in attackpref",tank,turret_mg,157
+german,tank,Pz.Kpfw. 35(t) (37mm KwK34(t) L/40),Pz. 35(t),250,20,0,1.2,dtankist,4,8,72,1800,37mm,110,576,140,58,1,man_machine,20,450,4,30,5,,,,lighttank,tank,pz35,441
+german,tank,Pz.Kpfw. 38(t) E (37mm KwK38(t) L/47.8),Pz. 38(t),230,20,0,1.45,dtankist,4,8,42,2400,37mm,110,576,88,58,1,man_machine,20,450,4,30,5,,,,lighttank,tank,PzKpfw38t,442
+german,tank,Pz.Kpfw. I A (2x 7.92 MG 13),Pz. I A,120,20,0,1.4,dtankist,2,8,1125,1125,man_machine,60,490,3,50,16,man_machine,25,490,3,30,16,,,,medtank,tank,1a,443
+german,tank,Pz.Kpfw. II F (20mm KwK 38 L/55),Pz. II F,200,30,0,1.69,dtankist,3,8,330,2250,20mm,65,530,5,65,5,man_machine,20,450,4,30,5,,,,lighttank,tank,LUcHS,444
+german,tank,Pz.Kpfw. III F (37mm KwK36 L/45),Pz. III F,450,30,0,1.5,dtankist,5,8,99,1200,37mm,110,576,88,56,1,man_machine,20,450,4,30,5,,,,medtank,tank,panzer3_f,415
+german,tank,Pz.Kpfw. III J (50mm KwK 38 L/42),Pz. III J,500,128,0,1.5,dtankist,5,8,99,1200,50mm,360,580,160,50,1,man_machine,20,450,4,30,5,,,,medtank,tank,2597Te_ke,32
+german,tank,Pz.Kpfw. III L (50mm KwK39 L/60),Pz. III L,510,128,0,1.29,dtankist,5,8,84,2400,50mm,450,608,160,50,1,man_machine,20,450,4,30,5,,,,medtank,tank,PZ3J,445
+german,tank,Pz.Kpfw. III Minenraeumer (Mg-34 7.92mm),Pz.III mine,400,128,0,1.08,dtankist,4,8,2000,0,man_machine,50,450,4,30,5,,,,,,,,,,medtank,tank,pz3mine,434
+german,tank,Pz.Kpfw. III N (75mm KwK L/24),Pz. III N,540,135,10,1.29,dtankist,5,8,64,3750,75mm_short,400,576,170,65,1,man_machine,20,450,4,30,5,,,,medtank,tank,PZ3n,435
+german,tank,Pz.Kpfw. IV D (75mm KwK37 L/24),Pz. IV D,500,30,0,1.26,dtankist,5,8,80,2700,75mm_short,400,590,170,58,1,man_machine,20,450,4,30,5,,,,medtank,tank,PZ4f,446
+german,tank,Pz.Kpfw. IV F1 (75mm KwK37 L/24),Pz. IV F1,500,30,0,1.26,dtankist,5,8,80,2700,75mm_short,400,590,170,58,1,man_machine,20,450,4,30,5,,,,medtank,tank,pz.4_f1,427
+german,tank,Pz.Kpfw. IV F2 (75mm KwK40 L/43),Pz.IVF2,600,160,0,1.41,dtankist,5,8,87,2000,75mm,590,640,170,54,1,man_machine,20,450,4,30,5,,,,medtank,tank,Ci_he,617
+german,tank,Pz.Kpfw. IV G (75mm KwK40 L/43),Pz. IV G,600,160,0,1.41,dtankist,5,8,87,2250,75mm,590,640,170,54,1,man_machine,20,450,4,30,5,,,,medtank,tank,PZ4G,447
+german,tank,Pz.Kpfw. IV H (75mm KwK 40 L/48),Pz. IV H,650,160,0,1.4,dtankist,5,8,87,3150,75mm,600,640,170,54,1,man_machine,20,450,4,30,5,,,,medtank,tank,PZ4s,439
+german,tank,Pz.Kpfw. V Panther A (75mm KwK42 L/70),Panther A,900,160,,1.74,dtankist,5,8,79,4800,88mm,1200,704,180,65,1,man_machine,20,450,4,30,5,,,,heavytank,tank,panther_a,413
+german,tank,Pz.Kpfw. V Panther D (75mm KwK42 L/70),Panther D,900,160,,1.74,dtankist,5,8,79,4800,88mm,1200,704,180,65,1,man_machine,20,450,4,30,5,,,,heavytank,tank,panther_d,414
+german,tank,Pz.Kpfw. V Panther G (75mm KwK42 L/70),Panther G,900,160,,1.74,dtankist,5,8,79,4800,88mm,1200,704,180,65,1,man_machine,20,450,4,30,5,,,,heavytank,tank,PANTH,411
+german,tank,Pz.Kpfw. VI/B Tiger II (88mm KwK43 L/71),TIGER II,1600,110,250,1.15,dtankist,5,8,72,5890,at_88mm,1800,768,211,65,1,man_machine,20,450,4,30,5,,,,heavytank,tank,KOENIG,321
+german,tank,Pz.Kpfw.III (Fl) (14mm Flammanlage 43),Pz.III (Fl),400,128,0,1.5,dtankist,5,8,750,1725,flamethrower1,70,265,6,25,10,man_machine,20,450,4,30,5,,,,medtank,tank,PZ3,431
+german,tank,Pz.Kpfw.VI E Tiger I (88mm KwK 36 L/56),Tiger I,1100,100,,1.25,dtankist,5,8,92,4500,at_88mm,1190,704,190,58,1,man_machine,20,450,4,30,5,,,,heavytank,tank,TIGER,600
+german,tank,Sd.Kfz. 304 Ladungstraeger Springer,Springer,30,50,60,3.31,,0,1,1,,kamikaze,1875,64,1,1,1,,,,,,,,,,lighttank,tank,BIV,503
+italian,apc,Autoblinda AB41 (20mm Cannone 20/65 L/65),AB41 20mm,160,50,0,3.00,itankist,4,18,456,1200,20mm,65,530,6.5,65,5,man_machine,20,450,4,30,5,,,,apc,car,2595ha_go,29
+italian,at,47mm Cannone Da 47/32 M35 L/32,47mm ATG,200,40,40,0.49,,,20,30,0,,,,,,,,,,,,,,,,gun,gun,77mm_Japan,49
+italian,crew,Equipaggio (Beretta M1938A 9mm),(I)Crew,40,100,40,0.5,,,18,96,,man_machine1,40,350,1,45,10,,,,,,,,,,man,sold,GERTAN,282
+italian,fortification,"Breda Modello 37 (7,66mm)",(I)hMG,30,42,40,,,,19,2000,0,,,,,,,,,,,,,,,,smallgear,gun,MACHGUN,126
+italian,mortar,Semovente M43 Bassotto (105mm howitzer),semo 43,510,160,0,1.1,itankist,3,8,36,864,stuh,770,704,100,65,1,man_machine,20,450,4,30,5,,,,medtank,tank,semovente_m43,509
+italian,sold,Bersaglieri (Beretta M1938A 9mm),SMG duce,120,100,40,0.9,,,20,400,1,man_machine1,90,350,1,20,30,grenade,2619,30,80,2,,,,,man,sold,i_bersa,283
+italian,sold,Capitano (Beretta M1934 9mm),(I)Officer,50,100,40,0.6,,,23,163,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,AOfice,285
+italian,sold,"Leggero tiratore MG (Breda Mod. 30 6,50mm)",(I)hMG,60,100,40,0.6,,,20,200,,man_machine,55,544,1,75,35,,,,,,,,,,man,sold,HMGunet,299
+italian,sold,MP Tiratore (Beretta M1938A 9mm),(I)SMG,50,100,40,0.5,,,20,280,2,man_machine1,40,350,1,40,32,grenade,150,150,200,52,1,,,,man,sold,JMGun,174
+italian,sold,"Sanitario (Carcano M91/24 6,50mm)",(I)Medic,70,100,40,0.6,,,20,64,350,man_sniper,100,500,100,35,5,none,1,28,4,,,,,,man,sold,japmed,306
+italian,sold,Sergente (Beretta M1938A 9mm),IT Sergeant,60,100,40,0.65,,,23,274,,man_machine1,40,350,1,40,30,,,,,,,,,,man,sold,asergeant,297
+italian,sold,Sold. difesa anticarro (Solothurn S18-100),´(I)AT-Rifle,45,100,40,0.45,,,20,30,,atrifle,120,530,200,28,1,,,,,,,,,,man,sold,datg,293
+italian,sold,Soldato Lanciflamme,IT Flamer,75,100,40,0.6,,,20,150,,flamethrower1,70,170,12,30,6,,,,,,,,,,man,sold,A-4,298
+italian,sold,Soldato Mortaio (Brixia 45mm),(I)Mortar,100,100,40,0.5,,,20,10,,mortar60,70,800,150,290,1,,,,,,,,,,man,sold,DM,305
+italian,sold,"Tiratore Fucile (Carcano M91/24 6,50mm)",(I)Rifleman,45,100,40,0.6,,,19,40,2,man_sniper,100,475,120,38,5,grenade,250,200,75,19,1,,,,man,sold,RGuner,284
+italian,stug,Semovente M40 (75mm Obice 75/18),Semovente 40,550,160,0,1.05,itankist,3,8,44,1104,75mm,535,600,170,65,1,man_machine,20,450,4,30,5,,,,medtank,tank,semovente40,507
+italian,stug,Semovente M41 (90mm gun 90/53),Semo 90mm,300,60,0,1.19,itankist,4,17,20,,at_88mm,1800,750,180,70,1,,,,,,,,,,heavytank,tank,semovente41,508
+italian,tank,Carro Armato L6/40 (47mm 47/32),L6/40,160,30,36,1.67,itankist,2,8,296,1560,50mm,200,580,160,50,1,man_machine,20,450,4,30,5,,,,lighttank,tank,tank_L6_40,328
+italian,tank,Carro Armato M13/40 (47mm Cannone 47/32),M13/40,200,42,0,1.3,itankist,4,8,104,1010,50mm,400,600,130,50,1,man_machine,20,450,4,30,5,,,,lighttank,tank,tank_m15_42,344
+italian,tank,Carro Pesante P26/40 (75mm canone L/34),P26/40,550,30,36,1.4,itankist,4,8,75,600,75mm,500,620,170,65,1,man_machine,20,450,4,30,5,,,,medtank,tank,tank_P40,405
+japanese,antiaircraft,Japanese 37mm AA,FLAK75MM,300,40,40,0.18,,,10,60,0,zenith_ac,150,1000,13,134,12,,,,,,,,,,gun,aa,75mm_tip_88,615
+japanese,at,70MM-INFANTERIEHAUBITZE,70MM,100,40,40,0.19,,,10,24,0,htw700,0,1481,450,180,1,,,,,,,,,,gun,gun,70mm_pehot_gaub,45
+japanese,ship,JAPANISCHES KANONENBOOT (37mm&MG),KANONENBOOT,270,40,40,1.51,jtankist,3,20,4200,100,man_machine,57,380,2,79,8,37mm,110,420,140,50,1,,,,boat,car,k_katjapan,291
+japanese,ship,JAPANISCHES LANDUNGSSCHIFF,BOOT,270,40,40,1.2,jtankist,1,9,,,,,,,,,,,,,,,,,,boat,car,k_desjapan,292
+japanese,ship,Japanese MINEKAZE ZERSTÃRER,MINEKAZE,13500,100,120,,jtankist,28,30,,,,,,,,,,,,,,,,,,cruiser,huge,k_minekaze4,530
+japanese,ship,KAMIKAZE-BOOT,KAMIKAZE,270,40,40,2.45,jtankist,0,9,1,,kamikaze,6250,64,1,1,1,,,,,,,,,,boat,car,k_katjapankamikadze,313
+japanese,stug,HO-NI II-HAUBITZE (105mm),HO-NI II,200,25,30,1.10,jtankist,5,9,20,,,,,,,,,,,,,,,,,lighttank,gun,Ho_ni_II,262
+japanese,stug,Type 4 Ho-Ro (105mm),HO-RO,200,25,30,1.16,jtankist,5,9,20,,,,,,,,,,,,,,,,,lighttank,gun,Gaub_HO_RO,264
+none,none,100MM-ARTILLERIE,100MM,1000,8,9,,,,11,125,0,pierce8-10k,347,755,510,100,1,htw1200,0,2364,594,370,1,,,,turret,none,k_turret_minekaze1,534
+none,none,105MM-HAUBITZE,105MM,1000,50,60,,,,11,50,,none,0,,,,,htw1200,0,2464,294,370,1,,,,TURRET,none,m1_87_1_tur1,53
+none,none,37MM-LUFTABWEHRGESCHÃTZ,FLAK 37MM,400,8,9,,,,11,1000,0,none,0,,,,,zenith_ac,72,1000,13,134,12,,,,turret,none,k_turret_erebus3,527
+none,none,45MM,45MM,300,8,9,,,,11,1000,0,45mm,150,600,120,50,1,,,,,,,,,,turret,none,k_turret_erebus2,526
+none,none,45MM-LUFTABWEHRPOSTEN,FLAK45MM,300,8,9,,,,11,150,0,none,0,,,,,zenith_ac,72,1000,13,134,12,,,,turret,none,k_turret_minekaze2,535
+none,none,5CM PAK 38,5CM,200,55,66,,,,11,100,,50mm,200,450,160,50,1,,,,,,,,,,turret,none,bw_tur,564
+none,none,75mm PzIV Turm,75mm,200,55,66,,,,11,100,,75mm,500,520,170,65,1,,,,,,,,,,turret,none,bw_tur,613
+none,none,85MM-AA-KANONE,85MM,500,50,60,,,,11,30,,none,0,,,,,zenith_ac,280,1000,4,134,1,,,,turret,none,m1_87_1_tur3,55
+none,none,"ARTILLERIE, 76MM",76MM,400,50,60,,,,11,50,,75mm,500,826,152,22,1,htw700,0,2333,345,370,1,,,,turret,none,mbv2_tur1,371
+none,none,"ARTILLERIE,7,5CM",7.5CM,2500,8,9,,,,11,500,0,88mm,1100,660,180,65,1,,,,,,,,,,turret,none,k_turret_klaus2,548
+none,none,BM-13 KATYUSHA RL,BM-13,100,50,60,,,,11,32,,none,0,,,,,katyusha,400,2000,2,300,16,,,,turret,none,m1_87_1_tur2,54
+none,none,GEBÃUDE,,,,,,,,,,,,,,,,,,,,,,,,,,BUILDING,,none,267
+none,none,"HAUPTKALIBER, 150MM",130MM,4900,8,9,,,,11,200,0,none,0,,,,,htw2500,0,4089,1200,370,2,,,,turret,none,xasan_tur1,540
+none,none,"HAUPTKALIBER, 2X13CM",13CM,4900,8,9,,,,11,200,0,none,0,,,,,htw2500,0,4089,1200,370,2,,,,turret,none,k_turret_klaus1,547
+none,none,"HAUPTKALIBER, 8/50 (20,3cm)",203MM,6500,8,9,,,,11,1000,0,none,0,,,,,htw2500,0,3648,5,370,2,,,,turret,none,k_turret_erebus1,525
+none,none,INFANTERIE,,100,100,40,0.5,,,15,240,,man_machine1,17,433,4,28,4,,,,,,,,,,man,sold,AOnTank,81
+none,none,"LUFTABWEHR, 2X3,7CM","AA 3,7CM",200,8,9,,,,11,850,0,none,0,,,,,zenith_ac,71,1037,5,137,2,,,,turret,none,k_turret_klaus3,549
+none,none,"LUFTABWEHRKANONE, 76MM",FLAK76MM,1250,8,9,,,,11,1000,0,man_machine,220,800,5,762,2,zenith,220,1276,5,90,2,,,,turret,none,xasan_tur3,542
+none,none,"LUFTABWEHRPOSTEN, 45MM",FLAK45MM,100,8,9,,,,11,1000,0,none,0,,,,,zenith_ac,72,1000,13,134,12,,,,turret,none,xasan_tur2,541
+none,none,T-34 GESCHÃTZTURM,76MM,500,50,60,,,,11,50,,75mm,500,500,180,65,1,,,,,,,,,,turret,none,m1_t34_tur,591
+none,none,TESTPORTAL,,,,,,,,,,,,,,,,,,,,,,,,,,,NONE,none,650
+none,none,TM-1-180,180MM,5000,38,45,,,,11,10,,none,0,,,,,htw2500,0,4408,503,50,1,,,,turret,none,180mm_bashn_vagon,605
+none,none,TM-3-12,305MM,5000,38,45,,,,11,10,,none,0,,,,,coastgun,0,5468,854,55,1,,,,turret,none,TM_3_12_bashn,609
+none,none,WIRBELWIND,WIRBEL,200,55,66,,,,11,3200,,20mm,65,450,3,90,15,zenith_ac,59,820,4,115,4,,,,turret,none,bw_ww_up,563
+other,antiaircraft,"Flak Battery (20mm flakvierling38 l/112,5)",Flak,1500,30,30,0.0,dtankist,5,15,3200,,20mm,96,400,4,50,20,zenith_ac,96,1250,4,115,4,,,,"medtank		- targettypes type, used also in attackpref",tank,turret_flak,159
+other,car,Car Citroen,Car,100,25,30,3.0,crew,1,12,,,,,,,,,,,,,,,,,,car,car,agit_JP,26
+other,car,Car Kurogan,Car,100,25,30,3.0,crew,1,12,,,,,,,,,,,,,,,,,,car,car,avt_KUROGAN,323
+other,car,Limousine,Limo,100,25,30,3.0,crew,1,12,,,,,,,,,,,,,,,,,,car,car,HORCH,265
+other,crew,Crew (Smg),Crew,40,100,40,0.5,,,18,96,,man_machine1,40,350,1,48,10,,,,,,,,,,man,sold,GERTAN,163
+other,fortification,Flamethrower casemate,flamecase,7000,150,180,,ammo.box,1,0,1000,1000,flamethrower,10,180,1,5,30,flamethrower,10,180,1,5,20,,,,,misc,mgbunker,229
+other,fortification,Foxhole (2 Soldiers),Foxhole,400,50,0,0.0,dtankist,1,17,,,,,,,,,,,,,,,,,,car,car,foxhole,231
+other,fortification,MG42 Casemate,,7000,150,180,,ammo.box,1,1,1000,,man_machine,46,659,2,79,8,,,,,,,,,,,misc,mgbunker,379
+other,fortification,Trench (1 crew - 5 soldiers),Trench,800,50,0,0.0,dtankist,1,17,,,,,,,,,,,,,,,,,,car,car,graben,252
+other,furg,Truck,Truck,100,20,0,2.6,crew,2,12,,,,,,,,,,,,,,,,,,car,car,truck94,616
+other,mortar,105mm Fieldgun (60 shells unreloadable),105mm Arty,350,40,40,0.11,,,12,60,0,htw1200,0,3200,650,370,1,,,,,,,,,,gun,gun,GUN_GN1,391
+other,mortar,150mm Fieldgun (50 shells unreloadable),150mm Arty,500,40,40,0.11,,,12,50,0,htw2500,0,4000,1200,370,1,,,,,,,,,,gun,gun,GU152HR,392
+other,mortar,Coast gun type 1,Coast,960,40,40,0.08,,,6,8,0,,,,,,,,,,,,,,,,gun,gun,coast_gn1,156
+other,othertypes,Bear,bear,75,100,40,0.9,,,7,0,0,none,5,140,1,5,1,,,,,,,,,,man,sold,bear,110
+other,othertypes,Schaf,schaf,10,100,40,0.9,,,7,0,0,none,5,140,1,5,1,,,,,,,,,,man,sold,sheep,515
+other,othertypes,Spare parts - Ersatzteile,Material,100,20,0,,,,,0,1000,,,,,,,,,,,,,,,,SOFT,NONE,t-34,556
+other,othertypes,ammunition crate - 1000,ammo-1000,100,20,0,,,,,1000,0,,,,,,,,,,,,,,,,SOFT,NONE,nofile,74
+other,othertypes,ammunition crate - 2.000,ammo-2.000,100,1,0,,,,,2000,0,,,,,,,,,,,,,,,,SOFT,NONE,nofile,75
+other,othertypes,ammunition crate - 3.000,ammo-3.000,100,20,0,,,,,3000,0,,,,,,,,,,,,,,,,SOFT,NONE,nofile,76
+other,othertypes,ammunition crate - 5.000,ammo-5.000,100,20,0,,,,,5000,0,,,,,,,,,,,,,,,,SOFT,NONE,nofile,77
+other,othertypes,cow,cow,20,100,40,0.9,,,7,0,0,none,5,140,1,5,1,grenade,2619,30,80,2,,,,,man,sold,cow,162
+other,rail,GEPANZERTE LOKOMOTIVE,ZUGMASCHINE,3500,160,0,,crew,3,10,,,,,,,,,,,,,,,,,,train,huge,locomotive2,331
+other,rail,GEPANZERTER WAGGON (PZ4 75mm),Pz4,1350,50,60,,crew,10,10,,,,,,,,,,,,,,,,,,train,huge,m1_t34_1,410
+other,rail,GEPANZERTER WAGGON/87,M1/87,1350,50,60,,crew,14,10,,,,,,,,,,,,,,,,,,train,huge,m1_87_1,340
+other,rail,GEPANZERTER WAGGON/T34,M1/T-34,1350,50,60,,crew,10,10,,,,,,,,,,,,,,,,,,train,huge,m1_t34_1,342
+other,rail,MBV2,MBV-2,1500,50,60,,crew,20,10,,,,,,,,,,,,,,,,,,train,huge,mbv2_1,369
+other,rail,MITTLERE GEPANZERTE LOKOMOTIVE,ZUGMASCHINE,3000,160,0,,crew,4,10,,,,,,,,,,,,,,,,,,train,huge,locomotive_r2,335
+other,rail,RAMPE,EINE RAMPE,750,50,60,,crew,,10,,,,,,,,,,,,,,,,,,train,huge,pandus2,452
+other,rail,SCHIENENPANZER STEYER/PAK 38,STEYER,1000,45,54,,crew,5,10,,,,,,,,,,,,,,,,,,train,huge,bw1,559
+other,rail,SCHIENENPANZER STEYER/WIRBELWIND,STEYER,1000,45,54,,crew,5,10,,,,,,,,,,,,,,,,,,train,huge,bw1,561
+other,rail,TM-1-180,TM-1-180,2950,38,45,,crew,18,10,,,,,,,,,,,,,,,,,,train,huge,180mm_vagon_90,604
+other,rail,TM-3-12,TM-3-12,5250,38,45,,crew,18,10,,,,,,,,,,,,,,,,,,train,huge,TM_3_12_na12,608
+other,ship,Flosssack - rubber dinghy,dinghy,120,0,0,1.05,crew,1,15,0,0,man_machine,60,490,3,50,16,man_machine,25,490,3,30,16,,,,medtank,tank,2597chi_ha,30
+other,sold,AI Scout (only for Single Player!),AI Scout,100,100,40,0.65,,,30,0,10000,,,,,,,professional,2,800,375,900,1,,,,man,sold,sniper,161
+other,sold,Elite SNIPER of Officer rang,Elit SNIPER,50,100,40,0.5,,,21,80,,professional,114,740,375,15,1,,,,,,,,,,man,sold,ElitsniperG,553
+other,sold,Field Radio Operator (haviest Artillery),Radioman,50,100,40,0.6,,,20,12,0,he_280mm,0,800,1,360,3,,,,,,,,,,man,sold,radio_operator,450
+other,sold,Field Radio Operator (heavy Artillery),Radioman,50,100,40,0.6,,,20,12,0,htw2500,0,800,1,360,3,,,,,,,,,,man,sold,radio_operator,449
+other,sold,Field Radio Operator (light Artillery),Radioman,50,100,40,0.6,,,20,32,0,he_75mmHow,0,800,1,180,4,,,,,,,,,,man,sold,radio_operator,448
+other,sold,Field Radio Operator (medium Artillery),Radioman,50,100,40,0.6,,,20,16,0,htw1200,0,800,1,360,4,,,,,,,,,,man,sold,radio_operator,451
+other,sold,General (Pistol),General,50,100,40,0.4,,,20,64,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,GENERAL,393
+other,sold,Officer (Pistol),,50,100,40,0.5,,,23,64,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,DOficer,396
+other,sold,Pioneer (10 Mines - unreloadable),PIO 10,100,100,40,0.5,,,20,64,10,man_sniper,100,510,120,35,5,,,,,,,,,,man,sold,sapper,423
+other,sold,Rifleman (Bolt Action Rifle),Riflemen,50,100,40,0.5,,,20,60,2,man_sniper,100,500,100,35,5,grenade,250,200,75,19,1,,,,man,sold,RGuner,394
+other,sold,Sapper (2x Mines - 1x explosive charge),Sapper,100,100,40,0.5,,,20,64,2,man_sniper,100,510,120,35,5,,,,,,,,,,man,sold,sapper,210
+other,sold,Sniper,Sniper,30,100,40,0.5,,,21,40,,professional,114,720,165,10,1,,,,,,,,,,man,sold,SNIPER,552
+other,sold,Soldier (Submachine-Gun),SMG,50,100,40,0.5,,,20,280,2,man_machine1,40,350,1,40,71,grenade,250,200,75,19,1,,,,man,sold,RMGun,397
+other,sold,Soldier (light Machinegun),light MG,60,100,40,0.6,,,20,200,,man_machine,55,530,1,75,35,,,,,,,,,,man,sold,HMGunet,395
+other,sold,civilian,civilian,100,100,40,0.5,,,20,0,0,man_sniper,100,510,120,35,5,,,,,,,,,,man,sold,civil,153
+other,support,Depot,depot,200,20,0,0,crew,2,9,15000,5000,,,,,,,,,,,,,,,,car,car,depot,171
+other,support,Garage - repair shop,Garage,500,20,0,1.74,crew,4,12,60000,0,,,,,,,,,,,,,,,,car,car,garage,241
+russian,antiaircraft,25mm Anti-Aircraft Gun obr.40 72-K,25mm AA,400,40,40,0.24,,,20,200,,zenith_ac,69,831,14,90,20,,,,,,,,,,gun,aa,25mm_72-k,34
+russian,antiaircraft,"37mm AA-Gun ZP 1939 L/62,6",37mm AA,300,40,40,0.16,,,20,80,0,zenith_ac,72,1000,13,134,12,,,,,,,,,,gun,aa,GUN_ZENR,42
+russian,antiaircraft,"T-60-3 AA-Tank (2x 12,7mm DShK-38)",T-90-AA,210,35,0,1.45,rtankist,2,8,2000,,knife,100,500,2,96,17,zenith,67,831,4,115,4,,,,lighttank,aa,T_90,596
+russian,antiaircraft,"USSR 85mm AA-Gun ZP 1939 L/51,6",(R)85mm-AA,600,40,40,0.16,,,20,30,0,zenith_new,700,2500,100,240,1,,,,,,,,,,gun,aa,flak85,52
+russian,antiaircraft,Zis-42 AA-Truck (37mm 61-k-1939),Zis-42 AA,120,8,0,2.0,rtankist,4,19,350,,flak37,100,570,11,100,12,zenith_ac,72,1000,13,134,12,,,,car,aa,ZEN_R,645
+russian,antiaircraft,Zis-5 mobile AA (12.7mm AA-double Dshk),Zis5-AA,120,12,0,2.0,rtankist,2,19,2000,,knife,80,480,2,96,17,zenith,12,820,1,210,60,,,,apc,aa,zis5aa,648
+russian,apc,BA-10 (45mm Gun 20K-1934),BA-10,300,16,0,2.8,rtankist,4,18,60,1070,45mm,150,575,130,50,1,knife,20,450,4,30,5,,,,apc,car,ba-10,105
+russian,apc,BA-6 (45mm Gun 20K-1934),BA-6,320,16,0,2.8,rtankist,4,18,60,1070,45mm,150,580,130,50,1,knife,20,450,4,30,5,,,,apc,car,brn2592,24
+russian,apc,"BA-64 (1x 7,62mm MG DT)",BA-64,100,10,1,2.8,rtankist,2,18,1260,,knife,55,450,2,50,40,,,,,,,,,,apc,car,BRONR,106
+russian,apc,"Lend-Lease M3 Halftrack (7,62mm MG DT)",(R)M3 Apc,100,15,0,2.0,rtankist,2,19,2010,,knife,60,450,4,50,5,,,,,,,,,,apc,car,r_m3,486
+russian,at,"100mm PTP BS-3-M1944 L/59,5",BS-3,600,40,40,0.10,,,20,20,0,,,,,,,,,,,,,,,,gun,gun,bs3,131
+russian,at,37mm AT-Gun PTP 1930 L/45,37mm ATG,400,40,40,0.49,,,12,50,0,,,,,,,,,,,,,,,,gun,gun,37mm_ptp1,39
+russian,at,45mm AT-Gun PTP 1937 L/46,45mm ATG,450,40,40,0.49,,,20,30,0,,,,,,,,,,,,,,,,gun,gun,GUN100R,43
+russian,at,Gwardeec Bronebojschik (M1A1 Bazooka),(RG)Bazooka,100,100,40,0.8,,,20,4,,bazooka,1100,416,250,35,1,,,,,,,,,,man,sold,AFaus,462
+russian,at,Istrebitly tankov (M1A1 Bazooka),(R)Bazooka,100,100,40,0.45,,,20,4,,bazooka,1100,416,250,35,1,,,,,,,,,,man,sold,AFaus,624
+russian,at,PTP ZIS-2 AT gun (57mm M1941),Zis-2,450,40,40,0.38,,,20,44,0,,,,,,,,,,,,,,,,gun,gun,zs2,643
+russian,at,PTP ZIS-3 AT gun (76.2mm M1942),Zis-3,450,40,40,0.18,,,20,24,0,,,,,,,,,,,,,,,,gun,gun,zs,644
+russian,car,GAZ-67 Jeep,GAZ-67,70,20,0,5.0,rtankist,1,17,,,,,,,,,,,,,,,,,,car,car,GAZ67BW,243
+russian,car,Lend-Lease Wyllis MB Jeep,Wyllis Jeep,70,20,0,5.0,rtankist,1,17,,,,,,,,,,,,,,,,,,car,car,URJEEP,639
+russian,car,"Motorcycle TIZ-AM-600 (1x 7,62mm MG DT)",TIZ-AM,50,20,0,4.4,rtankist,2,25,400,,knife,55,520,4,28,12,,,,,,,,,,smallgear,car,ussr_motik,603
+russian,crew,"Ekipazh (PPSh-41 7,62mm)",(R)crew,40,100,40,0.5,,,18,100,,man_machine1,40,350,1,48,10,,,,,,,,,,man,sold,RUSALTAN,482
+russian,crew,"Letchik (Tokarev TT-33 7,62mm)",PILOT,100,100,40,0.6,,,18,32,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,pilot,476
+russian,fortification,"DSHK 1938 (12,7mm)",heavy mg,30,42,40,,,,19,2000,0,,,,,,,,,,,,,,,,smallgear,gun,MACHGUN,186
+russian,furg,Studebaker truck,studebaker,240,20,0,2.6,rtankist,2,12,,,,,,,,,,,,,,,,,,car,car,stud,567
+russian,furg,ZIS-42 truck (3t),Zis-5,200,20,0,2.6,rtankist,2,12,,,,,,,,,,,,,,,,,,car,car,ruslkw,484
+russian,furg,ZIS-5 truck,Zis-5,160,20,0,2.6,rtankist,2,12,,,,,,,,,,,,,,,,,,car,car,ZIS,646
+russian,furg,ZIS-6 Truck,ZIS-6,160,20,0,2.6,rtankist,2,12,,,,,,,,,,,,,,,,,,car,car,agit_bron,107
+russian,furg,Zis-5 truck (mobile hospital),Zis-5 hospital,160,20,0,2.6,rtankist,2,12,,,,,,,,,,,,,,,,,,car,car,ZISM,647
+russian,mortar,152mm Fieldgun GP D-1-1943 L/24,D-1 152mm,500,40,40,0.11,,,12,12,0,htw2500,0,4000,1200,370,1,,,,,,,,,,gun,gun,GU152HR,169
+russian,mortar,160mm mortar 160-MT-13/43,160mm,110,40,40,0.11,,,17,16,0,,,,,,,,,,,,,,,,gun,gun,MORT160,16
+russian,mortar,280MM-KANONE,280MM,950,40,40,0.08,,,7,8,0,,,,,,,,,,,,,,,,gun,gun,280mm_gaub_japan,36
+russian,mortar,280mm G BR-5-1939 L/17 Howitzer,280MM,600,40,40,0.08,,,18,8,0,,,,,,,,,,,,,,,,gun,gun,MORTBR5,125
+russian,mortar,305MM BR-18,305MM,960,40,40,0.08,,,20,8,0,,,,,,,,,,,,,,,,gun,gun,305mmBr_18,124
+russian,mortar,BM-13 Katyusha (16x 132mm ROCKETS),(R)Katya,150,20,0,1.70,rtankist,2,12,16,,,,,,,,,,,,,,,,,car,car,BRONR2,315
+russian,mortar,BM-31/STUDEBAKER US6 (6x 300mm Rockets),BM-31,90,20,0,1.70,rtankist,2,12,6,,,,,,,,,,,,,,,,,car,car,BM_31,120
+russian,mortar,"Russian Howitzer (122mm G M-30 L/22,7)",122mm,350,40,40,0.14,,,20,16,0,htw1200,0,3200,650,370,1,,,,,,,,,,gun,gun,rus122,483
+russian,mortar,Russian mortar 82mm 82-PM-41,mortar,60,42,40,,,,17,16,0,,,,,,,,,,,,,,,,smallgear,gun,MORTAR,50
+russian,mortar,"SU-122 assualt howitzer (122mm M-30S L/22,7)",SU-122,850,45,34,1.62,rtankist,5,8,40,,stuh,790,704,350,65,1,,,,,,,,,,medtank,tank,su-122,580
+russian,mortar,"russian 76,2mm F-22 Light Howitzer",76.2mm arty,450,40,40,0.18,,,20,20,0,he_75mmHow,0,2650,650,180,1,,,,,,,,,,gun,gun,76.2mm_howitzer,48
+russian,plane,(R) Douglas A-20 Boston,(R) A-20,1400,20,0,8.65,rpilot,3,10,,,,,,,,,,,,,,,,,,soft,avia,p_he111,257
+russian,plane,Bell P-39 N Aircobra (Fighter-bomber),(R)Aircobra,250,20,0,9.72,rpilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_a6m,62
+russian,plane,IL-2 M Sturmovik (2x Fab 100),(R)IL-2 M,600,20,0,9.49,rpilot,2,10,,,,,,,,,,,,,,,,,,soft,avia,p_il2,275
+russian,plane,IL-2 Sturmovik (8x Rockets),(R)IL-2,600,20,0,9.49,rpilot,2,10,,,,,,,,,,,,,,,,,,soft,avia,p_il2,274
+russian,plane,Ilyushin Il-2 M3 Sturmovik (Bomber),(R)IL-2-Bomber,750,20,0,8.65,rpilot,2,10,,,,,,,,,,,,,,,,,,soft,avia,p_il2_bomber,260
+russian,plane,Jakowlew Jak-3 Fighter,(R)JAK-3,250,20,0,9.73,rpilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_jak3,290
+russian,plane,Lawotschkin LA-5 (Fighter),(R)LA-5,300,20,0,9.65,rpilot,1,10,,,,,,,,,,,,,,,,,,soft,avia,p_la5,329
+russian,plane,Lissunow Li-2 Cargo-Plane,(R)LI-2,800,20,0,9.19,rpilot,2,10,,,,,,,,,,,,,,,,,,soft,avia,p_li2rus,138
+russian,plane,Petljakow Pe-2 Bomber,(R)PE-2,900,20,0,9.24,rpilot,3,10,,,,,,,,,,,,,,,,,,soft,avia,p_pe2,418
+russian,plane,Polikarpov U-2 Recon-Plane (Raswedtschik),(R)U-2,150,20,0,9.81,rpilot,2,10,,,,,,,,,,,,,,,,,,soft,avia,p_i153,273
+russian,ship,"KHASSAN, AUFKLÃRUNGSSCHIFF",KHASSAN,10000,75,90,,rtankist,28,12,,,,,,,,,,,,,,,,,,cruiser,huge,xasan4,536
+russian,ship,RUSSISCHES LANDUNGSBOOT,BOOT,270,40,40,1.2,rtankist,1,9,,,,,,,,,,,,,,,,,,boat,car,k_desussr,555
+russian,ship,Russian Speedboat (1x37mm 1x20mm),(R)Speedboat,600,20,0,2.0,rtankist,7,20,4200,100,20mm,65,530,5,70,10,flak37,110,570,12,100,12,,,,boat,car,k_katrussia,554
+russian,sold,Avtomatchik (PPSh-41 & Koktejl Molotova),(R)SMG Molotov,50,100,40,0.5,,,20,280,5,man_machine1,43,350,1,40,8,molotov,170,185,200,52,1,,,,man,sold,RMGun,383
+russian,sold,Avtomatchik (PPSh-41 & explosiv charge),RSMG_at,50,100,40,0.5,,,20,280,1,man_machine1,55,350,1,40,71,grenade,2619,30,80,2,,,,,man,sold,RMGun,479
+russian,sold,"Avtomatchik (PPSh-41 7,62mm)",(R)PPSH-41,50,100,40,0.5,,,20,280,2,man_machine1,55,350,1,40,71,grenade,250,200,75,19,1,,,,man,sold,RMGun,478
+russian,sold,"Bronebojschik (PTRD-41 14,5mm)",AT-Rifle,45,100,40,0.45,,,20,30,,atrifle,120,530,200,28,1,,,,,,,,,,man,sold,datg,457
+russian,sold,"Gvardii Kapitan (Tokarev TT-33 7,62mm)",ROfficer,120,100,40,0.9,,,25,64,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,DOficer,464
+russian,sold,"Gvardii Major (Tokarev TT-33 7,62mm)",(R)Major,50,100,40,0.4,,,20,64,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,GENERAL,461
+russian,sold,"Gvardii Serzhant (PPSh-41 7,62mm)",guards serg,120,100,40,0.9,,,23,280,,man_machine1,40,350,1,40,71,,,,,,,,,,man,sold,rsergeant,465
+russian,sold,Gwardeec Avtomatchik (PPSH41 & explosivs),Guards smg,120,100,40,0.9,,,20,120,1,man_machine1,90,350,1,25,8,grenade,2619,30,80,2,,,,,man,sold,RMGun,390
+russian,sold,"Gwardeec Pulemetchik (DP MG-28 7,62mm)",(R) MG,60,100,40,0.6,,,20,200,,knife,55,544,1,75,35,,,,,,,,,,man,sold,HMGunet,463
+russian,sold,"Gwardeec Snajper (Mosin 7,62mm)",SNIPER,50,100,40,0.5,,,21,80,,professional,114,740,375,15,1,,,,,,,,,,man,sold,ElitsniperG,480
+russian,sold,"Gwardeec Strelok (Mosin 91/30 7,62mm)",Guards Rifleman,80,100,40,0.9,,,19,50,4,man_sniper,100,475,120,25,5,grenade,250,200,75,19,1,,,,man,sold,RGuner,473
+russian,sold,"Kapitan (Tokarev TT-33 7,62mm)",OFFIZIER,50,100,40,0.5,,,23,64,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,DOficer,474
+russian,sold,Minometchik (50mm mortar Mod.40),R Mortar,100,100,40,0.5,,,20,10,,mortar60,40,800,150,290,1,,,,,,,,,,man,sold,RMT,472
+russian,sold,Ognemetchik (KS-1),R_Flamer,75,100,40,0.6,,,20,150,,flamethrower1,70,170,12,30,6,,,,,,,,,,man,sold,A-4,459
+russian,sold,"Polkovnik (Tokarev TT-33 7,62mm)",(R)Major,50,100,40,0.4,,,20,64,,man_machine1,60,350,29,28,8,,,,,,,,,,man,sold,GENERAL,460
+russian,sold,"Pulemetchik (DP MG-28 Degtjarew 7,62mm)",(R) MG,60,100,40,0.6,,,20,200,,knife,55,544,1,75,35,,,,,,,,,,man,sold,HMGunet,467
+russian,sold,"Pulemetchik (Maxim M1910 7,62mm)",Maxim,60,100,40,0.45,,,20,500,,knife,55,544,1,75,35,,,,,,,,,,man,sold,maxim,368
+russian,sold,"Raschet Pulemeta (SG-43 Gorjunov 7,62mm)",(R)MG-Team,120,100,40,0.46,,,20,1000,,knife,55,544,1,75,50,,,,,,,,,,man,sold,dmg42_team,468
+russian,sold,"Sanitar (Mosin 91/30 7,92mm)",(R)medic,70,100,40,0.6,,,20,64,350,man_sniper,100,500,120,35,3,none,1,28,4,,,,,,man,sold,ALRUSMED,470
+russian,sold,Saper (2x Mines - explosive charges),Saper   ,100,100,40,0.5,,,20,64,2,man_sniper,100,500,100,35,5,,,,,,,,,,man,sold,sapper,488
+russian,sold,"Serzhant (PPSh-41 7,62mm)",russian Sergeant,60,100,40,0.65,,,23,274,,man_machine1,55,350,1,25,8,,,,,,,,,,man,sold,rsergeant,477
+russian,sold,"Strelok (Mosin 91/30 7,62mm)",r_gunner,50,100,40,0.5,,,19,60,2,man_sniper,100,475,105,38,5,grenade,250,200,75,19,1,,,,man,sold,RGuner,466
+russian,sold,"Strelok (Tokarew SVT-40 7,62mm)",r_gunner,50,100,40,0.5,,,20,120,,man_sniper,100,500,50,35,10,,,,,,,,,,man,sold,r_svt40,471
+russian,special,82MM.SMOKE,,60,42,40,,,,8,16,0,,,,,,,,,,,,,,,,smallgear,gun,MORTAR,51
+russian,stug,"ISU-122 (122mm A-19S L/46,5)",ISU-122,950,100,,1.15,rtankist,5,8,30,0,88mm,1800,768,350,65,1,,,,,,,,,,heavytank,tank,isu122,281
+russian,stug,ISU-152 (152mm ML-20S L/29),ISU-152,1000,90,126,1.0,rtankist,5,8,20,0,stuh_heavy,1300,832,10,80,1,,,,,,,,,,heavytank,tank,isu152,280
+russian,stug,"SU-100 (100mm D-10S L/53,5)",SU-100,850,45,34,1.69,rtankist,4,8,34,,88mm,1600,768,180,65,1,,,,,,,,,,medtank,tank,su-100,578
+russian,stug,SU-122 (122mm M-30S),SU-122,850,45,34,1.8,rtankist,5,8,40,,88mm,1500,700,350,65,1,,,,,,,,,,medtank,tank,su-122,579
+russian,stug,"SU-152 zeveroboy (152,4mm how.ML-20S)",SU-152,950,92,126,1.3,rtankist,5,8,20,0,88mm,1800,730,275,62,1,,,,,,,,,,heavytank,tank,SU-152,581
+russian,stug,"SU-76 M (76,2mm zis-3 l/51)",SU-76,400,30,0,1.64,rtankist,4,8,60,,75mm_short,500,640,180,65,1,,,,,,,,,,"medtank		- targettypes type, used also in attackpref",tank,su76jl,582
+russian,stug,"SU-85 (85mm D-5S-85 L/51,6)",SU-85,850,160,8,1.76,rtankist,4,8,48,,88mm,1200,704,180,65,1,,,,,,,,,,medtank,tank,SU-85,583
+russian,stug,SU-85 M (85mm Gun D-5S),SU-85,850,45,34,1.76,rtankist,4,8,48,,88mm,1200,704,180,65,1,,,,,,,,,,medtank,tank,SU-85M,577
+russian,support,T-34-T recovery-tank,T-34 recovery,600,160,0,1.78,rtankist,2,12,8000,0,,,,,,,,,,,,,,,,car,car,berge_t-34,113
+russian,tank,BT-7 mod.37 (45mm Gun M1934),BT-7,320,20,0,1.8,rtankist,3,8,172,2394,45mm,150,576,130,50,1,knife,20,450,4,30,5,,,,lighttank,tank,bt-7,133
+russian,tank,"BT-7A mod.36 (76,20mm KT-28 L/16,5)",BT-7A,320,20,0,1.8,rtankist,3,8,30,2394,stuh,480,704,180,65,1,knife,20,450,4,30,5,,,,lighttank,tank,Shinhoto_Ci_ha,31
+russian,tank,Guards Iosip-Stalin-II mod.44 (122mm D-25T L/43),IS-2,950,140,170,1.15,rtankist,4,8,28,2330,88mm,1800,768,350,65,1,knife,20,450,4,30,5,,,,heavytank,tank,IS-2,277
+russian,tank,Iosip-Stalin-I (85mm Gun D-5T85-1943),IS-1,900,140,140,1.15,rtankist,4,8,59,2331,88mm,1050,704,180,65,1,knife,20,450,4,30,5,,,,"medtank		- targettypes type, used also in attackpref",tank,IS-85,279
+russian,tank,Iosip-Stalin-II mod.43 (122mm Gun D-25T L/43),IS-2,950,140,150,1.15,rtankist,4,8,28,2330,88mm,1800,768,350,65,1,knife,20,450,4,30,5,,,,heavytank,tank,is-2-new,278
+russian,tank,"KV-1 mod.41 (76,20mm F-34 L/41,5)",KV 1,900,160,100,1.1,rtankist,5,8,114,1300,75mm,500,640,180,65,1,knife,20,450,4,30,5,,,,heavytank,tank,KV-1,324
+russian,tank,KV-1 s (76.2mm Gun ZiS-5),KV1s,900,160,100,1.33,rtankist,5,8,102,1200,75mm,500,640,180,65,1,knife,20,450,4,30,5,,,,heavytank,tank,KV1s,326
+russian,tank,KV-2 (152.4mm Howitzer M-10),KV-2,1000,160,100,0.7,rtankist,6,8,36,3087,stuh_heavy,1300,832,10,80,1,knife,20,450,4,30,5,,,,heavytank,tank,kv-2,325
+russian,tank,KV-85 (85mm Gun D-5T85),KV85,900,79,100,1.05,rtankist,4,8,71,1200,88mm,1000,704,180,70,1,knife,20,450,4,30,5,,,,heavytank,tank,kv85,327
+russian,tank,Lend Lease Matilda II (2-Pounder Mk IX),Matilda II,650,160,0,0.85,rtankist,4,8,93,2925,37mm,110,580,130,45,1,knife,20,450,4,30,5,,,,medtank,tank,MATILDAr,469
+russian,tank,Lend-Lease M-10 WOLVERINE (76.2mm Gun M7),M-10,670,50,0,1.57,rtankist,5,8,54,,88mm,1090,640,180,60,1,,,,,,,,,,medtank,tank,M-10,485
+russian,tank,Lend-Lease Sherman M4A3 76(w) (76mm M1A1),russian M4a2 76(W),800,160,0,1.6,rtankist,5,8,71,6250,88mm,990,625,180,65,1,knife,20,450,4,30,5,,,,medtank,tank,m4a2_76w,487
+russian,tank,Lend-lease Churchill IV Croc (75mm&Flame),,,,,,rtankist,,,,,,,,,,,,,,,,,,,,,,church_75,150
+russian,tank,OT-26 Flame tank (KS-24 Flamethrower),OT-26,220,15,0,1.3,rtankist,3,8,750,,flamethrower1,70,265,6,25,10,,,,,,,,,,lighttank,tank,T-26,400
+russian,tank,OT-34 mod.43 (76.2mm F-34 & Flamethr.),OT-34,750,160,0,1.85,rtankist,4,8,77,350,75mm,470,625,180,65,1,flamethrower1,70,225,6,25,6,,,,medtank,tank,t-34-43,401
+russian,tank,T-26S mod.39 (45mm Gun Model 38),T-26S,270,15,0,1.35,rtankist,3,8,165,1327,45mm,160,576,130,50,1,knife,20,450,4,30,5,,,,lighttank,tank,t2,584
+russian,tank,"T-28 mod.38 (76,20mm L-10 L/23,7)",T-28,600,30,0,1.25,rtankist,6,8,70,3100,75mm,480,608,180,65,1,knife,20,450,4,30,5,,,,medtank,tank,tank_T28,585
+russian,tank,T-34/57 mod.41 (57mm ZIS-4-1941 L/73),T-34/57,650,160,0,1.85,rtankist,4,8,50,1450,zis2,535,608,160,60,1,knife,20,450,4,30,5,,,,medtank,tank,t-34-57,588
+russian,tank,"T-34/76 mod.40 (76,20mm L-11 L/30,5)",T-34/76,600,160,0,1.78,rtankist,4,8,77,2898,75mm,450,590,130,60,1,knife,20,450,4,30,5,,,,medtank,tank,T40,597
+russian,tank,"T-34/76 mod.41 (76,20mm F-34 L/41,5)",T-34/76,650,160,0,1.78,rtankist,4,8,77,2898,75mm,470,640,180,65,1,knife,20,450,4,30,5,,,,medtank,tank,t41,598
+russian,tank,T-34/76 mod.41 mine-clearer (76.2mm F-34),T-34 Mine,650,50,0,1.6,rtankist,4,8,77,2898,75mm,470,640,180,65,1,knife,20,450,4,30,5,,,,medtank,tank,t-34_mine,592
+russian,tank,"T-34/76 mod.42 (76,20mm F-34 L/41,5)",T-34/76,700,160,0,1.78,rtankist,4,8,77,2394,75mm,490,640,180,65,1,knife,20,450,4,30,5,,,,medtank,tank,T-34,586
+russian,tank,"T-34/76 mod.43 (76,20mm F-34 L/41,5)",T-34/43,750,160,0,1.78,rtankist,4,8,100,2898,75mm,490,640,180,65,1,knife,20,450,4,30,5,,,,medtank,tank,t-34-43,587
+russian,tank,T-34/85 mod.43 (85mm Gun D-5T),T-34/85-43,850,160,55,1.79,rtankist,5,8,60,1890,88mm,1050,704,190,65,1,knife,20,450,4,30,5,,,,medtank,tank,t-34-85-43,590
+russian,tank,T-34/85 mod.44 (85mm ZiS-S-53),T-34/85-44,850,160,55,1.79,rtankist,5,8,60,1890,88mm,1050,704,180,65,1,knife,20,450,4,30,5,,,,medtank,tank,t-34-85,589
+russian,tank,"T-35 mod.38 (76,2mm KT-28 L/16,5)",T-35,1000,30,0,1.05,rtankist,11,8,96,3500,75mm,470,608,180,65,1,knife,20,450,4,50,5,,,,heavytank,tank,tank_T35,593
+russian,tank,"T-37A amphibious Tank (1x 7,62mm MG DT)",T-37A,120,0,0,1.3,rtankist,2,8,2142,0,knife,60,490,3,50,16,,,,,,,,,,lighttank,tank,tank2589osu,23
+russian,tank,T-60 mod.41 (20mm Gun TNSh),T-60,190,35,0,1.45,rtankist,2,14,780,945,20mm,65,530,5,65,5,knife,20,450,4,30,5,,,,lighttank,tank,t-60-41,594
+russian,tank,T-70 M mod.43 (45mm Gun Model 38),T-70,200,35,0,1.66,rtankist,2,8,94,945,45mm,150,576,130,50,1,knife,20,450,4,30,5,,,,lighttank,tank,T-70,595

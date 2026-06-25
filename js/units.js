@@ -377,6 +377,121 @@ Game.isSupport = (kind) => {
     return ['hmg', 'mortar50', 'mortar60', 'mortar81', 'pak36', 'at25', 'at47'].includes(kind);
 };
 
+// ═══════════════════════════════════════════════════════
+//  DATA-DRIVEN UNIT ROSTER (data/units.csv)
+// ═══════════════════════════════════════════════════════
+// The unit table above is the built-in baseline. `data/units.csv` is the
+// editable roster: at boot it is merged over the baseline, so you can tweak a
+// stat or add a whole new unit just by editing the CSV — no JS changes, no build
+// step. If the CSV is missing/unreadable (e.g. opened via file://), the built-in
+// table is used unchanged. Schema + how-to: data/README.md.
+
+// Built-in snapshot kept so we can prove the CSV round-trips the baseline exactly.
+Game._unitStatsBuiltin = JSON.parse(JSON.stringify(Game.UNIT_STATS));
+
+// Minimal RFC-4180-ish CSV parser (quoted fields, "" escapes, commas, CRLF).
+Game._parseCSV = (text) => {
+    const rows = []; let row = [], field = '', inQ = false;
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQ) {
+            if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+            else field += c;
+        } else if (c === '"') inQ = true;
+        else if (c === ',') { row.push(field); field = ''; }
+        else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+        else if (c !== '\r') field += c;
+    }
+    if (field.length || row.length) { row.push(field); rows.push(row); }
+    return rows;
+};
+
+// Merge a units CSV string into Game.UNIT_STATS (override fields present, add new
+// keys). Returns the number of rows applied.
+Game.applyUnitsCSV = (text) => {
+    const rows = Game._parseCSV(text).filter(r => r.length > 1);
+    if (rows.length < 2) return 0;
+    const idx = {}; rows[0].forEach((h, i) => idx[h.trim()] = i);
+    const cell = (row, name) => { const v = idx[name] != null ? row[idx[name]] : undefined; return (v === undefined || v === '') ? undefined : v; };
+    const num = (row, name) => { const v = cell(row, name); return v === undefined ? undefined : parseFloat(v); };
+    let applied = 0;
+    for (let r = 1; r < rows.length; r++) {
+        const row = rows[r];
+        const key = (cell(row, 'key') || '').trim();
+        if (!key) continue;
+        const u = Game.UNIT_STATS[key] || {};
+        const set = (k, v) => { if (v !== undefined) u[k] = v; };
+        set('kind', cell(row, 'kind'));
+        set('class', cell(row, 'class'));
+        set('supportType', cell(row, 'supportType'));
+        set('label', cell(row, 'label'));
+        set('weapon', cell(row, 'weapon'));
+        set('secondaryWeapon', cell(row, 'secondaryWeapon'));
+        set('color', cell(row, 'color'));
+        set('driveType', cell(row, 'driveType'));
+        set('hp', num(row, 'hp'));
+        set('speed', num(row, 'speed'));
+        set('size', num(row, 'size'));
+        set('sight', num(row, 'sight'));
+        set('rotationSpeed', num(row, 'rotationSpeed'));
+        set('cost', num(row, 'cost'));
+        set('hullTurnAccel', num(row, 'hullTurnAccel'));
+        const af = num(row, 'armor_front'), as = num(row, 'armor_side'), ar = num(row, 'armor_rear');
+        if (cell(row, 'class') === 'vehicle' || af || as || ar) u.armor = { front: af || 0, side: as || 0, rear: ar || 0 };
+        else u.armor = 0;
+        const tsp = num(row, 'turret_speed'), tac = num(row, 'turret_accel');
+        if (tsp !== undefined) u.turret = { speed: tsp, accel: tac !== undefined ? tac : tsp };
+        set('crew', num(row, 'crew'));
+        set('year', num(row, 'year'));     // introduction year (era gating)
+        // Synthesize a weapon for imported units (their weapon key won't exist in
+        // the built-in WEAPONS table). Built-in units leave the w_* columns blank
+        // and keep their hand-authored weapon.
+        const wkey = u.weapon;
+        const wr = num(row, 'w_range');
+        if (wkey && wr !== undefined && Game.WEAPONS && !Game.WEAPONS[wkey]) {
+            const acc = num(row, 'w_accuracy'); const a = (acc === undefined ? 0.65 : acc);
+            Game.WEAPONS[wkey] = {
+                name: u.label || wkey,
+                type: cell(row, 'w_type') || 'rifle',
+                fireType: cell(row, 'w_fire') || 'direct',
+                gameRange: wr,
+                damage: num(row, 'w_damage') ?? 10,
+                cooldown: num(row, 'w_cooldown') ?? 1.5,
+                accuracy: { short: Math.min(0.98, a + 0.1), medium: a, long: Math.max(0.1, a - 0.12) },
+                suppression: num(row, 'w_supp') ?? 6,
+                penetration: num(row, 'w_pen') ?? 0,
+                heBlast: num(row, 'w_blast') ?? 0,
+            };
+        }
+        Game.UNIT_STATS[key] = u;
+        applied++;
+    }
+    return applied;
+};
+
+// Unit keys available in a given campaign year (introduction year <= year).
+// Optional team filter ('french'/'german'/...). Units with no year are treated
+// as always available. Lets a scenario offer only era-appropriate units (e.g. a
+// 1940 campaign excludes the StG-44 and Tiger).
+Game.unitsForYear = (year, team) => {
+    return Object.keys(Game.UNIT_STATS).filter(k => {
+        const u = Game.UNIT_STATS[k];
+        if (team && k.split('_')[0] !== team) return false;
+        return u.year == null || u.year <= year;
+    });
+};
+
+Game.loadUnitsCSV = async () => {
+    try {
+        const res = await fetch('data/units.csv?v=' + Date.now());
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const n = Game.applyUnitsCSV(await res.text());
+        console.log('[units] applied ' + n + ' unit defs from data/units.csv');
+    } catch (e) {
+        console.warn('[units] data/units.csv not loaded (' + e.message + ') — using built-in roster.');
+    }
+};
+
 /**
  * Resolve which armor facing a shot hits, with obliquity.
  * Returns { facing, armor, obliquity } where obliquity is 0 (perpendicular)
