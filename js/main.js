@@ -181,7 +181,13 @@ Game.updateUnit = (unit, dt) => {
         if (ft && ft.alive && ft.team !== unit.team) {
             enemy = ft;
         } else {
-            unit.forcedTargetId = null; // target gone — release commitment
+            // Target died or vanished — release the commitment and STOP. We were
+            // chasing the unit, not a ground spot, so don't keep marching to where
+            // it used to be; hold position (and fire at will if anything's in range).
+            unit.forcedTargetId = null;
+            unit.path = [];
+            unit.moving = false;
+            unit._pursueAnchor = null;
         }
     }
     if (!enemy && unit.orderMode !== 'hold') enemy = Game.nearestEnemy(unit);
@@ -195,6 +201,43 @@ Game.updateUnit = (unit, dt) => {
         if (unit._bombarding) {
             unit.coverBonus = Game.computeCover(unit);
             return;
+        }
+    }
+
+    // ── Forced-target pursuit ──
+    // A player-ordered attack means "engage that unit ASAP." If we can't see it
+    // or it's out of range, keep closing toward it; the moment we have LOS and
+    // range, stop and fire. Without this, an ordered unit that's already in
+    // range but has a building/object blocking the shot would just stand still.
+    if (enemy && unit.forcedTargetId === enemy.id
+        && weaponDef0 && weaponDef0.fireType !== 'indirect') {
+        const dft = Game.dist(unit.x, unit.z, enemy.x, enemy.z);
+        const canHit = dft <= unit.range && Game.unitCanSee(unit, enemy);
+        if (canHit) {
+            // Clear shot — hold position and let the firing logic take over.
+            unit.path = [];
+            unit.moving = false;
+            unit.stopTimer = 0;
+        } else {
+            // Re-path straight toward the target (throttled). Pathing routes
+            // around obstacles, so the unit gains LOS as it closes in.
+            unit._pursueTimer = (unit._pursueTimer || 0) - dt;
+            const targetMoved = !unit._pursueAnchor
+                || Game.distSq(unit._pursueAnchor.x, unit._pursueAnchor.z, enemy.x, enemy.z) > 9;
+            if (!unit.moving || unit._pursueTimer <= 0 || targetMoved) {
+                unit._pursueTimer = 0.5;
+                unit._pursueAnchor = { x: enemy.x, z: enemy.z };
+                // Aim for a point that is always CLOSER than we are right now, so
+                // we move directly in and never retreat to a standoff ring. Capped
+                // to settle within weapon range once we get there.
+                const goalDist = Math.max(2, Math.min(unit.range * 0.85, dft * 0.6));
+                const ang = Game.angleTo(enemy.x, enemy.z, unit.x, unit.z);
+                const gx = Game.clamp(enemy.x + Math.cos(ang) * goalDist, 1, Game.WORLD_W - 1);
+                const gz = Game.clamp(enemy.z + Math.sin(ang) * goalDist, 1, Game.WORLD_H - 1);
+                unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
+                unit.moving = true;
+                unit.stopTimer = 0;
+            }
         }
     }
 

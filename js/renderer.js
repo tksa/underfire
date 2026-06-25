@@ -182,54 +182,55 @@ Game.syncUnitMeshes = (dt) => {
         // Health bar update
         const hb = unit.mesh.userData.healthBar;
         if (hb) {
+            const O = Game.overlay || { hp: true, ammo: true, fuel: true };
             const hasAmmo = unit.maxAmmo > 0;
+            const hasFuel = unit.maxFuel > 0;
             const ammoRatio = hasAmmo ? Game.clamp(unit.ammo / unit.maxAmmo, 0, 1) : 1;
+            const fuelRatio = hasFuel ? Game.clamp(unit.fuel / unit.maxFuel, 0, 1) : 1;
             const ammoLow = hasAmmo && ammoRatio <= 0.25; // includes empty
+            const fuelLow = hasFuel && fuelRatio <= 0.25;
             const isSelected = Game.selection.has(unit.id);
             const isDamaged = unit.hp < unit.maxHp;
             const showAll = Game._showAllHealthBars || false;
-            // Show the bar when selected, damaged, debug, OR low/out of ammo so
-            // players can see at a glance why a unit has stopped shooting.
-            hb.visible = isSelected || isDamaged || showAll || ammoLow;
+            // Rows the player has enabled AND the unit actually has, packed top-down.
+            const rows = [];
+            if (O.hp) rows.push('hp');
+            if (O.ammo && hasAmmo) rows.push('ammo');
+            if (O.fuel && hasFuel) rows.push('fuel');
+            // Show when selected / damaged / debug, or when something is running low.
+            hb.visible = rows.length > 0 && (isSelected || isDamaged || showAll || ammoLow || fuelLow);
 
             if (hb.visible) {
-                const ratio = Game.clamp(unit.hp / unit.maxHp, 0, 1);
-                // Redraw when HP, ammo, or damage state changes (not just HP).
-                const key = ratio.toFixed(2) + '|' + (hasAmmo ? ammoRatio.toFixed(2) : 'x')
-                    + (unit.tracksDisabled ? 't' : '') + (unit.engineDamaged ? 'e' : '') + (unit.turretDamaged ? 'r' : '');
+                const hpR = Game.clamp(unit.hp / unit.maxHp, 0, 1);
+                const key = rows.join(',') + '|' + hpR.toFixed(2)
+                    + '|' + (hasAmmo ? ammoRatio.toFixed(2) : '')
+                    + '|' + (hasFuel ? fuelRatio.toFixed(2) : '');
                 if (hb._lastKey !== key) {
                     hb._lastKey = key;
                     const canvas = unit.mesh.userData.healthBarCanvas;
                     const ctx = canvas.getContext('2d');
                     const w = canvas.width;
                     ctx.clearRect(0, 0, w, canvas.height);
-                    // ── HP bar (top row) ──
-                    const hpH = 7;
-                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                    ctx.fillRect(0, 0, w, hpH);
-                    ctx.fillStyle = ratio > 0.6 ? '#4a2' : (ratio > 0.3 ? '#da2' : '#d33');
-                    ctx.fillRect(1, 1, Math.round(ratio * (w - 2)), hpH - 2);
-                    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-                    ctx.lineWidth = 0.5;
-                    ctx.strokeRect(0.5, 0.5, w - 1, hpH - 1);
-                    // ── Ammo bar (bottom row), only for units that use ammo ──
-                    if (hasAmmo) {
-                        const ay = 9, aH = 6;
+                    const rowH = 6, pitch = 8;
+                    const drawBar = (y, ratio, fill, emptyOutline) => {
                         ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                        ctx.fillRect(0, ay, w, aH);
-                        if (unit.ammo === 0) {
-                            // Empty: bright red outline, no fill = unmistakably out
-                            ctx.strokeStyle = '#ff3b30';
-                            ctx.lineWidth = 1;
-                            ctx.strokeRect(0.5, ay + 0.5, w - 1, aH - 1);
+                        ctx.fillRect(0, y, w, rowH);
+                        if (ratio <= 0 && emptyOutline) {
+                            ctx.strokeStyle = emptyOutline; ctx.lineWidth = 1;
+                            ctx.strokeRect(0.5, y + 0.5, w - 1, rowH - 1);
                         } else {
-                            ctx.fillStyle = ammoRatio <= 0.25 ? '#f5a623' : '#3a8fd0'; // amber low / blue ok
-                            ctx.fillRect(1, ay + 1, Math.round(ammoRatio * (w - 2)), aH - 2);
-                            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-                            ctx.lineWidth = 0.5;
-                            ctx.strokeRect(0.5, ay + 0.5, w - 1, aH - 1);
+                            ctx.fillStyle = fill;
+                            ctx.fillRect(1, y + 1, Math.round(ratio * (w - 2)), rowH - 2);
+                            ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 0.5;
+                            ctx.strokeRect(0.5, y + 0.5, w - 1, rowH - 1);
                         }
-                    }
+                    };
+                    rows.forEach((row, i) => {
+                        const y = i * pitch;
+                        if (row === 'hp') drawBar(y, hpR, hpR > 0.6 ? '#4a2' : (hpR > 0.3 ? '#da2' : '#d33'), null);
+                        else if (row === 'ammo') drawBar(y, ammoRatio, ammoRatio <= 0.25 ? '#f5a623' : '#3a8fd0', '#ff3b30');
+                        else if (row === 'fuel') drawBar(y, fuelRatio, fuelRatio <= 0.25 ? '#f5a623' : '#c8a24a', '#ff3b30');
+                    });
                     unit.mesh.userData.healthBarTex.needsUpdate = true;
                 }
             }

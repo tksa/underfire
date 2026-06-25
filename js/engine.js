@@ -254,6 +254,28 @@ Game.screenToGround = (screenX, screenY) => {
 };
 
 /**
+ * Pick the living unit whose 3D mesh is directly under the cursor. Raycasts the
+ * actual meshes (not the ground), so it works regardless of camera parallax —
+ * clicking a tall tank body targets that tank, not the ground behind it.
+ */
+Game.unitAtScreen = (screenX, screenY) => {
+    if (!Game.raycaster || !Game.unitsGroup) return null;
+    const THREE = Game.THREE;
+    const ndc = new THREE.Vector2((screenX / Game.viewW) * 2 - 1, -(screenY / Game.viewH) * 2 + 1);
+    Game.raycaster.setFromCamera(ndc, Game.camera);
+    const hits = Game.raycaster.intersectObjects(Game.unitsGroup.children, true);
+    for (const h of hits) {
+        let o = h.object;
+        while (o && (!o.userData || o.userData.unitId == null)) o = o.parent;
+        if (o && o.userData && o.userData.unitId != null) {
+            const u = Game.getUnitById(o.userData.unitId);
+            if (u && u.alive && u.mesh && u.mesh.visible !== false) return u;
+        }
+    }
+    return null;
+};
+
+/**
  * Project a world position to screen pixel coordinates.
  */
 Game.worldToScreen = (x, z) => {

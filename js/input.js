@@ -426,7 +426,13 @@ Game.handleInputEvents = () => {
                     } else {
                         // Plain right-click: force-fire an enemy under the cursor, else MOVE
                         // everyone (mortars included — bombarding ground is the Attack command).
-                        const enemyUnit = Game.enemyAtWorld(ground.x, ground.z);
+                        // Pick by the actual mesh first (parallax-proof: a tall tank body
+                        // sits "above" the ground point behind it), then fall back to a
+                        // world-radius search around the ground hit.
+                        const picked = Game.unitAtScreen(e.clientX, e.clientY);
+                        const enemyUnit = (picked && picked.team !== Game.TEAM.FRENCH)
+                            ? picked
+                            : Game.enemyAtWorld(ground.x, ground.z);
                         if (enemyUnit) {
                             Game.orderAttackTarget(enemyUnit);
                         } else {
