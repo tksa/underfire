@@ -1,8 +1,18 @@
 {
  "version": "v0.6.0-dev",
- "build": "8f9e747",
+ "build": "0cb0581",
  "generated": "2026-06-26",
  "commits": [
+  {
+   "hash": "0cb0581",
+   "date": "2026-06-26",
+   "subject": "v0.6.0-dev"
+  },
+  {
+   "hash": "ab07e5b",
+   "date": "2026-06-26",
+   "subject": "dynamic enemy infantry"
+  },
   {
    "hash": "8f9e747",
    "date": "2026-06-26",
@@ -62,16 +72,6 @@
    "hash": "d449114",
    "date": "2026-06-24",
    "subject": "clear low/out-of-ammo indicators (the 'tanks don't fire' report)"
-  },
-  {
-   "hash": "815aa04",
-   "date": "2026-06-24",
-   "subject": "core gameplay bugs from playtest (firing, LOS, death, menu)"
-  },
-  {
-   "hash": "70331e4",
-   "date": "2026-06-24",
-   "subject": "rename 'Game mechanics' to 'Mechanics' (chip + i18n + README)"
   }
  ]
 }
