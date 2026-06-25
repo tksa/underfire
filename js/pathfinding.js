@@ -169,7 +169,15 @@ Game.computeCover = (unit) => {
         if (n.type === 'hedge') cover = Math.max(cover, 0.42);
         if (n.type === 'house') cover = Math.max(cover, 0.65);
     }
+    // Sapper-built sandbag emplacements protect anyone hunkered behind them.
+    if (Game.defenses) {
+        for (const d of Game.defenses) {
+            if (Game.distSq(d.x, d.z, unit.x, unit.z) <= 2.4 * 2.4) { cover = Math.max(cover, d.cover); break; }
+        }
+    }
+    // A dug-in unit keeps its entrenchment cover (was previously overwritten here).
+    if (unit.entrenched) cover = Math.max(cover, 0.5);
     if (unit.stance === 'prone') cover += 0.15;
     else if (unit.stance === 'crouch') cover += 0.08;
-    return Game.clamp(cover, 0, 0.78);
+    return Game.clamp(cover, 0, 0.82);
 };

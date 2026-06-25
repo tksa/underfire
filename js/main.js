@@ -98,6 +98,9 @@ Game.nearOfficer = (unit) => {
 
 Game.updateUnit = (unit, dt) => {
     if (!unit.alive) return;
+    // A towed gun is dragged by its tower; a passenger rides hidden inside its
+    // carrier. Both are driven by the vehicle, so they skip their own update.
+    if (unit._towed || unit._inVehicle != null) return;
     const prevX = unit.x, prevZ = unit.z;
     unit.coverBonus = Game.computeCover(unit);
     unit.cooldownLeft = Math.max(0, unit.cooldownLeft - dt);
@@ -1228,6 +1231,43 @@ Game.entrenchUnit = (unit) => {
 };
 
 // ═══════════════════════════════════════════════════════
+//  ENGINEER FIELD DEFENSES (sandbag emplacements)
+// ═══════════════════════════════════════════════════════
+
+// A sapper stacks a low sandbag wall just ahead of itself. Unlike entrenchment
+// (self-only dig-in), it's a placed object that gives cover to ANY friendly unit
+// who fights from behind it (see computeCover / coverAt). Limited supply.
+Game.buildSandbag = (unit) => {
+    if (!unit.alive || unit.supportType !== 'sapper') {
+        Game.pushMessage('Select a sapper to build sandbags.', 1.5);
+        return;
+    }
+    unit._sandbags = unit._sandbags ?? 3;
+    if (unit._sandbags <= 0) { Game.pushMessage('No sandbags left!', 1.5); return; }
+    unit._sandbags--;
+    const fx = unit.x + Math.cos(unit.angle) * 1.0;
+    const fz = unit.z + Math.sin(unit.angle) * 1.0;
+    const def = { x: fx, z: fz, cover: 0.55, team: unit.team, mesh: null };
+    if (Game.scene && Game.THREE && Game.terrainGroup) {
+        const THREE = Game.THREE;
+        const grp = new THREE.Group();
+        const mat = new THREE.MeshStandardMaterial({ color: 0x9b8b5e, roughness: 1.0 });
+        for (let k = -1; k <= 1; k++) {
+            const bag = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.5), mat);
+            bag.position.set(k * 0.5, 0.2, 0);
+            bag.castShadow = true;
+            grp.add(bag);
+        }
+        grp.position.set(fx, (Game.getHeight ? Game.getHeight(fx, fz) : 0), fz);
+        grp.rotation.y = -unit.angle;
+        Game.terrainGroup.add(grp);
+        def.mesh = grp;
+    }
+    Game.defenses.push(def);
+    Game.pushMessage(`Sandbags built (${unit._sandbags} left).`, 1.4);
+};
+
+// ═══════════════════════════════════════════════════════
 //  MINE SYSTEM
 // ═══════════════════════════════════════════════════════
 
@@ -1325,14 +1365,19 @@ Game.updateMines = (dt) => {
 //  TOWING
 // ═══════════════════════════════════════════════════════
 
+// Anything with an engine can tow: tanks, armored cars, and the trucks.
+Game.canTow = (u) => Game.isVehicle(u) || ['supply', 'fuel'].includes(u.supportType);
+
 Game.towUnit = (tower, target) => {
     if (!tower.alive || !target.alive) return;
-    if (!Game.isTank(tower.kind)) return;
+    if (!Game.canTow(tower)) return;
+    if (!target.deployable) { Game.pushMessage('Only guns can be towed.', 1.5); return; }
     if (target._towed) return;
     target._towed = true;
     target._towedBy = tower.id;
     target.path = [];
     target.moving = false;
+    target.deployed = false; target._deployT = 0; // rides limbered
     Game.pushMessage(`${tower.label} is towing ${target.label}.`, 2.0);
 };
 
@@ -1350,6 +1395,20 @@ Game.updateTowing = (dt) => {
         u.z = tower.z - Math.sin(tower.angle) * 2.0;
         u.angle = tower.angle;
     });
+    // A destroyed carrier spills its passengers (shaken and wounded).
+    Game.units.forEach(c => {
+        if (!c._passengers || !c._passengers.length || c.alive) return;
+        c._passengers.forEach(pid => {
+            const inf = Game.getUnitById(pid);
+            if (!inf || !inf.alive) return;
+            inf._inVehicle = null;
+            if (inf.mesh) inf.mesh.visible = true;
+            inf.x = c.x + Game.rand(-2, 2); inf.z = c.z + Game.rand(-2, 2);
+            inf.hp = Math.max(1, inf.hp - 40);
+            inf.suppressionValue = Game.clamp((inf.suppressionValue || 0) + 50, 0, 100);
+        });
+        c._passengers = [];
+    });
 };
 
 Game.untowUnit = (target) => {
@@ -1357,6 +1416,44 @@ Game.untowUnit = (target) => {
     target._towed = false;
     target._towedBy = null;
     Game.pushMessage(`${target.label} un-towed.`, 1.5);
+};
+
+// ═══════════════════════════════════════════════════════
+//  TROOP TRANSPORT (carry infantry in trucks)
+// ═══════════════════════════════════════════════════════
+
+Game.CARRIER_CAP = 5;
+Game.isCarrier = (u) => ['supply', 'fuel'].includes(u.supportType);
+
+Game.loadUnit = (inf, carrier) => {
+    if (!inf.alive || !carrier.alive || inf === carrier) return false;
+    if (inf.class === 'vehicle' || Game.isTank(inf.kind) || inf.deployable) return false; // foot troops only
+    carrier._passengers = carrier._passengers || [];
+    if (carrier._passengers.length >= Game.CARRIER_CAP) { Game.pushMessage(`${carrier.label} is full.`, 1.5); return false; }
+    carrier._passengers.push(inf.id);
+    inf._inVehicle = carrier.id;
+    inf.path = []; inf.moving = false;
+    if (inf.mesh) inf.mesh.visible = false;
+    if (Game.selection.has(inf.id)) Game.selection.delete(inf.id);
+    return true;
+};
+
+Game.unloadCarrier = (carrier) => {
+    if (!carrier._passengers || !carrier._passengers.length) return;
+    let n = 0;
+    carrier._passengers.forEach((pid, i, arr) => {
+        const inf = Game.getUnitById(pid);
+        if (!inf || !inf.alive) return;
+        const a = (i / arr.length) * Math.PI * 2;
+        inf.x = Game.clamp(carrier.x + Math.cos(a) * 2.2, 1, Game.WORLD_W - 1);
+        inf.z = Game.clamp(carrier.z + Math.sin(a) * 2.2, 1, Game.WORLD_H - 1);
+        inf._inVehicle = null;
+        inf.path = []; inf.moving = false;
+        if (inf.mesh) inf.mesh.visible = true;
+        n++;
+    });
+    carrier._passengers = [];
+    Game.pushMessage(`${carrier.label} unloaded ${n} troops.`, 1.8);
 };
 
 // ═══════════════════════════════════════════════════════

@@ -750,6 +750,53 @@ Game.handleInputEvents = () => {
             Game.selectedPlayerUnits().forEach(u => Game.entrenchUnit(u));
         }
 
+        // Build sandbags (U key) — sappers only
+        if (e.code === 'KeyU') {
+            const sapper = Game.selectedPlayerUnits().find(u => u.supportType === 'sapper');
+            if (sapper) Game.buildSandbag(sapper);
+            else Game.pushMessage('Select a sapper to build sandbags.', 1.5);
+        }
+
+        // Tow / untow a gun (O key) — select a vehicle/truck
+        if (e.code === 'KeyO') {
+            const tower = Game.selectedPlayerUnits().find(u => Game.canTow(u));
+            if (!tower) { Game.pushMessage('Select a vehicle or truck to tow with.', 1.5); }
+            else {
+                const towing = Game.units.find(u => u._towed && u._towedBy === tower.id);
+                if (towing) { Game.untowUnit(towing); }
+                else {
+                    let best = null, bd = 8 * 8;
+                    Game.units.forEach(u => {
+                        if (!u.alive || u.team !== tower.team || !u.deployable || u._towed) return;
+                        const d = Game.distSq(tower.x, tower.z, u.x, u.z);
+                        if (d < bd) { bd = d; best = u; }
+                    });
+                    if (best) Game.towUnit(tower, best);
+                    else Game.pushMessage('No gun within reach to tow.', 1.5);
+                }
+            }
+        }
+
+        // Load / unload troops (L key) — select a truck (+ infantry to load)
+        if (e.code === 'KeyL') {
+            const sel = Game.selectedPlayerUnits();
+            const carrier = sel.find(u => Game.isCarrier(u));
+            if (!carrier) { Game.pushMessage('Select a truck to carry troops.', 1.5); }
+            else if (carrier._passengers && carrier._passengers.length) {
+                Game.unloadCarrier(carrier);
+            } else {
+                let pool = sel.filter(u => u.class === 'infantry'
+                    && Game.distSq(u.x, u.z, carrier.x, carrier.z) < 12 * 12);
+                if (!pool.length) {
+                    pool = Game.units.filter(u => u.alive && u.team === carrier.team
+                        && u.class === 'infantry' && Game.distSq(u.x, u.z, carrier.x, carrier.z) < 10 * 10);
+                }
+                let n = 0;
+                pool.forEach(u => { if (Game.loadUnit(u, carrier)) n++; });
+                Game.pushMessage(n ? `${carrier.label} loaded ${n} troops.` : 'No infantry nearby to load.', 1.6);
+            }
+        }
+
         // Recon plane (J key)
         if (e.code === 'KeyJ') {
             Game._commandMode = 'recon';

@@ -23,7 +23,12 @@ Game.coverAt = (x, z) => {
         else if (n.type === 'house') cover = Math.max(cover, 0.65);
         else if (n.type === 'hedge') cover = Math.max(cover, 0.42);
     }
-    return Game.clamp(cover, 0, 0.78);
+    if (Game.defenses) {
+        for (const d of Game.defenses) {
+            if (Game.distSq(d.x, d.z, x, z) <= 2.4 * 2.4) { cover = Math.max(cover, d.cover); break; }
+        }
+    }
+    return Game.clamp(cover, 0, 0.82);
 };
 
 /**

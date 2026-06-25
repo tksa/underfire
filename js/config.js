@@ -21,6 +21,7 @@ Game.terrain = [];
 Game.buildings = [];
 Game.walls = [];
 Game.craters = [];
+Game.defenses = [];     // sapper-built sandbag emplacements (cover objects)
 Game.dynamicCraters = [];
 Game.CRATER_Y_OFFSET = 0.12; // Live updatable via dev console!
 Game.smoke = [];
