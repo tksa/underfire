@@ -83,6 +83,19 @@ Game.applySeparation = (unit, dt) => {
 //  PER-UNIT UPDATE
 // ═══════════════════════════════════════════════════════
 
+// Morale aura: is a living friendly officer within command radius? Officers
+// steady nearby troops (faster suppression recovery, higher break thresholds).
+Game.nearOfficer = (unit) => {
+    const R = 14;
+    for (const o of Game.units) {
+        if (!o.alive || o.team !== unit.team) continue;
+        if (!(o.supportType === 'officer' || o._actingOfficer)) continue; // real or field-promoted
+        if (o === unit) continue;
+        if (Game.distSq(o.x, o.z, unit.x, unit.z) <= R * R) return true;
+    }
+    return false;
+};
+
 Game.updateUnit = (unit, dt) => {
     if (!unit.alive) return;
     const prevX = unit.x, prevZ = unit.z;
@@ -93,7 +106,11 @@ Game.updateUnit = (unit, dt) => {
     unit.stopTimer = Math.max(0, unit.stopTimer - dt);
     unit.orderDelay = Math.max(0, (unit.orderDelay || 0) - dt);
 
-    const recovery = unit.underFire > 0 ? 4 : 11;
+    // Morale: a nearby friendly officer steadies the troops (RWM officerradius) —
+    // they shake off suppression faster and hold under fire that would break an
+    // isolated soldier.
+    unit._steadied = Game.nearOfficer(unit);
+    const recovery = (unit.underFire > 0 ? 4 : 11) * (unit._steadied ? 1.8 : 1);
     unit.suppressionValue = Math.max(0, unit.suppressionValue - recovery * dt);
     // Suppression escalates stance under fire and recovers when safe.
     // _autoStance marks a stance the AI imposed (so manual orders aren't overridden,
@@ -1224,8 +1241,30 @@ Game.layMine = (unit) => {
         return;
     }
     unit._mines--;
-    Game.mines.push({ x: unit.x, z: unit.z, team: unit.team, armed: true });
+    const mine = { x: unit.x, z: unit.z, team: unit.team, armed: true, mesh: null };
+    // The laying side can see its own minefield (faint disc); enemy mines stay hidden.
+    if (mine.team === Game.TEAM.FRENCH && Game.scene && Game.THREE && Game.effectsGroup) {
+        const THREE = Game.THREE;
+        const m = new THREE.Mesh(
+            new THREE.CircleGeometry(0.5, 14),
+            new THREE.MeshBasicMaterial({ color: 0x8a6a3c, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false })
+        );
+        m.rotation.x = -Math.PI / 2;
+        m.position.set(mine.x, (Game.getHeight ? Game.getHeight(mine.x, mine.z) : 0) + 0.06, mine.z);
+        Game.effectsGroup.add(m);
+        mine.mesh = m;
+    }
+    Game.mines.push(mine);
     Game.pushMessage('Mine placed!', 1.0);
+};
+
+Game._removeMine = (mine, i) => {
+    if (mine.mesh && Game.effectsGroup) {
+        Game.effectsGroup.remove(mine.mesh);
+        mine.mesh.geometry.dispose();
+        mine.mesh.material.dispose();
+    }
+    Game.mines.splice(i, 1);
 };
 
 Game.updateMines = (dt) => {
@@ -1233,10 +1272,18 @@ Game.updateMines = (dt) => {
         const mine = Game.mines[i];
         if (!mine.armed) continue;
         for (const u of Game.units) {
-            if (!u.alive || u.team === mine.team || !Game.isTank(u.kind)) continue;
+            if (!u.alive || u.team === mine.team) continue;
             const d = Game.dist(u.x, u.z, mine.x, mine.z);
-            if (d < 1.5) {
-                // Mine triggered!
+            // An enemy sapper carefully defuses the mine instead of setting it off.
+            if (u.supportType === 'sapper' && d < 1.4) {
+                if (Game.isFogVisible && Game.isFogVisible(mine.x, mine.z)) {
+                    Game.pushMessage('Mine cleared.', 1.2);
+                }
+                Game._removeMine(mine, i);
+                break;
+            }
+            // Only vehicles are heavy enough to trip an AT mine.
+            if (Game.isTank(u.kind) && d < 1.5) {
                 u.hp -= 60;
                 u.tracksDisabled = true;
                 u.speed = 0;
@@ -1251,12 +1298,23 @@ Game.updateMines = (dt) => {
                 if (Game.Audio) Game.Audio.explosion(mine.x, mine.z);
                 Game.addBlastFlash(mine.x, mine.z, 1.4);
                 Game.pushMessage(`Mine detonated! ${u.label} tracks disabled!`, 2.5);
+                // Blast catches nearby enemy infantry too.
+                Game.units.forEach(v => {
+                    if (!v.alive || v.team === mine.team || Game.isTank(v.kind)) return;
+                    const bd = Game.dist(mine.x, mine.z, v.x, v.z);
+                    if (bd >= 3) return;
+                    const fall = 1 - bd / 3;
+                    v.hp -= 35 * fall;
+                    v.suppressionValue = Game.clamp((v.suppressionValue || 0) + 45 * fall, 0, 100);
+                    v.shaken = Math.max(v.shaken || 0, 0.4);
+                    if (v.hp <= 0) { v.alive = false; v.hp = 0; if (v.mesh) v.mesh.visible = false; if (Game.selection.has(v.id)) Game.selection.delete(v.id); }
+                });
                 if (u.hp <= 0) {
                     u.alive = false;
                     u.hp = 0;
                     if (u.mesh) u.mesh.visible = false;
                 }
-                Game.mines.splice(i, 1);
+                Game._removeMine(mine, i);
                 break;
             }
         }
@@ -2204,6 +2262,7 @@ Game.tick = (now) => {
     // Pause gate — skip unit updates when paused
     if (!Game._paused) {
         if (Game.updateSquadAI) Game.updateSquadAI(dt);
+        if (Game.updateChainOfCommand) Game.updateChainOfCommand(dt);
         Game.units.forEach(unit => Game.updateUnit(unit, dt));
         Game.updateSupportUnits(dt);
         if (Game.updateIndirectShells) Game.updateIndirectShells(dt);

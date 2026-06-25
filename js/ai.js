@@ -99,10 +99,24 @@ Game.updateAI = (unit, dt, enemy) => {
 
     const setStance = (s) => { if (!isVeh) { unit.stance = s; unit._autoStance = true; } };
 
+    // Morale: an officer's presence stiffens resolve (RWM officerradius); an
+    // isolated soldier breaks sooner.
+    const steady = unit._steadied ? 12 : 0;
+
     // ── RETREAT: squad broken or near death — fall back to the rally point ──
     if (posture === 'fallback' || hpPct < 0.22) {
         unit._ai = 'retreat';
+        // Panic: a broken, heavily-suppressed soldier with no officer near may bolt
+        // in a random direction instead of an orderly fall-back (RWM moralerndmove).
         const rally = unit._rally || unit.holdPoint || { x: unit.x, z: unit.z };
+        if (!isVeh && !unit._steadied && supp > 70 && Game.rand(0, 1) < 0.25 && threatPos) {
+            const away = Game.angleTo(threatPos.x, threatPos.z, unit.x, unit.z) + Game.rand(-0.8, 0.8);
+            const gx = Game.clamp(unit.x + Math.cos(away) * 6 * Game.TILE, 1, Game.WORLD_W - 1);
+            const gz = Game.clamp(unit.z + Math.sin(away) * 6 * Game.TILE, 1, Game.WORLD_H - 1);
+            unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
+            setStance('run');
+            return;
+        }
         if (Game.dist(unit.x, unit.z, rally.x, rally.z) > 3 && (!unit.path || !unit.path.length)) {
             unit.path = Game.findPath(unit, unit.x, unit.z, rally.x, rally.z);
         }
@@ -111,7 +125,7 @@ Game.updateAI = (unit, dt, enemy) => {
     }
 
     // ── PINNED: heavy suppression — go prone, crawl to the nearest cover ──
-    if (supp > 75 && !isVeh) {
+    if (supp > 75 + steady && !isVeh) {
         unit._ai = 'pinned';
         setStance('prone');
         if (!inCover && threatPos) {
@@ -258,7 +272,8 @@ Game.updateSquadAI = (dt) => {
         // Posture: break and fall back if mauled or pinned; press the attack if it's
         // an assault squad or most of the squad is in contact; otherwise hold.
         let posture;
-        if (losses >= 0.5 || avgSupp > 72) posture = 'fallback';
+        const steadied = mem.some(u => u._steadied); // an officer is with the squad
+        if (losses >= (steadied ? 0.6 : 0.5) || avgSupp > (steadied ? 82 : 72)) posture = 'fallback';
         else if (nKnown > 0 && (mem[0].aiState === 'attack' || nKnown >= Math.ceil(strength * 0.5))) posture = 'attack';
         else posture = 'hold';
 
@@ -269,5 +284,56 @@ Game.updateSquadAI = (dt) => {
             u._rally = sq.rally;
             u._role = (posture === 'attack' && i % 2 === 1) ? 'maneuver' : 'fire';
         });
+    }
+};
+
+// ═══════════════════════════════════════════════════════
+//  CHAIN OF COMMAND (succession of command)
+// ═══════════════════════════════════════════════════════
+//
+// Real units never go leaderless: command devolves to the senior survivor.
+// An officer leads; if he falls, the senior NCO/soldier is field-promoted to
+// acting leader (inheriting the morale aura), and the chain continues down as
+// leaders are lost. We keep each side's leader count topped up to its starting
+// strength (and at least one), promoting the most senior eligible survivor.
+
+// Seniority score: rank first, then battle experience / veterancy, then health.
+Game.seniority = (u) => {
+    let base = 0;
+    if (u.supportType === 'officer') base = 1000;
+    else if (u._actingOfficer) base = 800;
+    return base + (u.veterancy || 0) * 200 + (u.experience || 0) + (u.hp / (u.maxHp || 1)) * 5;
+};
+
+Game.updateChainOfCommand = (dt) => {
+    Game._cmdTimer = (Game._cmdTimer || 0) - dt;
+    if (Game._cmdTimer > 0) return;
+    Game._cmdTimer = 1.5;
+    Game._cmd = Game._cmd || {};
+
+    const NONCOMBAT = ['supply', 'fuel', 'medic', 'mechanic'];
+    for (const team of [Game.TEAM.FRENCH, Game.TEAM.GERMAN]) {
+        const living = Game.units.filter(u => u.alive && u.team === team);
+        if (!living.length) continue;
+        const cmd = Game._cmd[team] = Game._cmd[team] || {};
+        // Establish the standing leader quota once (starting officers, min 1).
+        if (cmd.quota == null) {
+            cmd.quota = Math.max(living.filter(u => u.supportType === 'officer').length, 1);
+        }
+        const leaders = living.filter(u => u.supportType === 'officer' || u._actingOfficer);
+        let need = cmd.quota - leaders.length;
+        if (need <= 0) continue;
+        // Promote the most senior eligible combat survivors to fill the gap.
+        const elig = living
+            .filter(u => !(u.supportType === 'officer' || u._actingOfficer)
+                && !NONCOMBAT.includes(u.supportType))
+            .sort((a, b) => Game.seniority(b) - Game.seniority(a));
+        for (const u of elig) {
+            if (need <= 0) break;
+            u._actingOfficer = true;
+            u.veterancy = Math.min(1, (u.veterancy || 0) + 0.1); // a field commission steadies him
+            need--;
+            if (team === Game.TEAM.FRENCH) Game.pushMessage(`${u.label} takes command.`, 2.2);
+        }
     }
 };
