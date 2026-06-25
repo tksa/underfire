@@ -221,7 +221,9 @@ french_jm,french,f_mortar,infantry,,Mortier (60mm),rwm_french_jm,,60,1.65,0.5,20
 french_asergeant,french,f_serg,infantry,,"sous-officier (Mas-38 7,65mm)",rwm_french_asergeant,,36,2.15,0.5,23,8,2,#6f8597,,0,0,0,,,,,1939,"sous-officier (Mas-38 7,65mm)",rifle,direct,32,40,0.3,0.62,6,0,0
 french_amr35,french,amr_35_zt2_25mm_sa35,vehicle,,AMR-35 ZT2 (25mm SA35),rwm_french_amr35,,132,5.94,0.9,8,1.4,3,#6f8597,tracked,20,17,14,3,1.5,0.9,2,1940,AMR-35 ZT2 (25mm SA35),cannon,direct,48,75,0.3,0.8,12,23,0
 french_ci_nu,french,ft_17_c,vehicle,,Char Leger FT-17 C (37mm SA18 L/21),rwm_french_ci_nu,,72,3.7,0.9,8,1.4,2,#6f8597,tracked,20,17,14,3,1.5,0.9,2,1940,Char Leger FT-17 C (37mm SA18 L/21),cannon,direct,52,110,2.2,0.8,12,33,0
+french_b1_2,french,b1_bis,vehicle,,Char Lourd B-1 bis (75mm SA35 L/18),rwm_french_b1_2,,450,2.64,0.9,8,1.4,9,#6f8597,tracked,0,0,0,3,1.5,0.9,4,1940,Char Lourd B-1 bis (75mm SA35 L/18),cannon,direct,54,400,4.25,0.8,12,120,0
 french_c2,french,char_2c,vehicle,,"Char Lourd F.C.M.2C (75mm APX1897 L/36,3)",rwm_french_c2,,510,1.65,0.9,8,1.4,10,#6f8597,tracked,0,0,0,3,1.5,0.9,12,1940,"Char Lourd F.C.M.2C (75mm APX1897 L/36,3)",cannon,direct,53,450,4.25,0.8,12,144,0
+french_tank_s_35,french,s35,vehicle,,S 35 Somua (47mm SA35 L/34),rwm_french_tank_s_35,,252,4.59,0.9,8,1.4,5,#6f8597,tracked,30,26,21,3,1.5,0.9,3,1940,S 35 Somua (47mm SA35 L/34),cannon,direct,53,200,3.25,0.8,12,60,0
 german_flak18,german,88mm_flak,support,,Deutsche 88mm FlaK-36 L/56,rwm_german_flak18,,360,0.6,0.65,20,4,7,#6a7280,,40,34,28,3,1.5,,,1939,Deutsche 88mm FlaK-36 L/56,aa,direct,90,450,2.5,0.72,18,180,0
 german_37mm,german,37mm_flak,support,,FlaK-37 L/98 (37mm),rwm_german_37mm,,180,0.6,0.65,20,4,4,#6a7280,,40,34,28,3,1.5,,,1939,FlaK-37 L/98 (37mm),aa,direct,90,72,0.33,0.72,18,22,0
 german_20mmaa,german,20mm_flak_38,support,,Flak-38 (20mm),rwm_german_20mmaa,,180,1.62,0.65,20,4,4,#6a7280,,40,34,28,3,1.5,,,1939,Flak-38 (20mm),aa,direct,76,59,0.3,0.72,18,18,0
@@ -254,6 +256,7 @@ german_d_para_pzfst,german,d_para_pzfst,support,,Fallschirmjaeger (Panzerfaust 1
 german_a_4,german,german_37mm_pak_atg_in_house_simulation,support,,German 37mm Pak (ATG in house simulation),rwm_german_a_4,,60,0.99,0.65,11,4,2,#6a7280,,100,85,70,,,,,1936,German 37mm Pak (ATG in house simulation),at,direct,50,40,2.2,0.82,10,12,0
 german_gun45nem,german,50mm_pak,support,,PAK-38 L/60 (50mm),,,270,1.25,0.65,20,4,6,#6a7280,,40,34,28,,,,,1941,PAK-38 L/60 (50mm),at,none,,,,,,,
 german_gunp40,german,75mm_pak,support,,PAK-40 L/46 (75mm),,,270,0.6,0.65,20,4,6,#6a7280,,40,34,28,,,,,1942,PAK-40 L/46 (75mm),at,none,,,,,,,
+german_gunp37,german,37mm_pak,support,,PaK 35/36 L/45 (37mm),,,240,1.62,0.65,20,4,5,#6a7280,,40,34,28,,,,,1936,PaK 35/36 L/45 (37mm),at,none,,,,,,,
 german_pak43,german,pak_43,support,,PaK-43 L/71 (88mm),,,360,0.6,0.65,20,4,7,#6a7280,,40,34,28,,,,,1943,PaK-43 L/71 (88mm),at,none,,,,,,,
 german_dfaus,german,pzfst100,support,,Panzerjaeger (Panzerfaust 100),rwm_german_dfaus,,60,1.65,0.65,20,4,2,#6a7280,,100,85,70,,,,,1943,Panzerjaeger (Panzerfaust 100),at,direct,38,450,5,0.82,10,180,0
 german_pueppchen,german,pueppchen,support,,RPzB 43 Pueppchen (88mm),,,90,1.72,0.65,20,4,3,#6a7280,,40,34,28,,,,,1943,RPzB 43 Pueppchen (88mm),at,none,,,,,,,
@@ -383,6 +386,7 @@ german_2592_tk,german,38t_recon,vehicle,,Aufklaerungspanzer 38(t) (20mm KwK38 L/
 german_turret_mg,german,mg,vehicle,,MG Turret,rwm_german_turret_mg,,540,1.65,0.9,20,1.4,10,#6a7280,tracked,24,20,17,3,1.5,0.9,2,1940,MG Turret,cannon,direct,35,57,0.3,0.8,12,17,0
 german_pz35,german,pz_35_t,vehicle,,Pz.Kpfw. 35(t) (37mm KwK34(t) L/40),rwm_german_pz35,,150,3.96,0.9,8,1.4,4,#6a7280,tracked,20,17,14,3,1.5,0.9,4,1940,Pz.Kpfw. 35(t) (37mm KwK34(t) L/40),cannon,direct,52,110,3.5,0.8,12,33,0
 german_pzkpfw38t,german,pz_38_t,vehicle,,Pz.Kpfw. 38(t) E (37mm KwK38(t) L/47.8),rwm_german_pzkpfw38t,,138,4.78,0.9,8,1.4,3,#6a7280,tracked,20,17,14,3,1.5,0.9,4,1940,Pz.Kpfw. 38(t) E (37mm KwK38(t) L/47.8),cannon,direct,52,110,2.2,0.8,12,33,0
+german_1a,german,pz_i_a,vehicle,,Pz.Kpfw. I A (2x 7.92 MG 13),rwm_german_1a,,72,4.62,0.9,8,1.4,2,#6a7280,tracked,20,17,14,3,1.5,0.9,2,1940,Pz.Kpfw. I A (2x 7.92 MG 13),cannon,direct,45,60,0.3,0.8,12,18,0
 german_luchs,german,pz_ii_f,vehicle,,Pz.Kpfw. II F (20mm KwK 38 L/55),rwm_german_luchs,,120,5.58,0.9,8,1.4,3,#6a7280,tracked,30,26,21,3,1.5,0.9,3,1940,Pz.Kpfw. II F (20mm KwK 38 L/55),cannon,direct,48,65,0.3,0.8,12,20,0
 german_panzer3_f,german,pz_iii_f,vehicle,,Pz.Kpfw. III F (37mm KwK36 L/45),rwm_german_panzer3_f,,270,4.95,0.9,8,1.4,6,#6a7280,tracked,30,26,21,3,1.5,0.9,5,1940,Pz.Kpfw. III F (37mm KwK36 L/45),cannon,direct,52,110,2.2,0.8,12,33,0
 german_2597te_ke,german,pz_iii_j,vehicle,,Pz.Kpfw. III J (50mm KwK 38 L/42),rwm_german_2597te_ke,,300,4.95,0.9,8,1.4,6,#6a7280,tracked,128,109,90,3,1.5,0.9,5,1941,Pz.Kpfw. III J (50mm KwK 38 L/42),cannon,direct,53,360,4,0.8,12,108,0
