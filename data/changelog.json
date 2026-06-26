@@ -1,8 +1,23 @@
 {
  "version": "v0.6.0-dev",
- "build": "0cb0581",
+ "build": "3762114",
  "generated": "2026-06-26",
  "commits": [
+  {
+   "hash": "3762114",
+   "date": "2026-06-26",
+   "subject": "replace command-bar emojis with SVG icons (game-icons.net, CC-BY)"
+  },
+  {
+   "hash": "0b3da30",
+   "date": "2026-06-26",
+   "subject": "grenades, hold-fire, tank-crush, multi-plane air strikes"
+  },
+  {
+   "hash": "9d4e7ed",
+   "date": "2026-06-26",
+   "subject": "refresh data/changelog.json"
+  },
   {
    "hash": "0cb0581",
    "date": "2026-06-26",
@@ -57,21 +72,6 @@
    "hash": "c3235e9",
    "date": "2026-06-25",
    "subject": "always-fresh JS via per-load cache-buster on script URLs"
-  },
-  {
-   "hash": "13798d3",
-   "date": "2026-06-25",
-   "subject": "Move vs Attack-Move stance switch + smarter target engagement"
-  },
-  {
-   "hash": "c870260",
-   "date": "2026-06-25",
-   "subject": "order units to close in and engage"
-  },
-  {
-   "hash": "d449114",
-   "date": "2026-06-24",
-   "subject": "clear low/out-of-ammo indicators (the 'tanks don't fire' report)"
   }
  ]
 }
