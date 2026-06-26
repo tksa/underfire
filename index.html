@@ -844,6 +844,19 @@
       margin-bottom: 3px;
     }
 
+    /* SVG glyph icons (game-icons.net, white) used in the command bar */
+    .ui-ico {
+      width: 20px;
+      height: 20px;
+      object-fit: contain;
+      vertical-align: middle;
+      display: inline-block;
+      opacity: 0.88;
+    }
+    .stance-icon .ui-ico { width: 15px; height: 15px; }
+    .stance-btn.active .ui-ico,
+    .cmd-btn.armed .ui-ico { opacity: 1; }
+
     .cmd-btn .cmd-label {
       font-size: 8px;
       text-transform: uppercase;
@@ -1231,24 +1244,24 @@
         <div class="hud-title">Orders</div>
         <div class="stance-switch" title="Right-click order mode (E to toggle)">
           <button class="stance-btn active" id="stanceMove" data-stance="move"><span class="stance-icon">⇒</span>Move</button>
-          <button class="stance-btn" id="stanceAttack" data-stance="attack"><span class="stance-icon">⊕</span>Attack&nbsp;Move</button>
+          <button class="stance-btn" id="stanceAttack" data-stance="attack"><span class="stance-icon"><img class="ui-ico" src="icons/attack-move.svg" alt=""></span>Attack&nbsp;Move</button>
         </div>
         <div class="cmd-grid">
           <div class="cmd-btn" id="cmdStop" title="Stop (V)"><span class="cmd-icon">■</span><span
               class="cmd-label">Stop</span></div>
           <div class="cmd-btn" id="cmdHold" title="Hold fire (H)"><span class="cmd-icon">⊘</span><span
               class="cmd-label">Hold</span></div>
-          <div class="cmd-btn" id="cmdGrenade" title="Grenade (G)"><span class="cmd-icon">💣</span><span
+          <div class="cmd-btn" id="cmdGrenade" title="Grenade (G)"><span class="cmd-icon"><img class="ui-ico" src="icons/grenade.svg" alt=""></span><span
               class="cmd-label">Grenade</span></div>
-          <div class="cmd-btn" id="cmdSmoke" title="Smoke (T)"><span class="cmd-icon">🌫</span><span
+          <div class="cmd-btn" id="cmdSmoke" title="Smoke (T)"><span class="cmd-icon"><img class="ui-ico" src="icons/smoke.svg" alt=""></span><span
               class="cmd-label">Smoke</span></div>
-          <div class="cmd-btn" id="cmdAirStrike" title="Air Strike (B) — wheel to set planes"><span class="cmd-badge" id="airStrikeBadge">0</span><span class="cmd-icon">✈</span><span
+          <div class="cmd-btn" id="cmdAirStrike" title="Air Strike (B) — wheel to set planes"><span class="cmd-badge" id="airStrikeBadge">0</span><span class="cmd-icon"><img class="ui-ico" src="icons/bombing-run.svg" alt=""></span><span
               class="cmd-label">Strike</span></div>
           <div class="cmd-btn" id="cmdRotate" title="Rotate (R)"><span class="cmd-icon">↻</span><span
               class="cmd-label">Rotate</span></div>
           <div class="cmd-btn" id="cmdProne" title="Crawl / Stand toggle (C cycles)"><span class="cmd-icon">⤓</span><span
               class="cmd-label">Crawl</span></div>
-          <div class="cmd-btn" id="cmdAttackGround" title="Attack ground — fire on a spot (F)"><span class="cmd-icon">◎</span><span
+          <div class="cmd-btn" id="cmdAttackGround" title="Attack ground — fire on a spot (F)"><span class="cmd-icon"><img class="ui-ico" src="icons/artillery-shell.svg" alt=""></span><span
               class="cmd-label">Ground</span></div>
         </div>
       </div>

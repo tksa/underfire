@@ -1,7 +1,17 @@
 # Credits — Third-Party Assets
 
-All bundled third-party assets are **CC0 / Public Domain** (no attribution legally
-required). Listed here as good practice and to record provenance.
+Most bundled third-party assets are **CC0 / Public Domain** (no attribution legally
+required); listed here as good practice and to record provenance. The **UI icons**
+are **CC-BY 3.0** and attribution is required — see "UI Icons" below.
+
+## UI Icons (game-icons.net — CC-BY 3.0)
+Command-bar glyphs in `icons/` are from [game-icons.net](https://game-icons.net),
+used under CC-BY 3.0. Icons made by:
+- **Lorc** — grenade, bombing-run, gas-mask (smoke)
+- **Skoll** — bayonet (attack-move)
+- **Quoting** — artillery-shell (attack-ground)
+
+(White-on-transparent variants, recoloured via CSS.)
 
 ## Textures (OpenGameArt.org, CC0)
 - **Dirty Grass Seamless** (ground detail normal + AO) — used as terrain detail maps.
