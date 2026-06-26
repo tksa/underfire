@@ -22,10 +22,33 @@ window.Game.SkeletonUtils = { clone: skeletonClone };  // proper clone for rigge
  * Apply separation steering so units don't overlap.
  * Tanks push harder; infantry yields to tanks.
  */
+// A moving tank that drives over a man crushes him. Lethal, regardless of team
+// (the player's tanks flatten enemy AND friendly infantry that don't get clear).
+// Crew-served gun teams get crushed too; other tanks do not (handled by collision).
+Game.crushUnit = (tank, victim) => {
+    if (!victim.alive || victim._crushed) return;
+    if (Game.isTank(victim.kind) || victim._towed || victim._inVehicle != null) return;
+    victim._crushed = true;
+    victim.hp = 0;
+    victim.alive = false;
+    victim.suppressionValue = 100;
+    if (Game.selection.has(victim.id)) Game.selection.delete(victim.id);
+    if (victim.mesh) victim.mesh.visible = false;
+    // Squashed-earth mark + a low thud where he went under the tracks.
+    Game.craters.push({ x: victim.x, z: victim.z, r: Game.rand(0.25, 0.45) });
+    Game.cameraShake = Math.max(Game.cameraShake || 0, 2);
+    if (Game.Audio) Game.Audio.explosion(victim.x, victim.z);
+    const who = victim.team === Game.TEAM.FRENCH ? 'friendly' : 'enemy';
+    Game.pushMessage(`${tank.label} ran over ${who} ${victim.label}.`, 1.6);
+};
+
 Game.applySeparation = (unit, dt) => {
     let sepX = 0, sepZ = 0;
     const isVeh = Game.isTank(unit.kind);
     const myRadius = isVeh ? unit.size * 2.5 : unit.size * 0.7;
+    // A tank rolling at speed crushes anyone under its hull.
+    const tankMoving = isVeh && (unit.currentSpeed || 0) > 0.6;
+    const crushRadius = unit.size * 1.15;
 
     for (const other of Game.units) {
         if (!other.alive || other.id === unit.id) continue;
@@ -35,6 +58,14 @@ Game.applySeparation = (unit, dt) => {
         const distSq = dx * dx + dz * dz;
 
         const otherVeh = Game.isTank(other.kind);
+
+        // Run-over: a moving tank overlapping foot soldiers flattens them rather
+        // than nudging them aside (no more "bounce off the bow").
+        if (isVeh && !otherVeh && tankMoving && distSq < crushRadius * crushRadius) {
+            Game.crushUnit(unit, other);
+            continue;
+        }
+
         const otherRadius = otherVeh ? other.size * 2.5 : other.size * 0.7;
         const minDist = myRadius + otherRadius + 0.3;
         const minDistSq = minDist * minDist;
@@ -47,8 +78,12 @@ Game.applySeparation = (unit, dt) => {
 
             let strength = overlap * 3.0;
 
-            // Infantry yields to tanks hard
-            if (!isVeh && otherVeh) strength *= 4.0;
+            // Infantry vs tank: a *parked* tank is a solid obstacle to step around,
+            // but a *moving* one is not pushed away from — it drives over you.
+            if (!isVeh && otherVeh) {
+                if ((other.currentSpeed || 0) > 0.6) strength = 0; // let it run us over
+                else strength *= 4.0;                              // shoulder past a stopped hull
+            }
             // Tanks are immovable by infantry
             if (isVeh && !otherVeh) strength = 0;
 
@@ -202,16 +237,40 @@ Game.updateSupportUnits = (dt) => {
 // ═══════════════════════════════════════════════════════
 
 Game.airStrikes = [];
-Game.airStrikesAvailable = 1;  // Bonus charges
+Game.airStrikesAvailable = 1;     // planes (sorties) available
+Game.airStrikePlanesToUse = 1;    // how many to commit in the next strike
+
+// Clamp the "planes to use" selector into the legal range for the current stock.
+Game.adjustAirStrikePlanes = (delta) => {
+    const avail = Math.max(0, Game.airStrikesAvailable);
+    if (avail <= 0) { Game.airStrikePlanesToUse = 0; return 0; }
+    Game.airStrikePlanesToUse = Game.clamp((Game.airStrikePlanesToUse || 1) + delta, 1, avail);
+    return Game.airStrikePlanesToUse;
+};
 
 Game.callAirStrike = (x, z) => {
-    if (Game.airStrikesAvailable <= 0) {
+    const avail = Game.airStrikesAvailable;
+    if (avail <= 0) {
         Game.pushMessage('No air strikes available!', 2.0);
         return;
     }
-    Game.airStrikesAvailable--;
-    Game.pushMessage('Air strike called! Incoming in 3 seconds...', 3.0);
-    Game.airStrikes.push({ x, z, delay: 3.0, shells: 10, done: false });
+    const planes = Game.clamp(Math.round(Game.airStrikePlanesToUse || 1), 1, avail);
+    Game.airStrikesAvailable -= planes;
+    Game.airStrikePlanesToUse = Math.min(Game.airStrikePlanesToUse || 1, Math.max(1, Game.airStrikesAvailable));
+
+    Game.pushMessage(`${planes} aircraft inbound! Bombs away in 3s... (${Game.airStrikesAvailable} sortie${Game.airStrikesAvailable === 1 ? '' : 's'} left)`, 3.0);
+    // Engine drone overhead — louder/longer for a bigger flight.
+    if (Game.Audio && Game.Audio.plane) Game.Audio.plane(3.0 + planes * 0.5);
+
+    // Rolling bombardment: each plane makes its run a beat after the last, fanned
+    // across the target so a multi-plane strike carpets a wider strip.
+    for (let p = 0; p < planes; p++) {
+        const off = p - (planes - 1) / 2;
+        Game.airStrikes.push({
+            x: x + off * 4, z: z + off * 2.5,
+            delay: 3.0 + p * 0.7, shells: 10, done: false,
+        });
+    }
 };
 
 Game.updateAirStrikes = (dt) => {
@@ -502,48 +561,123 @@ Game.updateIndirectShells = (dt) => {
 //  GRENADE SYSTEM
 // ═══════════════════════════════════════════════════════
 
+// ── Thrown projectiles (frag / smoke / anti-tank) ──────────────────────────
+// Game-loop driven so they pause with the game, arc visibly toward the target,
+// and detonate on landing. Shared by the player's Grenade/Smoke orders and the
+// enemy tank-hunter AI.
+Game.MAX_THROW = 14;          // max throw distance (world units)
+Game.thrownGrenades = [];
+
+Game._makeThrownMesh = (color) => {
+    const THREE = Game.THREE;
+    if (!THREE || !Game.scene) return null;
+    const geo = new THREE.SphereGeometry(0.13, 8, 6);
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.7 }));
+    m.castShadow = true;
+    m.raycast = () => { };
+    Game.scene.add(m);
+    return m;
+};
+
+Game.spawnThrownGrenade = (fromX, fromZ, tx, tz, opts = {}) => {
+    const x0 = fromX, z0 = fromZ;
+    const dur = opts.dur || (0.35 + Game.dist(x0, z0, tx, tz) * 0.045);
+    Game.thrownGrenades.push({
+        x0, z0, tx, tz, x: x0, z: z0,
+        y: (Game.getHeight ? Game.getHeight(x0, z0) : 0) + 0.6,
+        t: 0, dur,
+        type: opts.type || 'frag',                 // 'frag' | 'smoke' | 'at'
+        dmg: opts.dmg ?? 25,
+        blastR: opts.blastR ?? 2.5,
+        supp: opts.supp ?? 40,
+        arc: opts.arc ?? 2.0,
+        mesh: Game._makeThrownMesh(opts.type === 'smoke' ? 0x9aa0a6 : 0x2c2e27),
+    });
+};
+
+Game._detonateThrown = (g) => {
+    if (g.type === 'smoke') {
+        Game.smokeClouds.push({ x: g.tx, z: g.tz, radius: 5, life: 12.0 });
+        for (let k = 0; k < 5; k++) {
+            Game.smoke.push({
+                x: g.tx + Game.rand(-1, 1), z: g.tz + Game.rand(-1, 1),
+                r: 2.2, life: 12.0, total: 12.0,
+                vx: Game.rand(-0.2, 0.2), vz: Game.rand(-0.3, -0.1), mesh: null,
+            });
+        }
+        Game.pushMessage('Smoke screen up.', 1.2);
+        return;
+    }
+    const blastR = g.blastR;
+    Game.units.forEach(u => {
+        if (!u.alive) return;
+        const bd = Game.dist(g.tx, g.tz, u.x, u.z);
+        if (bd >= blastR) return;
+        const falloff = 1 - bd / blastR;
+        let dmg = g.dmg * falloff;
+        // AT bundle wrecks armour but is poor against troops; frag is the reverse.
+        if (g.type === 'at') dmg *= Game.isTank(u.kind) ? 1.0 : 0.4;
+        else dmg *= Game.isTank(u.kind) ? 0.25 : 1.0;
+        u.hp -= dmg;
+        u.suppressionValue = Math.min(100, u.suppressionValue + g.supp * falloff);
+        u.shaken = 0.4;
+        if (u.hp <= 0) {
+            u.alive = false; u.hp = 0;
+            if (u.mesh) u.mesh.visible = false;
+            if (Game.selection.has(u.id)) Game.selection.delete(u.id);
+        }
+    });
+    Game.smoke.push({
+        x: g.tx, z: g.tz, r: g.type === 'at' ? 1.3 : 1.0,
+        life: 0.9, total: 0.9, vx: Game.rand(-0.3, 0.3), vz: Game.rand(-0.8, -0.3), mesh: null,
+    });
+    Game.craters.push({ x: g.tx, z: g.tz, r: Game.rand(0.3, 0.6) });
+    Game.cameraShake = Math.max(Game.cameraShake || 0, g.type === 'at' ? 5 : 3);
+    if (Game.Audio) Game.Audio.explosion(g.tx, g.tz);
+    Game.addBlastFlash(g.tx, g.tz, g.type === 'at' ? 1.3 : 1.0);
+};
+
+Game.updateThrownGrenades = (dt) => {
+    for (let i = Game.thrownGrenades.length - 1; i >= 0; i--) {
+        const g = Game.thrownGrenades[i];
+        g.t += dt;
+        const p = Math.min(1, g.t / g.dur);
+        g.x = Game.lerp(g.x0, g.tx, p);
+        g.z = Game.lerp(g.z0, g.tz, p);
+        const ground = Game.getHeight ? Game.getHeight(g.x, g.z) : 0;
+        g.y = ground + 0.5 + Math.sin(p * Math.PI) * g.arc;
+        if (g.mesh) g.mesh.position.set(g.x, g.y, g.z);
+        if (p >= 1) {
+            Game._detonateThrown(g);
+            if (g.mesh) {
+                Game.scene.remove(g.mesh);
+                g.mesh.geometry.dispose();
+                g.mesh.material.dispose();
+            }
+            Game.thrownGrenades.splice(i, 1);
+        }
+    }
+};
+
 Game.throwGrenade = (unit, x, z) => {
-    if (!unit.alive || Game.isTank(unit.kind)) return;
+    if (!unit || !unit.alive || Game.isTank(unit.kind)) return;
     unit._grenades = unit._grenades ?? 3;
     if (unit._grenades <= 0) {
         Game.pushMessage('No grenades left!', 1.5);
         return;
     }
-    const d = Game.dist(unit.x, unit.z, x, z);
-    if (d > 8) {
-        Game.pushMessage('Target too far for grenade!', 1.5);
-        return;
+    let d = Game.dist(unit.x, unit.z, x, z);
+    // Clamp an over-long throw to max range along the same bearing instead of refusing.
+    if (d > Game.MAX_THROW) {
+        const a = Game.angleTo(unit.x, unit.z, x, z);
+        x = unit.x + Math.cos(a) * Game.MAX_THROW;
+        z = unit.z + Math.sin(a) * Game.MAX_THROW;
     }
     unit._grenades--;
-    // Blast after a brief delay
-    setTimeout(() => {
-        const blastR = 2.5;
-        Game.units.forEach(u => {
-            if (!u.alive) return;
-            const bd = Game.dist(x, z, u.x, u.z);
-            if (bd < blastR) {
-                const falloff = 1 - bd / blastR;
-                u.hp -= 25 * falloff;
-                u.suppressionValue = Math.min(100, u.suppressionValue + 40 * falloff);
-                u.shaken = 0.4;
-                if (u.hp <= 0) {
-                    u.alive = false;
-                    u.hp = 0;
-                    if (u.mesh) u.mesh.visible = false;
-                }
-            }
-        });
-        Game.smoke.push({
-            x, z, r: 1.0, life: 0.8, total: 0.8,
-            vx: Game.rand(-0.3, 0.3), vz: Game.rand(-0.8, -0.3),
-            mesh: null,
-        });
-        Game.craters.push({ x, z, r: Game.rand(0.3, 0.6) });
-        Game.cameraShake = Math.max(Game.cameraShake, 3);
-        if (Game.Audio) Game.Audio.explosion(x, z);
-        Game.addBlastFlash(x, z, 1.0);
-    }, 600);
-    Game.pushMessage('Grenade thrown!', 1.0);
+    unit.angle = Game.angleTo(unit.x, unit.z, x, z);
+    Game.spawnThrownGrenade(unit.x, unit.z, x, z, { type: 'frag', dmg: 28, blastR: 2.6, supp: 40 });
+    Game.pushMessage(`Grenade out! (${unit._grenades} left)`, 1.2);
+    if (Game.Audio) Game.Audio.voice('f_sold_attack');
 };
 
 // ═══════════════════════════════════════════════════════
@@ -553,24 +687,23 @@ Game.throwGrenade = (unit, x, z) => {
 Game.smokeClouds = [];
 
 Game.throwSmoke = (unit, x, z) => {
-    if (!unit.alive || Game.isTank(unit.kind)) return;
+    if (!unit || !unit.alive || Game.isTank(unit.kind)) return;
     unit._smokeGrenades = unit._smokeGrenades ?? 2;
     if (unit._smokeGrenades <= 0) {
         Game.pushMessage('No smoke grenades left!', 1.5);
         return;
     }
-    const d = Game.dist(unit.x, unit.z, x, z);
-    if (d > 8) {
-        Game.pushMessage('Target too far for smoke!', 1.5);
-        return;
+    let d = Game.dist(unit.x, unit.z, x, z);
+    if (d > Game.MAX_THROW) {
+        const a = Game.angleTo(unit.x, unit.z, x, z);
+        x = unit.x + Math.cos(a) * Game.MAX_THROW;
+        z = unit.z + Math.sin(a) * Game.MAX_THROW;
     }
     unit._smokeGrenades--;
-    Game.smokeClouds.push({ x, z, radius: 4, life: 8.0 });
-    Game.smoke.push({
-        x, z, r: 2.5, life: 8.0, total: 8.0,
-        vx: 0, vz: 0, mesh: null,
-    });
-    Game.pushMessage('Smoke deployed!', 1.5);
+    unit.angle = Game.angleTo(unit.x, unit.z, x, z);
+    Game.spawnThrownGrenade(unit.x, unit.z, x, z, { type: 'smoke', arc: 1.6 });
+    Game.pushMessage(`Smoke thrown! (${unit._smokeGrenades} left)`, 1.4);
+    if (Game.Audio) Game.Audio.voice('f_sold_move');
 };
 
 Game.updateSmokeClouds = (dt) => {
@@ -1197,65 +1330,6 @@ Game.ramVehicle = (attacker, target) => {
     Game.pushMessage(`${attacker.label} rammed ${target.label}!`, 2.5);
 };
 
-// ═══════════════════════════════════════════════════════
-//  DOCTRINE / SKILL SYSTEM (SS4)
-// ═══════════════════════════════════════════════════════
-
-Game.DOCTRINES = {
-    infantry: {
-        name: 'Infantry',
-        desc: '+20% infantry HP, +2 sight, +1 grenade',
-        apply: () => {
-            Game.units.forEach(u => {
-                if (!u.alive || Game.isTank(u.kind)) return;
-                u.maxHp = Math.round(u.maxHp * 1.2);
-                u.hp = Math.min(u.hp, u.maxHp);
-                u.sight += 2;
-                u._grenades = (u._grenades || 3) + 1;
-            });
-        },
-    },
-    armor: {
-        name: 'Armor',
-        desc: '+15% vehicle HP, +10% speed, -20% fuel use',
-        apply: () => {
-            Game.units.forEach(u => {
-                if (!u.alive || !Game.isTank(u.kind)) return;
-                u.maxHp = Math.round(u.maxHp * 1.15);
-                u.hp = Math.min(u.hp, u.maxHp);
-                u.speed *= 1.1;
-                u._fuelEfficiency = 0.8;
-            });
-        },
-    },
-    support: {
-        name: 'Support',
-        desc: '+1 air strike, +2 mines, +50% support range',
-        apply: () => {
-            Game.airStrikesAvailable = (Game.airStrikesAvailable || 1) + 1;
-            Game.units.forEach(u => {
-                if (!u.alive) return;
-                if (u.supportType === 'sapper' || u.kind.includes('sapper')) {
-                    u._mines = (u._mines || 2) + 2;
-                }
-                if (u.supportType) {
-                    u.sight = Math.round(u.sight * 1.5);
-                }
-            });
-        },
-    },
-};
-
-Game.activeDoctrine = null;
-
-Game.setDoctrine = (doctrineName) => {
-    const doc = Game.DOCTRINES[doctrineName];
-    if (!doc) return;
-    Game.activeDoctrine = doctrineName;
-    doc.apply();
-    Game.pushMessage(`Doctrine activated: ${doc.name} — ${doc.desc}`, 5.0);
-};
-
 Game.updateHover = () => {
     Game.hoverUnit = null;
     const wx = Game.mouse.worldX, wz = Game.mouse.worldZ;
@@ -1770,6 +1844,7 @@ Game.tick = (now) => {
         Game.updateSupportUnits(dt);
         if (Game.updateIndirectShells) Game.updateIndirectShells(dt);
         if (Game.updateAirStrikes) Game.updateAirStrikes(dt);
+        if (Game.updateThrownGrenades) Game.updateThrownGrenades(dt);
         if (Game.updateSmokeClouds) Game.updateSmokeClouds(dt);
         if (Game.updateTracers3D) Game.updateTracers3D(dt);
         if (Game.updateSmoke3D) Game.updateSmoke3D(dt);
@@ -1849,11 +1924,11 @@ Game.boot = async () => {
         stanceAttack: () => { Game.setOrderStance('attack'); },
         cmdAttackGround: () => { Game._commandMode = 'attackground'; Game.pushMessage('Attack ground — right-click a spot to suppress.', 2.0); },
         cmdStop: () => { Game.selectedPlayerUnits().forEach(u => { u.path = []; u.moving = false; u.orderMode = 'hold'; u.forcedTargetId = null; u.bombardX = null; u.bombardZ = null; u._bombarding = false; }); Game.pushMessage('Units stopped.', 1.0); },
-        cmdHold: () => { Game.selectedPlayerUnits().forEach(u => { u.orderMode = u.orderMode === 'hold' ? 'aggressive' : 'hold'; }); },
+        cmdHold: () => { Game.toggleHoldFire(); },
         cmdGrenade: () => { Game._commandMode = 'grenade'; Game.pushMessage('Grenade — right-click target.', 2.0); },
         cmdMove: () => { Game.setOrderStance('move'); },
         cmdSmoke: () => { Game._commandMode = 'smoke'; Game.pushMessage('Smoke — right-click target.', 2.0); },
-        cmdAirStrike: () => { if (Game.airStrikesAvailable > 0) { Game._commandMode = 'airstrike'; Game.pushMessage('Click target for air strike...', 3.0); } else { Game.pushMessage('No air strikes available!', 2.0); } },
+        cmdAirStrike: () => { if (Game.airStrikesAvailable > 0) { Game._commandMode = 'airstrike'; Game.adjustAirStrikePlanes(0); Game.pushMessage(`Air strike: ${Game.airStrikePlanesToUse} of ${Game.airStrikesAvailable} plane(s). Wheel to adjust, right-click target.`, 3.5); } else { Game.pushMessage('No air strikes available!', 2.0); } },
         cmdRotate: () => { Game._commandMode = 'rotate'; Game.pushMessage('Rotate — right-click direction.', 2.0); },
         cmdProne: () => { Game.toggleProneSelection(); },
     };
@@ -1928,14 +2003,9 @@ Game.startFromMenu = () => {
     const menu = document.getElementById('mainMenu');
     const mission = document.querySelector('.mission-card.selected')?.dataset.mission || 'dyle';
     const side = document.querySelector('.side-btn.selected')?.dataset.side || 'french';
-    const doctrine = document.querySelector('.doc-btn.selected')?.dataset.doctrine || 'infantry';
 
     Game.selectedMission = mission;
     Game.selectedSide = side;
-    Game.selectedDoctrine = doctrine;
-
-    // Apply doctrine
-    if (Game.setDoctrine) Game.setDoctrine(doctrine);
 
     // Hide menu
     menu.classList.add('hidden');
@@ -1961,7 +2031,7 @@ Game.startFromMenu = () => {
         Game.cam.z = nearby.reduce((s, u) => s + u.z, 0) / nearby.length;
     }
 
-    Game.pushMessage(`Mission: ${mission.toUpperCase()} | Side: ${side.toUpperCase()} | Doctrine: ${doctrine.toUpperCase()}`, 5.0);
+    Game.pushMessage(`Mission: ${mission.toUpperCase()} | Side: ${side.toUpperCase()}`, 5.0);
 };
 
 // Save/Load was removed for the single-session public build. A persistent

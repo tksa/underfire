@@ -692,18 +692,57 @@ Game._createUnitMesh = (unit) => {
             const leg = addMesh(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 4), metalMat, 0, 0.3, 0.3);
             leg.rotation.x = 0.5;
         } else if (unit.kind === 'hmg') {
-            // tripod + receiver + barrel
+            // Hotchkiss M1914: low tripod, finned air-cooled barrel, metallic
+            // strip feed, rear spade grips, and a crouched gunner. (+Z forward.)
+            const brass = std(0x96702f, { roughness: 0.45, metalness: 0.35, flatShading: false });
+            const apexY = 0.44;
+
+            // Tripod: three splayed legs (one forward, two rear) up to the cradle.
             for (let i = 0; i < 3; i++) {
-                const a = i * (Math.PI * 2 / 3) + Math.PI / 3;
-                const leg = addMesh(new THREE.CylinderGeometry(0.02, 0.025, 0.55, 4), metalMat,
-                    Math.cos(a) * 0.2, 0.22, Math.sin(a) * 0.2 - 0.1);
-                leg.rotation.z = Math.cos(a) * 0.5;
-                leg.rotation.x = -Math.sin(a) * 0.5;
+                const a = i * (Math.PI * 2 / 3) + Math.PI / 2;
+                const leg = addMesh(new THREE.CylinderGeometry(0.018, 0.028, 0.58, 5), metalMat,
+                    Math.cos(a) * 0.17, apexY * 0.5, Math.sin(a) * 0.17 - 0.06);
+                leg.rotation.z = Math.cos(a) * 0.46;
+                leg.rotation.x = -Math.sin(a) * 0.46;
             }
-            addMesh(new THREE.BoxGeometry(0.14, 0.12, 0.4), gunMat, 0, 0.48, -0.05);
-            const barrelGeo = new THREE.CylinderGeometry(0.025, 0.03, 0.7, 6);
+            // Cradle / pintle on the apex.
+            addMesh(new THREE.CylinderGeometry(0.05, 0.065, 0.12, 8), metalMat, 0, apexY, -0.04);
+            // Receiver body.
+            addMesh(new THREE.BoxGeometry(0.12, 0.11, 0.42), gunMat, 0, apexY + 0.1, 0.0);
+            // Finned cooling jacket — the gun's signature ring stack near the breech.
+            const barrelY = apexY + 0.12;
+            const finGeo = new THREE.CylinderGeometry(0.062, 0.062, 0.03, 10);
+            finGeo.rotateX(Math.PI / 2);
+            for (let f = 0; f < 7; f++) {
+                addMesh(finGeo, brass, 0, barrelY, 0.24 + f * 0.052);
+            }
+            // Slim barrel beyond the jacket + muzzle.
+            const barrelGeo = new THREE.CylinderGeometry(0.022, 0.026, 0.5, 8);
             barrelGeo.rotateX(Math.PI / 2);
-            addMesh(barrelGeo, metalMat, 0, 0.5, 0.4);
+            addMesh(barrelGeo, metalMat, 0, barrelY, 0.72);
+            addMesh(new THREE.BoxGeometry(0.016, 0.06, 0.02), metalMat, 0, barrelY + 0.05, 0.92); // front sight
+            // Metallic feed strip jutting from the right side.
+            const strip = addMesh(new THREE.BoxGeometry(0.26, 0.018, 0.05), brass, 0.15, barrelY + 0.01, 0.16);
+            strip.rotation.y = 0.14;
+            // Rear spade grips.
+            [-1, 1].forEach(s => addMesh(new THREE.BoxGeometry(0.028, 0.16, 0.028), gunMat, s * 0.07, apexY + 0.07, -0.22));
+            addMesh(new THREE.BoxGeometry(0.2, 0.028, 0.028), gunMat, 0, apexY + 0.15, -0.22);
+
+            // Crouched gunner behind the gun.
+            const skinCol = 0xcaa987;
+            const helmetCol = unit.team === Game.TEAM.FRENCH ? 0x515f6e : 0x53574b;
+            const clothMat = std(baseColor, { roughness: 0.9 });
+            Game._addWeathering(clothMat, 0.1);
+            const gnr = new THREE.Group();
+            gnr.position.set(0, 0, -0.42);
+            group.add(gnr);
+            addMesh(new THREE.BoxGeometry(0.32, 0.16, 0.34), std(baseColor.clone().multiplyScalar(0.72), { roughness: 0.95 }), 0, 0.16, 0.02, gnr); // haunches
+            const torso = addMesh(new THREE.BoxGeometry(0.26, 0.26, 0.2), clothMat, 0, 0.42, 0.06, gnr);
+            torso.rotation.x = 0.5; // hunched over the grips
+            addMesh(new THREE.BoxGeometry(0.085, 0.05, 0.085), std(skinCol), 0, 0.58, 0.04, gnr); // neck
+            addMesh(new THREE.SphereGeometry(0.092, 10, 8), std(skinCol), 0, 0.62, 0.13, gnr);     // head
+            addMesh(new THREE.SphereGeometry(0.112, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+                std(helmetCol, { roughness: 0.6 }), 0, 0.64, 0.13, gnr);                            // helmet
         } else {
             // AT gun: carriage + wheels + shield + barrel + trail legs
             const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.1, 10);
@@ -863,9 +902,13 @@ Game._loadUnitModel = (unit, mesh) => {
     const isVeh = Game.isTank(unit.kind);
     const isSup = Game.isSupport(unit.kind);
 
-    // Prefer a team-specific model (e.g. french_hmg.glb = Hotchkiss M1914),
-    // then a generic per-kind model. No cross-kind fallback — the procedural
-    // mesh looks better than a wrong model. Probe each combo once.
+    // The heavy MG (incl. the former french_hmg "Hotchkiss M1914" GLB) is fully
+    // procedural now — the bundled model didn't read well at game scale, so it
+    // was removed in favour of the built mesh in _createUnitMesh.
+    if (unit.kind === 'hmg') return;
+
+    // Prefer a team-specific model, then a generic per-kind model. No cross-kind
+    // fallback — the procedural mesh looks better than a wrong model. Probe once.
     const teamKind = `${unit.team}_${unit.kind}`;
     Game._modelLoadFailed = Game._modelLoadFailed || new Set();
     if (Game._modelLoadFailed.has(teamKind)) return;
@@ -873,8 +916,8 @@ Game._loadUnitModel = (unit, mesh) => {
 
     // Per-model corrections: yaw (radians) when the source faces the wrong way,
     // and an extra scale multiplier on top of footprint normalization.
-    const MODEL_YAW = {};                       // hotchkiss faces +Z correctly — no flip
-    const MODEL_SCALE = { french_hmg: 1.21 };   // ~20% larger (two +10% bumps)
+    const MODEL_YAW = {};
+    const MODEL_SCALE = {};
 
     // Try each path sequentially until one works
     const tryLoad = (idx) => {

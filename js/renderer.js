@@ -794,6 +794,24 @@ Game.updateHUD = () => {
         proneBtn.classList.toggle('active', proneActive);
     }
 
+    // Hold button lights up while the selection is holding fire
+    const holdBtn = document.getElementById('cmdHold');
+    if (holdBtn) {
+        const sel = Game.selectedPlayerUnits();
+        holdBtn.classList.toggle('active', sel.length > 0 && sel.every(u => u.holdFire));
+    }
+
+    // Air strike button: badge shows planes-to-use / available; armed + dimmed states
+    const strikeBtn = document.getElementById('cmdAirStrike');
+    const strikeBadge = document.getElementById('airStrikeBadge');
+    if (strikeBtn && strikeBadge) {
+        const avail = Game.airStrikesAvailable || 0;
+        const toUse = avail > 0 ? Math.max(1, Math.min(Game.airStrikePlanesToUse || 1, avail)) : 0;
+        strikeBadge.textContent = avail > 0 ? `${toUse}/${avail}` : '0';
+        strikeBtn.classList.toggle('disabled', avail <= 0);
+        strikeBtn.classList.toggle('armed', Game._commandMode === 'airstrike');
+    }
+
     // Status pill
     if (Game.hud.statusPill) {
         Game.hud.statusPill.textContent = Game.missionState.won
@@ -849,7 +867,7 @@ Game.updateHUD = () => {
             Game.hud.selectedPanel.innerHTML = `
         <div class="hud-title">Selected</div>
         <div class="hud-unit-name">${u.label}</div>
-        <div class="hud-text">Move: ${(Game.STANCE_LABEL && Game.STANCE_LABEL[u.stance]) || u.stance} • Fire: ${u.orderMode === 'hold' ? 'hold' : 'fire'} • ${u.behavior || 'defensive'}</div>
+        <div class="hud-text">Move: ${(Game.STANCE_LABEL && Game.STANCE_LABEL[u.stance]) || u.stance} • Fire: ${u.holdFire ? '<span style="color:#ff9a4d;font-weight:600">HOLD</span>' : 'free'} • ${u.behavior || 'defensive'}</div>
         <div class="hud-text">HP ${Math.round(u.hp)} • ${ammoText}${fuelStr} • XP ${Math.round(u.experience || 0)}</div>
         ${statusFlags.length ? `<div class="hud-text" style="color:#ff6b5e;font-weight:600">${statusFlags.join(' &nbsp; ')}</div>` : ''}
         <div class="hud-bar"><div class="hud-bar-fill hp" style="width:${hpPct}%"></div></div>

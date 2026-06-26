@@ -19,10 +19,11 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null) => {
 
     const offsets = Game.formationOffsets(chosen.length, 2.5);
     chosen.forEach((unit, i) => {
-        // A move order cancels any standing attack/bombard commitment
+        // A move order cancels any standing attack/bombard/facing commitment
         unit.forcedTargetId = null;
         unit.bombardX = null; unit.bombardZ = null;
         unit._bombarding = false;
+        unit._faceAngle = null; unit._faceUntil = 0;
         // Rotate offset to face movement direction
         const rx = offsets[i].x * Math.cos(angle) - offsets[i].z * Math.sin(angle);
         const rz = offsets[i].x * Math.sin(angle) + offsets[i].z * Math.cos(angle);
@@ -34,7 +35,7 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null) => {
         // Attack-move: advance to the area but stop to engage any enemy that comes
         // into range, then push on. A plain move keeps the unit's current stance;
         // hold stays put-and-defend.
-        if (mode === 'attack') unit.orderMode = 'assault';
+        if (mode === 'attack') { unit.orderMode = 'assault'; unit.holdFire = false; }
         else if (mode === 'hold') unit.orderMode = 'hold';
         // Combat readiness: a plain Move travels "weapons stowed" — the unit needs
         // a moment to react to contact. Attack-move advances already ready.
@@ -127,6 +128,7 @@ Game.orderAttackGround = (x, z) => {
         u.bombardX = x; u.bombardZ = z;
         u.forcedTargetId = null;
         u.orderMode = 'aggressive';
+        u.holdFire = false;
         u._bombarding = false;
         u._combatReady = true;
         u.stopTimer = 0;
@@ -157,10 +159,14 @@ Game.commandDelay = (unit) => {
 };
 
 // Nearest enemy (of the player) to a world point, within pick radius.
+// Fog-gated: an enemy the player hasn't currently spotted can't be picked, so
+// clicking blind into the fog issues a ground order instead of silently
+// "homing" onto a hidden unit and giving its position away.
 Game.enemyAtWorld = (x, z) => {
     let best = null, bestD = Infinity;
     for (const u of Game.units) {
         if (!u.alive || u.team === Game.TEAM.FRENCH) continue;
+        if (Game.isFogVisible && !Game.isFogVisible(u.x, u.z)) continue;
         const d = Game.distSq(x, z, u.x, u.z);
         const pick = Math.max((u.size + 0.9) * (u.size + 0.9), 3.5);
         if (d < pick && d < bestD) { bestD = d; best = u; }
@@ -189,6 +195,7 @@ Game.orderAttackTarget = (target) => {
         u.forcedTargetId = target.id;
         u.bombardX = null; u.bombardZ = null;
         u.orderMode = 'aggressive';
+        u.holdFire = false;
         u._combatReady = true; // explicit attack — engage on contact
         const d = Game.dist(u.x, u.z, target.x, target.z);
         if (d > u.range * 0.9) {
@@ -319,6 +326,34 @@ Game._showFormationPreview = (wx, wz) => {
     });
 };
 
+/**
+ * Rotate: turn the selected units in place to face a point. Sets a persistent
+ * desired facing (held briefly) so the turn is actually carried out by the move
+ * module instead of being snapped and instantly overwritten by path/aim logic.
+ * Tanks swing hull + turret; infantry/guns pivot to face.
+ */
+Game.orderFace = (x, z) => {
+    const chosen = Game.selectedPlayerUnits();
+    if (!chosen.length) return;
+    chosen.forEach(u => {
+        u._faceAngle = Game.angleTo(u.x, u.z, x, z);
+        u._faceUntil = Game.gameClock + 4;     // hold the manual facing while it turns
+        u.path = [];
+        u.moving = false;
+        u.forcedTargetId = null;
+        u._engageId = null;
+        u.bombardX = null; u.bombardZ = null; u._bombarding = false;
+        u.stopTimer = Math.max(u.stopTimer || 0, 0.2);
+    });
+    Game.spawnOrderMarker(x, z, 0xffd27a);     // amber = facing
+    Game.pushMessage('Facing set.', 1.2);
+    if (Game.Audio) {
+        const anyTank = chosen.some(u => Game.isTank(u.kind));
+        Game.Audio.voice(anyTank ? 'f_tank_move' : 'f_sold_move');
+    }
+    Game._clearFormationPreview();
+};
+
 Game.haltSelection = () => {
     Game.selectedPlayerUnits().forEach(u => {
         u.path = [];
@@ -356,9 +391,32 @@ Game.toggleProneSelection = () => {
     Game.pushMessage(anyUp ? 'Crawling (prone).' : 'Standing up.', 1.5);
 };
 
-Game.setHoldFire = (toggle) => {
-    Game.selectedPlayerUnits().forEach(u => u.orderMode = toggle ? 'hold' : 'aggressive');
-    Game.pushMessage(toggle ? 'Hold fire set.' : 'Aggressive fire set.', 1.7);
+// The selected foot soldier nearest a target point — used for grenade/smoke so
+// the closest man (most likely in range) does the throwing, not just the first.
+Game.nearestThrower = (x, z) => {
+    let best = null, bd = Infinity;
+    for (const u of Game.selectedPlayerUnits()) {
+        if (Game.isTank(u.kind)) continue;
+        const d = Game.distSq(u.x, u.z, x, z);
+        if (d < bd) { bd = d; best = u; }
+    }
+    return best;
+};
+
+// Hold fire is a dedicated stand-down flag (separate from move/attack orders):
+// the unit keeps its orders and still relocates, but will not open fire or seek
+// targets until weapons are freed again.
+Game.setHoldFire = (on) => {
+    Game.selectedPlayerUnits().forEach(u => { u.holdFire = !!on; });
+};
+
+Game.toggleHoldFire = () => {
+    const sel = Game.selectedPlayerUnits();
+    if (!sel.length) { Game.pushMessage('No unit selected.', 1.2); return; }
+    const turnOn = sel.some(u => !u.holdFire);   // any weapon free -> hold them all
+    sel.forEach(u => { u.holdFire = turnOn; });
+    Game.pushMessage(turnOn ? 'Holding fire — weapons safe.' : 'Weapons free — fire at will.', 1.6);
+    if (Game.Audio) Game.Audio.voice('f_sold_select');
 };
 
 Game.handleMouseSelection = () => {
@@ -485,18 +543,17 @@ Game.handleInputEvents = () => {
                     if (sapper) Game.throwTNT(sapper, ground.x, ground.z);
                     Game._commandMode = null;
                 } else if (Game._commandMode === 'grenade') {
-                    const thrower = Game.selectedPlayerUnits().find(u => !Game.isTank(u.kind));
+                    const thrower = Game.nearestThrower(ground.x, ground.z);
                     if (thrower) Game.throwGrenade(thrower, ground.x, ground.z);
+                    else Game.pushMessage('Select infantry to throw a grenade.', 1.5);
                     Game._commandMode = null;
                 } else if (Game._commandMode === 'smoke') {
-                    const thrower = Game.selectedPlayerUnits().find(u => !Game.isTank(u.kind));
+                    const thrower = Game.nearestThrower(ground.x, ground.z);
                     if (thrower) Game.throwSmoke(thrower, ground.x, ground.z);
+                    else Game.pushMessage('Select infantry to throw smoke.', 1.5);
                     Game._commandMode = null;
                 } else if (Game._commandMode === 'rotate') {
-                    Game.selectedPlayerUnits().forEach(u => {
-                        u.angle = Game.angleTo(u.x, u.z, ground.x, ground.z);
-                        u.turretAngle = u.angle;
-                    });
+                    Game.orderFace(ground.x, ground.z);
                     Game._commandMode = null;
                 } else if (Game._commandMode === 'attackground') {
                     Game.orderAttackGround(ground.x, ground.z);
@@ -569,9 +626,14 @@ Game.handleInputEvents = () => {
     });
 
     // Mouse wheel does NOT zoom — use the +/- keys. Swallow the event so the
-    // page/trackpad never scrolls the canvas.
+    // page/trackpad never scrolls the canvas. While an air strike is armed, the
+    // wheel sets how many planes to commit.
     container.addEventListener('wheel', e => {
         e.preventDefault();
+        if (Game._commandMode === 'airstrike') {
+            Game.adjustAirStrikePlanes(e.deltaY < 0 ? 1 : -1);
+            Game.pushMessage(`Air strike: ${Game.airStrikePlanesToUse} of ${Game.airStrikesAvailable} plane(s) — right-click target.`, 2.0);
+        }
     }, { passive: false });
 
     window.addEventListener('keydown', e => {
@@ -676,7 +738,8 @@ Game.handleInputEvents = () => {
         if (e.code === 'KeyB') {
             if (Game.airStrikesAvailable > 0) {
                 Game._commandMode = 'airstrike';
-                Game.pushMessage('Click target for air strike...', 3.0);
+                Game.adjustAirStrikePlanes(0); // clamp selector to current stock
+                Game.pushMessage(`Air strike: ${Game.airStrikePlanesToUse} of ${Game.airStrikesAvailable} plane(s). Wheel to adjust, right-click target.`, 3.5);
             } else {
                 Game.pushMessage('No air strikes available!', 2.0);
             }
@@ -737,11 +800,7 @@ Game.handleInputEvents = () => {
 
         // Hold fire toggle (H key)
         if (e.code === 'KeyH') {
-            Game.selectedPlayerUnits().forEach(u => {
-                u.orderMode = u.orderMode === 'hold' ? 'aggressive' : 'hold';
-            });
-            const first = Game.selectedPlayerUnits()[0];
-            if (first) Game.pushMessage(`Fire: ${first.orderMode}`, 1.0);
+            Game.toggleHoldFire();
         }
 
         // Pause / unpause (P key)

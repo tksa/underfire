@@ -475,50 +475,6 @@
       border-radius: 10px; padding: 1px 6px; margin-left: 4px; vertical-align: middle;
     }
 
-    .doc-row {
-      display: flex;
-      gap: 8px;
-    }
-
-    .doc-row.disabled {
-      opacity: 0.4;
-      filter: grayscale(0.8);
-      pointer-events: none;
-    }
-
-    .doc-btn {
-      flex: 1;
-      padding: 8px 6px;
-      text-align: center;
-      border: 1px solid rgba(102, 108, 120, 0.3);
-      border-radius: 3px;
-      cursor: pointer;
-      background: rgba(30, 33, 39, 0.6);
-      color: #d7dde6;
-      font-size: 11px;
-      transition: all 0.15s;
-    }
-
-    .doc-btn:hover {
-      background: rgba(52, 56, 64, 0.6);
-    }
-
-    .doc-btn.selected {
-      border-color: #c9a45d;
-      background: rgba(58, 63, 72, 0.7);
-    }
-
-    .doc-btn .db-name {
-      font-weight: 600;
-      font-size: 12px;
-    }
-
-    .doc-btn .db-desc {
-      font-size: 10px;
-      color: #8e96a2;
-      margin-top: 2px;
-    }
-
     .menu-start {
       width: 100%;
       padding: 14px;
@@ -835,6 +791,7 @@
     }
 
     .cmd-btn {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -847,6 +804,29 @@
       cursor: pointer;
       transition: background 0.15s, border-color 0.15s;
       user-select: none;
+    }
+
+    /* Count badge (e.g. air strike planes to-use / available) */
+    .cmd-badge {
+      position: absolute;
+      top: 1px;
+      right: 2px;
+      font-size: 8px;
+      font-weight: 700;
+      line-height: 1;
+      padding: 1px 3px;
+      border-radius: 6px;
+      background: rgba(40, 120, 200, 0.92);
+      color: #fff;
+      letter-spacing: 0;
+    }
+
+    .cmd-btn.disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .cmd-btn.disabled .cmd-badge {
+      background: rgba(120, 120, 120, 0.85);
     }
 
     .cmd-btn:hover {
@@ -1227,7 +1207,7 @@
           C: Run/Walk/Crouch/Crawl &nbsp; S: Run toggle &nbsp; F: First aid<br>
           G: Grenade &nbsp; T: Smoke &nbsp; V: Stop &nbsp; H: Hold fire<br>
           E: Assault &nbsp; R: Rotate &nbsp; N: Entrench &nbsp; M: Mine &nbsp; Q: Garrison<br>
-          B: Air strike &nbsp; J: Recon &nbsp; Y: Binoculars &nbsp; K: TNT (sapper)<br>
+          B: Air strike (wheel = planes) &nbsp; J: Recon &nbsp; Y: Binoculars &nbsp; K: TNT (sapper)<br>
           Space: Pause &nbsp; X: Exit vehicle &nbsp; L: Last attack<br>
           RC enemy: Attack target &nbsp; RC ground (mortar): Bombard<br>
           Arrows / screen edge: Pan &nbsp; + / -: Zoom<br>
@@ -1262,7 +1242,7 @@
               class="cmd-label">Grenade</span></div>
           <div class="cmd-btn" id="cmdSmoke" title="Smoke (T)"><span class="cmd-icon">🌫</span><span
               class="cmd-label">Smoke</span></div>
-          <div class="cmd-btn" id="cmdAirStrike" title="Air Strike (B)"><span class="cmd-icon">✈</span><span
+          <div class="cmd-btn" id="cmdAirStrike" title="Air Strike (B) — wheel to set planes"><span class="cmd-badge" id="airStrikeBadge">0</span><span class="cmd-icon">✈</span><span
               class="cmd-label">Strike</span></div>
           <div class="cmd-btn" id="cmdRotate" title="Rotate (R)"><span class="cmd-icon">↻</span><span
               class="cmd-label">Rotate</span></div>
@@ -1408,24 +1388,6 @@
       </div>
 
       <div class="menu-section">
-        <div class="menu-section-title"><span data-i18n="m_doctrine">Doctrine</span> <span class="side-soon" data-i18n="soon">soon</span></div>
-        <div class="doc-row disabled">
-          <div class="doc-btn selected" data-doctrine="infantry">
-            <div class="db-name" data-i18n="doc_inf">Infantry</div>
-            <div class="db-desc" data-i18n="doc_inf_d">+20% HP, +2 sight</div>
-          </div>
-          <div class="doc-btn" data-doctrine="armor">
-            <div class="db-name" data-i18n="doc_arm">Armor</div>
-            <div class="db-desc" data-i18n="doc_arm_d">+15% HP, +10% speed</div>
-          </div>
-          <div class="doc-btn" data-doctrine="support">
-            <div class="db-name" data-i18n="doc_sup">Support</div>
-            <div class="db-desc" data-i18n="doc_sup_d">+1 airstrike, +2 mines</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="menu-section">
         <div class="menu-section-title" data-i18n="m_updates">Latest Updates</div>
         <div class="menu-updates" id="menuUpdates"></div>
       </div>
@@ -1447,12 +1409,6 @@
       btn.addEventListener('click', () => {
         if (btn.classList.contains('disabled')) return; // German not playable yet
         document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-      });
-    });
-    document.querySelectorAll('.doc-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.doc-btn').forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
       });
     });

@@ -21,3 +21,10 @@ package-lock.json
 # Local environment
 .env
 .env.local
+
+# Meshy working files (prompts/reference; not part of the shipped game)
+meshy/
+
+# Third-party Blender MCP addon (install in Blender; get it from
+# github.com/ahujasid/blender-mcp). Not bundled in this repo.
+tools/blender_mcp_addon.py

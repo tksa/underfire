@@ -127,6 +127,9 @@ Game.uMod.deploy = (unit, ctx) => {
 // Sets ctx.enemy.
 Game.uMod.scan = (unit, ctx) => {
     let enemy = null;
+    // Manual "Rotate" facing in progress: hold the ordered bearing and don't let
+    // an auto-acquired target spin the unit away from it.
+    const facing = unit._faceAngle != null && (unit._faceUntil || 0) > Game.gameClock;
     if (unit.forcedTargetId != null) {
         const ft = Game.getUnitById(unit.forcedTargetId);
         if (ft && ft.alive && ft.team !== unit.team) {
@@ -138,8 +141,9 @@ Game.uMod.scan = (unit, ctx) => {
             unit._pursueAnchor = null;
         }
     }
-    // A holding or retreating unit doesn't go looking for a fight.
-    if (!enemy && unit.orderMode !== 'hold' && unit.orderMode !== 'retreat') {
+    // A holding or retreating unit (or one ordered to hold fire) doesn't go
+    // looking for a fight.
+    if (!enemy && !facing && !unit.holdFire && unit.orderMode !== 'hold' && unit.orderMode !== 'retreat') {
         enemy = Game.nearestEnemy(unit);
     }
     // Sticky engagement: once a unit acquires a target it commits to it through a
@@ -150,7 +154,7 @@ Game.uMod.scan = (unit, ctx) => {
     if (enemy) {
         unit._engageId = enemy.id;
         unit._engageTime = Game.gameClock;
-    } else if (unit._engageId != null && unit.orderMode !== 'retreat'
+    } else if (unit._engageId != null && unit.orderMode !== 'retreat' && !unit.holdFire && !facing
         && (Game.gameClock - (unit._engageTime || 0)) < 1.6) {
         const le = Game.getUnitById(unit._engageId);
         if (le && le.alive && le.team !== unit.team
@@ -228,7 +232,7 @@ Game.uMod.fire = (unit, ctx) => {
     const enemy = ctx.enemy;
     const dt = ctx.dt;
     const isVeh = ctx.isVeh;
-    const canFire = !(Game.isTank(unit.kind) && unit.turretDamaged);
+    const canFire = !unit.holdFire && !(Game.isTank(unit.kind) && unit.turretDamaged);
     const hasTurret = isVeh && unit.hasTurret;
     const aimAngleToEnemy = enemy ? Game.angleTo(unit.x, unit.z, enemy.x, enemy.z) : null;
     ctx.hasTurret = hasTurret;
@@ -566,6 +570,33 @@ Game.uMod.move = (unit, ctx) => {
             }
         } else {
             unit.currentSpeed = 0;
+        }
+
+        // Manual "Rotate" order: turn in place toward the ordered bearing. Tanks
+        // swing hull (and turret); infantry/guns pivot. Cleared once aligned.
+        if (unit._faceAngle != null) {
+            if (isVeh) {
+                unit.angle = Game.rotateTo(unit.angle, unit._faceAngle, unit.rotationSpeed * dt);
+                if (hasTurret) {
+                    const tRot = Game.rotateWithInertia(
+                        unit.turretAngle, unit.turretAngVel, unit._faceAngle,
+                        unit.turretRotSpeed, unit.turretAccel, dt);
+                    unit.turretAngle = tRot.angle;
+                    unit.turretAngVel = tRot.angVel;
+                } else {
+                    unit.turretAngle = unit.angle;
+                }
+            } else {
+                unit.angle = Game.lerpAngle(unit.angle, unit._faceAngle,
+                    Game.clamp(unit.rotationSpeed * dt, 0, 1));
+                unit.turretAngle = unit.angle;
+            }
+            const hullSet = Math.abs(Game.angleDiff(unit.angle, unit._faceAngle)) < 0.04;
+            const turretSet = !hasTurret || Math.abs(Game.angleDiff(unit.turretAngle, unit._faceAngle)) < 0.06;
+            if ((hullSet && turretSet) || (unit._faceUntil || 0) <= Game.gameClock) {
+                unit._faceAngle = null;
+                unit._faceUntil = 0;
+            }
         }
     }
 

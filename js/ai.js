@@ -121,6 +121,29 @@ Game.updateAI = (unit, dt, enemy) => {
     // isolated soldier breaks sooner.
     const steady = unit._steadied ? 12 : 0;
 
+    // ── TANK HUNTER: a foot soldier with an enemy tank right on top of him pulls
+    //    an anti-tank grenade bundle and lobs it (RWM close-assault). Checked
+    //    before the cover/retreat branches so a cornered man still fights back. ──
+    if (!isVeh && unit.class === 'infantry') {
+        unit._atGrenades = unit._atGrenades ?? 2;
+        if (unit._atGrenades > 0 && (unit._atNext == null || Game.gameClock >= unit._atNext)) {
+            let tank = null, bd = 7 * 7;
+            for (const e of Game.units) {
+                if (!e.alive || e.team === unit.team || !Game.isTank(e.kind)) continue;
+                const ed = Game.distSq(unit.x, unit.z, e.x, e.z);
+                if (ed < bd && Game.unitCanSee(unit, e)) { bd = ed; tank = e; }
+            }
+            if (tank && Game.spawnThrownGrenade) {
+                unit._atGrenades--;
+                unit._atNext = Game.gameClock + Game.rand(2.5, 4.5);
+                unit.angle = Game.angleTo(unit.x, unit.z, tank.x, tank.z);
+                Game.spawnThrownGrenade(unit.x, unit.z,
+                    tank.x + Game.rand(-0.6, 0.6), tank.z + Game.rand(-0.6, 0.6),
+                    { type: 'at', dmg: 45, blastR: 2.2, supp: 18, arc: 1.4 });
+            }
+        }
+    }
+
     // ── RETREAT: squad broken or near death — fall back to the rally point ──
     if (posture === 'fallback' || hpPct < 0.22) {
         unit._ai = 'retreat';

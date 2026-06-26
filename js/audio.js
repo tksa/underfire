@@ -124,6 +124,36 @@ Game.Audio = (() => {
         } catch (e) { /* ignore */ }
     };
 
+    // Synthesized aircraft drone for an inbound air strike (no sample needed).
+    // Two detuned sawtooth "engines" with vibrato, pitch rising as it nears, and
+    // a swell-then-fade gain so it reads as a flight passing overhead.
+    const plane = (dur = 3.4) => {
+        if (!enabled) return;
+        try {
+            actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+            if (actx.state === 'suspended') actx.resume();
+            const now = actx.currentTime;
+            const out = actx.createGain();
+            out.gain.setValueAtTime(0.0001, now);
+            out.gain.exponentialRampToValueAtTime(0.22 * master, now + dur * 0.45);
+            out.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+            out.connect(actx.destination);
+            [68, 70].forEach((f, i) => {
+                const o = actx.createOscillator();
+                o.type = 'sawtooth';
+                o.frequency.setValueAtTime(f * 0.85, now);
+                o.frequency.linearRampToValueAtTime(f * 1.3, now + dur); // approach Doppler rise
+                const lfo = actx.createOscillator(), lfoG = actx.createGain();
+                lfo.frequency.value = 10 + i * 2.5;   // prop beat
+                lfoG.gain.value = 7;
+                lfo.connect(lfoG); lfoG.connect(o.frequency);
+                o.connect(out);
+                o.start(now); o.stop(now + dur);
+                lfo.start(now); lfo.stop(now + dur);
+            });
+        } catch (e) { /* ignore */ }
+    };
+
     // Per-frame mix of the looping beds. Ambience is constant; the engine
     // layer follows the loudest moving vehicle near the camera.
     const updateAmbient = (dt) => {
@@ -179,6 +209,7 @@ Game.Audio = (() => {
         cannon: (x, z) => play('cannon', x, z),
         explosion: (x, z) => play('explosion', x, z),
         ricochet: (x, z) => playFile(Math.random() < 0.5 ? 'ricochet' : 'ricochet_ground', 0.5, x, z, true),
+        plane,
         voice,
         click,
         updateAmbient,
