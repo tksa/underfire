@@ -100,8 +100,22 @@ Game.applySeparation = (unit, dt) => {
             // moving FRIENDLY tank we scramble clear of (it won't crush us anyway).
             if (!isVeh && otherVeh) {
                 const tankRolling = (other.currentSpeed || 0) > 0.6;
-                if (tankRolling && other.team !== unit.team) strength = 0; // enemy tank runs us over
-                else strength *= 4.0;                                      // dodge a friendly hull / shoulder past a stopped one
+                if (tankRolling && other.team !== unit.team) {
+                    strength = 0; // only an ENEMY tank rolls over us
+                } else {
+                    strength *= 4.0; // shoulder past a stopped hull
+                    // A FRIENDLY tank bearing down: step ASIDE, perpendicular to
+                    // its heading toward the nearer side, so we clear its path
+                    // instead of being shoved straight ahead of it (= bulldozed).
+                    if (tankRolling) {
+                        const fX = Math.cos(other.angle), fZ = Math.sin(other.angle);
+                        let pX = -fZ, pZ = fX;                              // tank's side axis
+                        if (dx * pX + dz * pZ < 0) { pX = -pX; pZ = -pZ; }  // pick the nearer side
+                        const lateral = (overlap + 0.6) * 9.0;
+                        sepX += pX * lateral;
+                        sepZ += pZ * lateral;
+                    }
+                }
             }
             // Tanks are immovable by infantry
             if (isVeh && !otherVeh) strength = 0;
