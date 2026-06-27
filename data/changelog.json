@@ -1,8 +1,18 @@
 {
  "version": "v0.6.0-dev",
- "build": "3762114",
- "generated": "2026-06-26",
+ "build": "5b12c14",
+ "generated": "2026-06-27",
  "commits": [
+  {
+   "hash": "5b12c14",
+   "date": "2026-06-27",
+   "subject": "EZ-Tree trees/hedges, postprocessing, FSR-like upscaler, road + debug overhaul"
+  },
+  {
+   "hash": "1a73000",
+   "date": "2026-06-26",
+   "subject": "refresh data/changelog.json (Latest Updates)"
+  },
   {
    "hash": "3762114",
    "date": "2026-06-26",
@@ -62,16 +72,6 @@
    "hash": "8499c41",
    "date": "2026-06-26",
    "subject": "towed-gun deploy/limber (RWM siege) + RWM logic reference"
-  },
-  {
-   "hash": "917d364",
-   "date": "2026-06-25",
-   "subject": "separate Attack Ground order"
-  },
-  {
-   "hash": "c3235e9",
-   "date": "2026-06-25",
-   "subject": "always-fresh JS via per-load cache-buster on script URLs"
   }
  ]
 }
