@@ -175,13 +175,13 @@
       color: #c9a45d; border: 1px solid rgba(201, 164, 93, 0.5); border-radius: 10px;
       padding: 1px 6px; margin-left: 4px; vertical-align: middle;
     }
-    /* Language selector (top-right) */
+    /* Language selector (top-right) — hidden at launch; English is the default. */
     #langBar {
       position: fixed;
       top: 12px;
       right: 14px;
       z-index: 10002;
-      display: flex;
+      display: none;
       gap: 5px;
       background: rgba(16, 18, 22, 0.55);
       border: 1px solid rgba(106, 114, 126, 0.35);
@@ -1138,16 +1138,16 @@
       <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Lighting
       </div>
       <label>Sun Intensity
-        <input type="range" id="dbgSun" min="0" max="3" step="0.05" value="2.8">
-        <span class="dbg-val" id="dbgSunVal">2.80</span>
+        <input type="range" id="dbgSun" min="0" max="6" step="0.05" value="5.05">
+        <span class="dbg-val" id="dbgSunVal">5.05</span>
       </label>
       <label>Ambient
-        <input type="range" id="dbgAmbient" min="0" max="2" step="0.05" value="1.3">
-        <span class="dbg-val" id="dbgAmbientVal">1.30</span>
+        <input type="range" id="dbgAmbient" min="0" max="5" step="0.05" value="2.1">
+        <span class="dbg-val" id="dbgAmbientVal">2.10</span>
       </label>
       <label>Cloud Shadows
-        <input type="range" id="dbgCloud" min="0" max="0.5" step="0.01" value="0.18">
-        <span class="dbg-val" id="dbgCloudVal">0.18</span>
+        <input type="range" id="dbgCloud" min="0" max="0.5" step="0.01" value="0">
+        <span class="dbg-val" id="dbgCloudVal">0.00</span>
       </label>
       <label style="gap:4px"><input type="checkbox" id="dbgDynLight" checked> Dynamic Light</label>
 
@@ -1461,7 +1461,7 @@
     // data/changelog.json is generated from the git commit log at deploy time
     // (scripts/gen-changelog.mjs) and fetched here — no build step. Falls back to
     // a short built-in list if it can't be loaded.
-    const UNDER_VERSION = 'v0.6.0-dev';
+    const UNDER_VERSION = 'v0.7.0-dev';
     const vEl = document.getElementById('menuVersion');
     const upEl = document.getElementById('menuUpdates');
     if (vEl) vEl.textContent = UNDER_VERSION;
@@ -1498,7 +1498,9 @@
     "imports": {
       "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.180.0/three.module.min.js",
       "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
-      "fflate": "https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js"
+      "fflate": "https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js",
+      "@dgreenheck/ez-tree": "https://cdn.jsdelivr.net/npm/@dgreenheck/ez-tree@1.1.0/build/ez-tree.es.js",
+      "postprocessing": "https://cdn.jsdelivr.net/npm/postprocessing@6.39.1/build/index.js"
     }
   }
   </script>

@@ -132,13 +132,23 @@ Game.applyShot = (shooter, target) => {
         mesh: null,
     });
 
-    // Fire SFX (muzzle) + HE impact SFX
+    // Fire SFX (muzzle) + HE impact SFX. Pick by the actual weapon first (so an
+    // MG-armed tank rattles instead of booming), falling back to "any vehicle/gun
+    // fires a cannon" — which also covers imported units whose kind isn't in the
+    // hardcoded tank list and whose synthesized weapon type is cannon/at/aa/gun.
     if (Game.Audio) {
-        if (isTankShooter || weapon.type === 'atgun' || weapon.type === 'tankgun') {
-            Game.Audio.cannon(muzzleX, muzzleZ);
-        } else if (weapon.type === 'lmg' || weapon.type === 'hmg' || weapon.type === 'smg') {
+        const wt = weapon.type;
+        const isMG = ['lmg', 'hmg', 'smg', 'mg', 'machine'].includes(wt);
+        // Foot soldiers never boom like a gun — a crewman's pistol or an AT rifle
+        // is still a small-arms crack, even when its w_type came over as "at"/"gun".
+        const isBigGun = !isMG && shooter.class !== 'infantry'
+            && (['tankgun', 'atgun', 'cannon', 'at', 'aa', 'gun', 'howitzer', 'flak'].includes(wt)
+                || isTankShooter || shooter.class === 'vehicle');
+        if (isMG) {
             Game.Audio.mg(muzzleX, muzzleZ);
-        } else if (weapon.type !== 'mortar') {
+        } else if (isBigGun) {
+            Game.Audio.cannon(muzzleX, muzzleZ);
+        } else if (wt !== 'mortar' && wt !== 'none') {
             Game.Audio.rifle(muzzleX, muzzleZ);
         }
         if (weapon.heBlast && weapon.heBlast > 1.0) {

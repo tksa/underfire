@@ -7,12 +7,26 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
+import { Tree } from '@dgreenheck/ez-tree';
+import {
+    EffectComposer, RenderPass, EffectPass,
+    BloomEffect, TiltShiftEffect, HueSaturationEffect,
+    BrightnessContrastEffect, VignetteEffect, SMAAEffect,
+    BlendFunction, KernelSize,
+} from 'postprocessing';
 window.THREE = THREE;
 window.Game.THREE = THREE;
 window.Game.FBXLoader = FBXLoader;
 window.Game.PLYLoader = PLYLoader;
 window.Game.GLTFLoader = GLTFLoader;
 window.Game.SkeletonUtils = { clone: skeletonClone };  // proper clone for rigged/skinned models
+window.Game.EZTree = { Tree };   // procedural tree generator (MIT); we swap in CC0 materials
+window.Game.PostFX = {           // pmndrs/postprocessing (MIT), loaded from CDN
+    EffectComposer, RenderPass, EffectPass,
+    BloomEffect, TiltShiftEffect, HueSaturationEffect,
+    BrightnessContrastEffect, VignetteEffect, SMAAEffect,
+    BlendFunction, KernelSize,
+};
 
 // ═══════════════════════════════════════════════════════
 //  UNIT COLLISION AVOIDANCE
@@ -22,11 +36,12 @@ window.Game.SkeletonUtils = { clone: skeletonClone };  // proper clone for rigge
  * Apply separation steering so units don't overlap.
  * Tanks push harder; infantry yields to tanks.
  */
-// A moving tank that drives over a man crushes him. Lethal, regardless of team
-// (the player's tanks flatten enemy AND friendly infantry that don't get clear).
+// A moving tank that drives over an ENEMY man crushes him. Tanks never crush their
+// own side — friendly infantry get shoved clear instead (see applySeparation).
 // Crew-served gun teams get crushed too; other tanks do not (handled by collision).
 Game.crushUnit = (tank, victim) => {
     if (!victim.alive || victim._crushed) return;
+    if (victim.team === tank.team) return;   // never run over friendlies
     if (Game.isTank(victim.kind) || victim._towed || victim._inVehicle != null) return;
     victim._crushed = true;
     victim.hp = 0;
@@ -59,9 +74,11 @@ Game.applySeparation = (unit, dt) => {
 
         const otherVeh = Game.isTank(other.kind);
 
-        // Run-over: a moving tank overlapping foot soldiers flattens them rather
-        // than nudging them aside (no more "bounce off the bow").
-        if (isVeh && !otherVeh && tankMoving && distSq < crushRadius * crushRadius) {
+        // Run-over: a moving tank overlapping ENEMY foot soldiers flattens them
+        // rather than nudging them aside (no more "bounce off the bow"). Friendly
+        // infantry are never crushed — they fall through to separation and dodge.
+        if (isVeh && !otherVeh && tankMoving && other.team !== unit.team
+            && distSq < crushRadius * crushRadius) {
             Game.crushUnit(unit, other);
             continue;
         }
@@ -78,11 +95,13 @@ Game.applySeparation = (unit, dt) => {
 
             let strength = overlap * 3.0;
 
-            // Infantry vs tank: a *parked* tank is a solid obstacle to step around,
-            // but a *moving* one is not pushed away from — it drives over you.
+            // Infantry vs tank: a *parked* tank is a solid obstacle to step around.
+            // A moving ENEMY tank is not pushed away from — it drives over you. A
+            // moving FRIENDLY tank we scramble clear of (it won't crush us anyway).
             if (!isVeh && otherVeh) {
-                if ((other.currentSpeed || 0) > 0.6) strength = 0; // let it run us over
-                else strength *= 4.0;                              // shoulder past a stopped hull
+                const tankRolling = (other.currentSpeed || 0) > 0.6;
+                if (tankRolling && other.team !== unit.team) strength = 0; // enemy tank runs us over
+                else strength *= 4.0;                                      // dodge a friendly hull / shoulder past a stopped one
             }
             // Tanks are immovable by infantry
             if (isVeh && !otherVeh) strength = 0;
@@ -1369,9 +1388,9 @@ Game.updateLighting = (dt) => {
     const t = Game.gameClock;
     const dynEnabled = document.getElementById('dbgDynLight')?.checked ?? true;
 
-    const sunBase = Game._dbgSunBase ?? 2.4;
-    const ambBase = Game._dbgAmbientBase ?? 1.4;
-    const cloudBase = Game._dbgCloudBase ?? 0.18;
+    const sunBase = Game._dbgSunBase ?? 5.05;
+    const ambBase = Game._dbgAmbientBase ?? 2.1;
+    const cloudBase = Game._dbgCloudBase ?? 0;
 
     if (dynEnabled) {
         // Slowly vary sun intensity — simulates clouds passing over
@@ -1865,6 +1884,7 @@ Game.tick = (now) => {
 
     // Order markers animate even while paused (orders are issued during pause)
     if (Game.updateOrderMarkers) Game.updateOrderMarkers(dt);
+    if (Game.updateFoliage) Game.updateFoliage(dt);
 
     // Ambient + engine audio bed (runs regardless of pause)
     if (Game.Audio && Game.Audio.updateAmbient) Game.Audio.updateAmbient(dt);

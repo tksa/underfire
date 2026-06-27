@@ -59,6 +59,17 @@ Any static file server works (`npx serve`, `php -S`, nginx, etc.). Opening `inde
 
 Towed guns (AT guns, heavy MGs) deploy/limber automatically: they set up to fire and pack up when ordered to move.
 
+### Debug panel
+
+Press `` ` `` (backtick) in-game to toggle the **Debug Controls** panel. It has live sliders for:
+
+- **Terrain** — height scale, smoothing, bump/roughness/metalness, texture filter and scale, flat shading (then **Rebuild Terrain**)
+- **Lighting / Water / Camera** — sun and ambient, cloud shadows, water level/opacity/roughness, camera tilt and zoom range
+- **Tank Model** — pick a model and **Scan Nodes** to inspect its mesh hierarchy
+- **Post-processing** — anti-aliasing (SMAA), the render **upscaler**, bloom, tilt-shift depth-of-field, colour grading (hue/saturation, brightness/contrast), vignette, and live **lighting** (sun / ambient / cloud shadows)
+
+Each post-processing control has a slider *and* a typeable number box. Retune the look live, then click **Copy values** to copy the current settings to the clipboard (a `postfx = { … }` block including lighting) so you can drop them into an issue, a PR, or a chat.
+
 ---
 
 ## Help build it
@@ -87,6 +98,8 @@ When reporting a bug, a sentence on what you did, what you expected, and what ha
 ## Tech at a glance
 
 - **Three.js** (r0.180, via CDN importmap) for 3D rendering
+- **Postprocessing** ([pmndrs/postprocessing](https://github.com/pmndrs/postprocessing), CDN) — bloom, tilt-shift depth-of-field, colour grading, vignette, SMAA, plus an FSR-like render upscaler; all tunable live in the debug panel
+- **Procedural trees & hedges** via [EZ-Tree](https://github.com/dgreenheck/ez-tree) (geometry only), rendered with CC0 oak bark + leaf textures
 - Vanilla JS — a global `Game` namespace of classic scripts plus one ES-module entry (`js/main.js`)
 - **Per-unit logic split into modules** (`js/unit_modules.js`: move/fire/scan/health/morale/deploy/…) behind a thin `updateUnit` orchestrator
 - **Data-driven units** — `data/units.csv` is the editable roster (614 units, with per-unit `year` for era gating), merged over the built-in table at boot

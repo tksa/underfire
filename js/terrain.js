@@ -35,6 +35,25 @@ Game.TILE_COLORS = {
 
 // Field types eligible for hedgerow borders / treelines.
 Game.FIELD_TYPES = ['grass', 'pasture', 'wheat', 'stubble', 'plowed', 'vineyard', 'garden', 'orchard'];
+// Compact terrain material stack: 14px/tile keeps the generated color, roughness
+// and AO maps detailed enough without carrying three large 2000px canvases.
+Game.TERRAIN_TEXELS_PER_TILE = 14;
+Game.TERRAIN_DETAIL_DENSITY = 0.58;
+
+Game._isBridgeTile = (tx, ty) => !!(Game.bridgeTiles || []).some(b => b.tx === tx && b.ty === ty);
+
+Game.getRoadAxis = (tx, ty) => {
+    const isRoad = (x, y) => {
+        const t = Game.getTile(x, y);
+        return t && t.type === 'road';
+    };
+    const ew = isRoad(tx - 1, ty) || isRoad(tx + 1, ty);
+    const ns = isRoad(tx, ty - 1) || isRoad(tx, ty + 1);
+    if (ew && !ns) return 'x';
+    if (ns && !ew) return 'z';
+    if (ew && ns) return ((tx + ty) % 2 === 0) ? 'x' : 'z';
+    return 'x';
+};
 
 // ── Tile factory ──────────────────────────────────────
 Game.makeTile = (type = 'grass') => {
@@ -511,6 +530,158 @@ Game.getTerrainSlope = (x, z) => {
     return Math.sqrt(gradX * gradX + gradZ * gradZ);
 };
 
+Game._hash2 = (x, z) => {
+    const n = Math.sin(x * 127.1 + z * 311.7) * 43758.5453123;
+    return n - Math.floor(n);
+};
+
+Game._valueNoise2 = (x, z) => {
+    const x0 = Math.floor(x), z0 = Math.floor(z);
+    const fx = x - x0, fz = z - z0;
+    const u = fx * fx * (3 - 2 * fx);
+    const v = fz * fz * (3 - 2 * fz);
+    const a = Game._hash2(x0, z0);
+    const b = Game._hash2(x0 + 1, z0);
+    const c = Game._hash2(x0, z0 + 1);
+    const d = Game._hash2(x0 + 1, z0 + 1);
+    return Game.lerp(Game.lerp(a, b, u), Game.lerp(c, d, u), v);
+};
+
+Game._fbm2 = (x, z) => {
+    let amp = 0.5, freq = 1, sum = 0, norm = 0;
+    for (let i = 0; i < 4; i++) {
+        sum += Game._valueNoise2(x * freq, z * freq) * amp;
+        norm += amp;
+        amp *= 0.5;
+        freq *= 2.15;
+    }
+    return sum / norm;
+};
+
+Game.getGroundDetailHeight = (wx, wz) => {
+    const tile = Game.getTileAtWorld(wx, wz);
+    if (!tile) return 0;
+    const { tx, ty } = Game.tileAtWorld(wx, wz);
+    const lx = (wx / Game.TILE) - tx;
+    const lz = (wz / Game.TILE) - ty;
+    const nFine = Game._fbm2(wx * 1.1, wz * 1.1) - 0.5;
+    const nCoarse = Game._fbm2(wx * 0.26 + 31.7, wz * 0.26 - 12.3) - 0.5;
+    let h = nCoarse * 0.035 + nFine * 0.028;
+
+    if (tile.type === 'road' || tile.type === 'yard') {
+        // Gentle crowned dirt track, no carved rut grooves (they read as
+        // broken parallel lines, especially on the diagonal lanes).
+        const axis = Game.getRoadAxis(tx, ty);
+        const cross = axis === 'x' ? lz : lx;
+        const crown = Math.exp(-Math.pow((cross - 0.5) / 0.30, 2));
+        h += 0.02 * crown + nFine * 0.03;
+    } else if (tile.type === 'mud' || tile.type === 'swamp') {
+        const puddle = Math.max(0, Game._fbm2(wx * 0.55, wz * 0.55) - 0.58);
+        h += nFine * 0.035 - puddle * 0.16;
+    } else if (tile.type === 'plowed' || tile.type === 'vineyard' || tile.type === 'garden') {
+        const rowsRunX = ((tx >> 2) + (ty >> 2)) % 2 === 0;
+        const rowCoord = rowsRunX ? lz : lx;
+        const furrow = Math.sin(rowCoord * Math.PI * 10);
+        h += furrow * (tile.type === 'plowed' ? 0.07 : 0.045) + nFine * 0.022;
+    } else if (tile.type === 'wheat' || tile.type === 'stubble') {
+        const rowsRunX = ((tx >> 2) + (ty >> 2)) % 2 === 0;
+        h += Math.sin((rowsRunX ? lz : lx) * Math.PI * 8) * 0.025 + nFine * 0.02;
+    } else if (tile.type === 'forest' || tile.type === 'dense_forest' || tile.type === 'orchard') {
+        h += nFine * 0.07 + nCoarse * 0.05;
+    } else if (tile.type === 'water') {
+        h -= 0.05;
+    }
+
+    return Game.clamp(h, -0.14, 0.14);
+};
+
+Game._attachFoliageWind = (material, options = {}) => {
+    const strength = options.strength ?? 0.045;
+    const speed = options.speed ?? 1.0;
+    const flutter = options.flutter ?? 0.012;
+
+    material.onBeforeCompile = (shader) => {
+        shader.uniforms.foliageTime = { value: 0 };
+        shader.uniforms.foliageWindStrength = { value: strength };
+        shader.uniforms.foliageWindSpeed = { value: speed };
+        shader.uniforms.foliageFlutter = { value: flutter };
+        shader.vertexShader = shader.vertexShader.replace(
+            '#include <common>',
+            `#include <common>
+             uniform float foliageTime;
+             uniform float foliageWindStrength;
+             uniform float foliageWindSpeed;
+             uniform float foliageFlutter;`
+        );
+        shader.vertexShader = shader.vertexShader.replace(
+            '#include <begin_vertex>',
+            `#include <begin_vertex>
+             vec3 foliageHint = vec3(0.0);
+             #ifdef USE_INSTANCING
+                 foliageHint = vec3(instanceMatrix[3].x, instanceMatrix[3].y, instanceMatrix[3].z);
+             #endif
+             float foliageBend = 1.0;
+             #ifdef USE_UV
+                 foliageBend = smoothstep(0.12, 1.0, uv.y);
+             #endif
+             float foliagePhase = foliageTime * foliageWindSpeed + dot(foliageHint.xz, vec2(0.37, 0.23));
+             float foliageGust = sin(foliagePhase) * 0.72 + sin(foliagePhase * 2.17 + 1.8) * 0.28;
+             transformed.x += foliageGust * foliageWindStrength * foliageBend;
+             transformed.z += cos(foliagePhase * 1.43) * foliageFlutter * foliageBend;`
+        );
+        material.userData.foliageShader = shader;
+    };
+
+    Game._foliageWindMaterials = Game._foliageWindMaterials || [];
+    Game._foliageWindMaterials.push(material);
+    return material;
+};
+
+Game.updateFoliage = () => {
+    const time = Game.gameClock || 0;
+    (Game._foliageWindMaterials || []).forEach(mat => {
+        const shader = mat.userData && mat.userData.foliageShader;
+        if (shader && shader.uniforms.foliageTime) shader.uniforms.foliageTime.value = time;
+    });
+};
+
+Game._makeGrassBladeTexture = () => {
+    const THREE = Game.THREE;
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 128;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, c.width, c.height);
+
+    const blade = ctx.createLinearGradient(0, c.height, 0, 0);
+    blade.addColorStop(0, 'rgba(55,67,34,0.92)');
+    blade.addColorStop(0.55, 'rgba(87,112,55,0.96)');
+    blade.addColorStop(1, 'rgba(154,166,94,0.78)');
+
+    ctx.fillStyle = blade;
+    ctx.beginPath();
+    ctx.moveTo(31, 126);
+    ctx.bezierCurveTo(16, 82, 20, 34, 33, 4);
+    ctx.bezierCurveTo(47, 38, 48, 84, 35, 126);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(214,218,150,0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(32, 124);
+    ctx.bezierCurveTo(29, 84, 30, 37, 33, 8);
+    ctx.stroke();
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.anisotropy = Math.min(4, Game.renderer.capabilities.getMaxAnisotropy());
+    return tex;
+};
+
 Game.isUnderwater = (x, z) => {
     return Game.getHeight(x, z) < Game.WATER_LEVEL;
 };
@@ -521,7 +692,7 @@ Game.isUnderwater = (x, z) => {
 
 Game.buildTerrainTexture = () => {
     const THREE = Game.THREE;
-    const px = 16; // pixels per tile
+    const px = Game.TERRAIN_TEXELS_PER_TILE || 20;
     const W = Game.MAP_COLS * px;
     const H = Game.MAP_ROWS * px;
     const canvas = document.createElement('canvas');
@@ -540,6 +711,12 @@ Game.buildTerrainTexture = () => {
         }
         return `rgb(${r},${g},${b})`;
     };
+    const fillCircle = (x, y, r, style) => {
+        ctx.fillStyle = style;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+    };
 
     // Hedge/wall/house tiles paint as their surroundings (the 3D meshes sit on top)
     const paintType = (t) => {
@@ -548,11 +725,22 @@ Game.buildTerrainTexture = () => {
         return t;
     };
 
-    // 1. Base tile fill with per-tile brightness jitter
+    // 1. Base tile fill. Brightness varies with SMOOTH noise (not per-tile
+    //    random) so the terrain no longer shows a hard tile grid; roads and
+    //    yards get no per-tile variation at all (that grid was very visible on
+    //    the roads). Texture for roads comes from the gravel speckle below.
     for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
         for (let tx = 0; tx < Game.MAP_COLS; tx++) {
             const type = paintType(Game.terrain[ty][tx].type);
-            ctx.fillStyle = rgb(colOf(type), 0.07);
+            const hex = colOf(type);
+            let r = (hex >> 16) & 255, g = (hex >> 8) & 255, b = hex & 255;
+            if (type !== 'road' && type !== 'yard') {
+                const v = 1 + (Game._fbm2(tx * 0.4, ty * 0.4) - 0.5) * 0.12;
+                r = Game.clamp(Math.round(r * v), 0, 255);
+                g = Game.clamp(Math.round(g * v), 0, 255);
+                b = Game.clamp(Math.round(b * v), 0, 255);
+            }
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
             ctx.fillRect(tx * px, ty * px, px, px);
         }
     }
@@ -605,14 +793,13 @@ Game.buildTerrainTexture = () => {
                     ctx.fillRect(x0 + Game.rand(0, px - s), y0 + Game.rand(0, px - s), s, s);
                 }
             } else if (type === 'road') {
-                const rh = (Game.getTile(tx + 1, ty)?.type === 'road') || (Game.getTile(tx - 1, ty)?.type === 'road');
-                ctx.fillStyle = 'rgba(60,48,32,0.25)';
-                if (rh) {
-                    ctx.fillRect(x0, y0 + Math.round(px * 0.3), px, 1.5);
-                    ctx.fillRect(x0, y0 + Math.round(px * 0.7), px, 1.5);
-                } else {
-                    ctx.fillRect(x0 + Math.round(px * 0.3), y0, 1.5, px);
-                    ctx.fillRect(x0 + Math.round(px * 0.7), y0, 1.5, px);
+                // Clean dirt track: scattered gravel/dust speckle, no hard ruts
+                // (the old per-tile rut lines broke up across diagonal lanes).
+                for (let k = 0; k < 7; k++) {
+                    const gx = x0 + Game.rand(1, px - 1);
+                    const gy = y0 + Game.rand(1, px - 1);
+                    fillCircle(gx, gy, Game.rand(0.35, 1.3), `rgba(96,82,58,${Game.rand(0.18, 0.36)})`);
+                    if (Math.random() < 0.35) fillCircle(gx + Game.rand(-1, 1), gy + Game.rand(-1, 1), Game.rand(0.2, 0.6), 'rgba(225,210,170,0.22)');
                 }
             } else if (type === 'mud') {
                 for (let k = 0; k < 3; k++) {
@@ -620,9 +807,25 @@ Game.buildTerrainTexture = () => {
                     const s = Game.rand(2, 6);
                     ctx.fillRect(x0 + Game.rand(0, px - s), y0 + Game.rand(0, px - s), s, s);
                 }
+                for (let k = 0; k < 2; k++) {
+                    fillCircle(x0 + Game.rand(2, px - 2), y0 + Game.rand(2, px - 2), Game.rand(1.6, 4.0), `rgba(42,38,31,${Game.rand(0.16, 0.28)})`);
+                }
             } else if (type === 'water') {
                 ctx.fillStyle = 'rgba(255,255,255,0.05)';
                 ctx.fillRect(x0, y0 + Game.rand(2, px - 2), px, 1);
+            } else if (type === 'yard') {
+                for (let k = 0; k < 6; k++) {
+                    fillCircle(x0 + Game.rand(1, px - 1), y0 + Game.rand(1, px - 1), Game.rand(0.3, 1.1), `rgba(88,76,56,${Game.rand(0.12, 0.28)})`);
+                }
+            } else if (type === 'plowed') {
+                for (let k = 0; k < 3; k++) {
+                    fillCircle(x0 + Game.rand(1, px - 1), y0 + Game.rand(1, px - 1), Game.rand(0.4, 1.2), `rgba(34,24,17,${Game.rand(0.12, 0.22)})`);
+                }
+            } else if (type === 'grass' || type === 'pasture' || type === 'orchard') {
+                for (let k = 0; k < 3; k++) {
+                    ctx.fillStyle = `rgba(35,55,22,${Game.rand(0.05, 0.14)})`;
+                    ctx.fillRect(x0 + Game.rand(0, px), y0 + Game.rand(0, px), Game.rand(1, 4), 1);
+                }
             }
         }
     }
@@ -659,6 +862,124 @@ Game.buildTerrainTexture = () => {
     tex.generateMipmaps = true;
     tex.anisotropy = Game.renderer.capabilities.getMaxAnisotropy();
     return tex;
+};
+
+Game.buildTerrainMaterialMaps = () => {
+    const THREE = Game.THREE;
+    const px = Game.TERRAIN_TEXELS_PER_TILE || 20;
+    const W = Game.MAP_COLS * px;
+    const H = Game.MAP_ROWS * px;
+    const roughCanvas = document.createElement('canvas');
+    const aoCanvas = document.createElement('canvas');
+    roughCanvas.width = aoCanvas.width = W;
+    roughCanvas.height = aoCanvas.height = H;
+    const rctx = roughCanvas.getContext('2d');
+    const actx = aoCanvas.getContext('2d');
+
+    const gray = (v, a = 1) => `rgba(${v},${v},${v},${a})`;
+    const fillCircle = (ctx, x, y, r, style) => {
+        ctx.fillStyle = style;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+    };
+    const mat = {
+        grass: [230, 226], pasture: [232, 230], wheat: [238, 232], stubble: [226, 220],
+        plowed: [214, 184], vineyard: [224, 204], garden: [222, 202], orchard: [228, 210],
+        forest: [236, 178], dense_forest: [242, 154], road: [206, 202], mud: [128, 164],
+        yard: [212, 214], hedge: [238, 172], wall: [220, 210], house: [220, 212],
+        water: [72, 255], swamp: [136, 150],
+    };
+
+    for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
+        for (let tx = 0; tx < Game.MAP_COLS; tx++) {
+            const type = Game.terrain[ty][tx].type;
+            const [rough, ao] = mat[type] || mat.grass;
+            const x0 = tx * px, y0 = ty * px;
+            rctx.fillStyle = gray(rough);
+            rctx.fillRect(x0, y0, px, px);
+            actx.fillStyle = gray(ao);
+            actx.fillRect(x0, y0, px, px);
+
+            const rowsRunX = ((tx >> 2) + (ty >> 2)) % 2 === 0;
+            if (type === 'plowed' || type === 'vineyard' || type === 'garden' || type === 'wheat' || type === 'stubble') {
+                const gap = type === 'plowed' ? 3 : 4;
+                actx.fillStyle = 'rgba(30,30,30,0.16)';
+                rctx.fillStyle = 'rgba(255,255,255,0.08)';
+                for (let p = 1; p < px; p += gap) {
+                    if (rowsRunX) {
+                        actx.fillRect(x0, y0 + p, px, 1);
+                        rctx.fillRect(x0, y0 + p + 1, px, 1);
+                    } else {
+                        actx.fillRect(x0 + p, y0, 1, px);
+                        rctx.fillRect(x0 + p + 1, y0, 1, px);
+                    }
+                }
+            } else if (type === 'road' || type === 'yard') {
+                // Soft, direction-free wear patches instead of hard rut lines.
+                for (let k = 0; k < 4; k++) {
+                    const cx = x0 + Game.rand(2, px - 2);
+                    const cy = y0 + Game.rand(2, px - 2);
+                    const rad = Game.rand(3, 7);
+                    fillCircle(actx, cx, cy, rad, 'rgba(30,30,30,0.08)');
+                    fillCircle(rctx, cx, cy, rad, 'rgba(20,20,20,0.05)');
+                }
+            } else if (type === 'mud' || type === 'swamp') {
+                for (let k = 0; k < 3; k++) {
+                    const cx = x0 + Game.rand(2, px - 2);
+                    const cy = y0 + Game.rand(2, px - 2);
+                    const rad = Game.rand(2, 5);
+                    fillCircle(rctx, cx, cy, rad, 'rgba(20,20,20,0.22)');
+                    fillCircle(actx, cx, cy, rad, 'rgba(40,40,40,0.18)');
+                }
+            } else if (type === 'forest' || type === 'dense_forest' || type === 'orchard') {
+                for (let k = 0; k < 5; k++) {
+                    fillCircle(actx, x0 + Game.rand(0, px), y0 + Game.rand(0, px), Game.rand(1.5, 4), 'rgba(28,28,28,0.16)');
+                }
+            }
+        }
+    }
+
+    // Tile-border occlusion darkens seams/hedge bases so fields sit into the map.
+    actx.strokeStyle = 'rgba(24,24,24,0.08)';
+    actx.lineWidth = 1;
+    for (let ty = 1; ty < Game.MAP_ROWS; ty++) {
+        for (let tx = 1; tx < Game.MAP_COLS; tx++) {
+            const type = Game.terrain[ty][tx].type;
+            if (Game.terrain[ty][tx - 1].type !== type) {
+                actx.beginPath(); actx.moveTo(tx * px, ty * px); actx.lineTo(tx * px, (ty + 1) * px); actx.stroke();
+            }
+            if (Game.terrain[ty - 1][tx].type !== type) {
+                actx.beginPath(); actx.moveTo(tx * px, ty * px); actx.lineTo((tx + 1) * px, ty * px); actx.stroke();
+            }
+        }
+    }
+
+    [rctx, actx].forEach(ctx => {
+        const img = ctx.getImageData(0, 0, W, H);
+        const d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+            const n = (Math.random() - 0.5) * 14;
+            d[i] = d[i + 1] = d[i + 2] = Game.clamp(d[i] + n, 0, 255);
+        }
+        ctx.putImageData(img, 0, 0);
+    });
+
+    const makeTex = (canvas) => {
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.ClampToEdgeWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+        tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.generateMipmaps = true;
+        tex.anisotropy = Math.min(4, Game.renderer.capabilities.getMaxAnisotropy());
+        return tex;
+    };
+
+    return {
+        roughnessMap: makeTex(roughCanvas),
+        aoMap: makeTex(aoCanvas),
+    };
 };
 
 // ═══════════════════════════════════════════════════════
@@ -723,6 +1044,207 @@ Game._makeGableGeo = (w, h, d) => {
     return geo;
 };
 
+Game._makeGroundDecalTexture = (kind) => {
+    Game._groundDecalTextures = Game._groundDecalTextures || {};
+    if (Game._groundDecalTextures[kind]) return Game._groundDecalTextures[kind];
+
+    const THREE = Game.THREE;
+    const S = 96;
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const ctx = c.getContext('2d');
+    const cx = S / 2, cy = S / 2;
+    const g = ctx.createRadialGradient(cx, cy, 4, cx, cy, S * 0.48);
+    if (kind === 'puddle') {
+        g.addColorStop(0.0, 'rgba(28,35,35,0.58)');
+        g.addColorStop(0.55, 'rgba(35,38,32,0.28)');
+        g.addColorStop(1.0, 'rgba(35,32,26,0.0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, S, S);
+        ctx.strokeStyle = 'rgba(230,220,185,0.16)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(cx - 6, cy - 4, S * 0.22, S * 0.08, -0.25, 0, Math.PI * 2);
+        ctx.stroke();
+    } else {
+        g.addColorStop(0.0, 'rgba(45,34,23,0.46)');
+        g.addColorStop(0.65, 'rgba(58,43,28,0.20)');
+        g.addColorStop(1.0, 'rgba(58,43,28,0.0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, S, S);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.needsUpdate = true;
+    Game._groundDecalTextures[kind] = tex;
+    return tex;
+};
+
+Game._addTerrainSurfaceDetails = () => {
+    const THREE = Game.THREE;
+    const T = Game.TILE;
+    const dummy = new THREE.Object3D();
+    const color = new THREE.Color();
+    const groundY = (x, z) => Game.getHeight(x, z) + Game.getGroundDetailHeight(x, z);
+    const density = Game.TERRAIN_DETAIL_DENSITY || 1;
+    const detailChance = (p) => Math.random() < p * density;
+
+    // Dark wheel-track strips following road tiles.
+    const rutTiles = [];
+    for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
+        for (let tx = 0; tx < Game.MAP_COLS; tx++) {
+            if (Game.terrain[ty][tx].type === 'road' && !Game._isBridgeTile(tx, ty)) rutTiles.push({ tx, ty });
+        }
+    }
+    if (rutTiles.length) {
+        const rutGeo = new THREE.BoxGeometry(1, 0.012, 1);
+        const rutMat = new THREE.MeshBasicMaterial({
+            color: 0x3b2d1f,
+            transparent: true,
+            opacity: 0.26,
+            depthWrite: false,
+        });
+        rutMat.polygonOffset = true;
+        rutMat.polygonOffsetFactor = -1;
+        rutMat.polygonOffsetUnits = -1;
+        const rutMesh = new THREE.InstancedMesh(rutGeo, rutMat, rutTiles.length * 2);
+        let n = 0;
+        rutTiles.forEach(({ tx, ty }) => {
+            const axis = Game.getRoadAxis(tx, ty);
+            const cx = tx * T + T / 2;
+            const cz = ty * T + T / 2;
+            [-0.19, 0.19].forEach(off => {
+                const x = cx + (axis === 'z' ? off * T : 0);
+                const z = cz + (axis === 'x' ? off * T : 0);
+                dummy.position.set(x, groundY(x, z) + 0.035, z);
+                dummy.rotation.set(0, 0, 0);
+                dummy.scale.set(axis === 'x' ? T * 0.86 : 0.13, 1, axis === 'z' ? T * 0.86 : 0.13);
+                dummy.updateMatrix();
+                rutMesh.setMatrixAt(n++, dummy.matrix);
+            });
+        });
+        rutMesh.instanceMatrix.needsUpdate = true;
+        rutMesh.renderOrder = 2;
+        Game.terrainGroup.add(rutMesh);
+    }
+
+    // Soft mud and puddle decals in the wet/compacted areas.
+    const puddles = [];
+    for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
+        for (let tx = 0; tx < Game.MAP_COLS; tx++) {
+            if (Game._isBridgeTile(tx, ty)) continue;
+            const type = Game.terrain[ty][tx].type;
+            const p = type === 'mud' ? 0.38 : type === 'swamp' ? 0.28 : type === 'road' ? 0.045 : type === 'yard' ? 0.035 : 0;
+            if (p && detailChance(p)) {
+                puddles.push({
+                    x: tx * T + Game.rand(0.45, T - 0.45),
+                    z: ty * T + Game.rand(0.45, T - 0.45),
+                    rx: Game.rand(0.35, type === 'road' ? 0.95 : 1.45),
+                    rz: Game.rand(0.22, type === 'road' ? 0.55 : 1.05),
+                    rot: Game.rand(0, Math.PI * 2),
+                    wet: type === 'mud' || type === 'swamp',
+                });
+            }
+        }
+    }
+    if (puddles.length) {
+        const puddleGeo = new THREE.CircleGeometry(1, 20);
+        const puddleMat = new THREE.MeshBasicMaterial({
+            color: 0x4b4335,
+            map: Game._makeGroundDecalTexture('puddle'),
+            transparent: true,
+            opacity: 0.82,
+            depthWrite: false,
+        });
+        const puddleMesh = new THREE.InstancedMesh(puddleGeo, puddleMat, puddles.length);
+        puddles.forEach((p, i) => {
+            dummy.position.set(p.x, groundY(p.x, p.z) + 0.055, p.z);
+            dummy.rotation.set(-Math.PI / 2, 0, p.rot);
+            dummy.scale.set(p.rx, p.rz, 1);
+            dummy.updateMatrix();
+            puddleMesh.setMatrixAt(i, dummy.matrix);
+        });
+        puddleMesh.instanceMatrix.needsUpdate = true;
+        puddleMesh.renderOrder = 3;
+        Game.terrainGroup.add(puddleMesh);
+    }
+
+    // Small rocks/gravel on hard surfaces and plowed ground.
+    const rocks = [];
+    for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
+        for (let tx = 0; tx < Game.MAP_COLS; tx++) {
+            const type = Game.terrain[ty][tx].type;
+            const p = type === 'road' ? 0.42 : type === 'yard' ? 0.34 : type === 'plowed' ? 0.22
+                : type === 'stubble' ? 0.12 : type === 'mud' ? 0.10 : 0;
+            if (!p || !detailChance(p)) continue;
+            const count = type === 'road' || type === 'yard' ? Game.randi(1, 2) : 1;
+            for (let k = 0; k < count; k++) {
+                rocks.push({
+                    x: tx * T + Game.rand(0.25, T - 0.25),
+                    z: ty * T + Game.rand(0.25, T - 0.25),
+                    s: Game.rand(0.035, type === 'road' ? 0.12 : 0.18),
+                    rot: Game.rand(0, Math.PI * 2),
+                });
+            }
+        }
+    }
+    if (rocks.length) {
+        const rockGeo = new THREE.DodecahedronGeometry(1, 0);
+        const rockMat = new THREE.MeshStandardMaterial({ color: 0x8b806d, roughness: 0.98, flatShading: true });
+        const rockMesh = new THREE.InstancedMesh(rockGeo, rockMat, rocks.length);
+        rocks.forEach((r, i) => {
+            dummy.position.set(r.x, groundY(r.x, r.z) + r.s * 0.42, r.z);
+            dummy.rotation.set(Game.rand(-0.18, 0.18), r.rot, Game.rand(-0.18, 0.18));
+            dummy.scale.set(r.s * Game.rand(0.8, 1.7), r.s * Game.rand(0.35, 0.9), r.s * Game.rand(0.8, 1.5));
+            dummy.updateMatrix();
+            rockMesh.setMatrixAt(i, dummy.matrix);
+            color.setHSL(0.09 + Game.rand(-0.015, 0.015), 0.12, 0.42 + Game.rand(-0.08, 0.08));
+            rockMesh.setColorAt(i, color);
+        });
+        rockMesh.receiveShadow = true;
+        rockMesh.instanceMatrix.needsUpdate = true;
+        if (rockMesh.instanceColor) rockMesh.instanceColor.needsUpdate = true;
+        Game.terrainGroup.add(rockMesh);
+    }
+
+    // Twigs/leaves around hedges, woods and orchards.
+    const litter = [];
+    for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
+        for (let tx = 0; tx < Game.MAP_COLS; tx++) {
+            const type = Game.terrain[ty][tx].type;
+            const p = type === 'forest' || type === 'dense_forest' ? 0.42
+                : type === 'hedge' || type === 'orchard' ? 0.24
+                    : type === 'pasture' || type === 'grass' ? 0.035 : 0;
+            if (!p || !detailChance(p)) continue;
+            litter.push({
+                x: tx * T + Game.rand(0.2, T - 0.2),
+                z: ty * T + Game.rand(0.2, T - 0.2),
+                len: Game.rand(0.18, 0.62),
+                rot: Game.rand(0, Math.PI * 2),
+                leaf: Math.random() < 0.45,
+            });
+        }
+    }
+    if (litter.length) {
+        const twigGeo = new THREE.BoxGeometry(1, 0.022, 0.055);
+        const twigMat = new THREE.MeshStandardMaterial({ color: 0x5d3f27, roughness: 1.0 });
+        const twigMesh = new THREE.InstancedMesh(twigGeo, twigMat, litter.length);
+        litter.forEach((l, i) => {
+            dummy.position.set(l.x, groundY(l.x, l.z) + 0.045, l.z);
+            dummy.rotation.set(0, l.rot, 0);
+            dummy.scale.set(l.len, l.leaf ? 0.5 : 1, l.leaf ? 0.09 : 0.045);
+            dummy.updateMatrix();
+            twigMesh.setMatrixAt(i, dummy.matrix);
+            if (l.leaf) color.setHSL(0.16 + Game.rand(-0.04, 0.04), 0.35, 0.34 + Game.rand(-0.08, 0.08));
+            else color.setHSL(0.08, 0.42, 0.25 + Game.rand(-0.04, 0.06));
+            twigMesh.setColorAt(i, color);
+        });
+        twigMesh.receiveShadow = true;
+        twigMesh.instanceMatrix.needsUpdate = true;
+        if (twigMesh.instanceColor) twigMesh.instanceColor.needsUpdate = true;
+        Game.terrainGroup.add(twigMesh);
+    }
+};
+
 Game.buildTerrainMeshes = () => {
     const THREE = Game.THREE;
     const T = Game.TILE;
@@ -742,12 +1264,12 @@ Game.buildTerrainMeshes = () => {
     for (let i = 0; i < pos.count; i++) {
         const wx = pos.getX(i) + Game.WORLD_W / 2;
         const wz = pos.getZ(i) + Game.WORLD_H / 2;
-        // small high-frequency jitter keeps fields from looking billiard-smooth
-        const micro = Math.sin(wx * 1.7) * Math.cos(wz * 1.3) * 0.04
-            + Math.sin(wx * 4.1 + wz * 3.3) * 0.02;
+        // Visual-only micro relief: ruts, furrows, gravel and rooty forest floor.
+        const micro = Game.getGroundDetailHeight(wx, wz);
         pos.setY(i, Game.getHeight(wx, wz) + micro);
     }
     terrainGeo.computeVertexNormals();
+    terrainGeo.setAttribute('uv2', terrainGeo.attributes.uv.clone());
 
     // Vertex colors start white — craters darken them at runtime
     const vertCount = pos.count;
@@ -757,33 +1279,41 @@ Game.buildTerrainMeshes = () => {
 
     // Painted tile texture + tiled PBR detail maps
     const terrainTex = Game.buildTerrainTexture();
+    const terrainMasks = Game.buildTerrainMaterialMaps();
 
     const texLoader = new THREE.TextureLoader();
+    const terrainDetailColor = texLoader.load('textures/oga/ground_detail_color.jpg');
+    terrainDetailColor.wrapS = terrainDetailColor.wrapT = THREE.RepeatWrapping;
+    terrainDetailColor.colorSpace = THREE.SRGBColorSpace;
+    terrainDetailColor.anisotropy = Math.min(4, Game.renderer.capabilities.getMaxAnisotropy());
+
     // CC0 seamless ground detail normal (OpenGameArt — DirtyGrassSeamless)
     const terrainNormal = texLoader.load('textures/oga/ground_detail_nrm.jpg');
     terrainNormal.wrapS = THREE.RepeatWrapping;
     terrainNormal.wrapT = THREE.RepeatWrapping;
-    terrainNormal.repeat.set(28, 28);
+    terrainNormal.repeat.set(42, 42);
     terrainNormal.minFilter = THREE.LinearMipmapLinearFilter;
     terrainNormal.anisotropy = Math.min(4, Game.renderer.capabilities.getMaxAnisotropy());
 
     const terrainRough = texLoader.load('textures/terrain_roughness.jpg');
     terrainRough.wrapS = THREE.RepeatWrapping;
     terrainRough.wrapT = THREE.RepeatWrapping;
-    terrainRough.repeat.set(28, 28);
+    terrainRough.repeat.set(42, 42);
     terrainRough.minFilter = THREE.LinearMipmapLinearFilter;
 
     // CC0 ground ambient-occlusion detail, subtly multiplied into the painted color
     const terrainAO = texLoader.load('textures/oga/ground_detail_ao.jpg');
     terrainAO.wrapS = THREE.RepeatWrapping;
     terrainAO.wrapT = THREE.RepeatWrapping;
-    terrainAO.repeat.set(28, 28);
+    terrainAO.repeat.set(42, 42);
 
     const terrainMat = new THREE.MeshStandardMaterial({
         map: terrainTex,
         normalMap: terrainNormal,
-        normalScale: new THREE.Vector2(0.42, 0.42),
-        roughnessMap: terrainRough,
+        normalScale: new THREE.Vector2(0.68, 0.68),
+        roughnessMap: terrainMasks.roughnessMap,
+        aoMap: terrainMasks.aoMap,
+        aoMapIntensity: 0.82,
         roughness: 1.0,
         metalness: 0.0,
         flatShading: false,
@@ -792,12 +1322,31 @@ Game.buildTerrainMeshes = () => {
 
     // High-frequency detail noise — breaks up repetition at close zoom
     terrainMat.onBeforeCompile = (shader) => {
+        shader.uniforms.detailColorMap = { value: terrainDetailColor };
+        shader.uniforms.detailRoughnessMap = { value: terrainRough };
+        shader.uniforms.detailAoMap = { value: terrainAO };
+        shader.fragmentShader = `
+            uniform sampler2D detailColorMap;
+            uniform sampler2D detailRoughnessMap;
+            uniform sampler2D detailAoMap;
+        ` + shader.fragmentShader;
         shader.fragmentShader = shader.fragmentShader.replace(
             '#include <map_fragment>',
             `#include <map_fragment>
-             vec2 dnUv = vMapUv * 220.0;
+             vec2 detailUv = vMapUv * 42.0;
+             vec3 detailColor = texture2D(detailColorMap, detailUv).rgb;
+             float detailAo = texture2D(detailAoMap, detailUv * 1.37).r;
+             vec2 dnUv = vMapUv * 240.0;
              float detail = fract(sin(dot(floor(dnUv), vec2(12.9898, 78.233))) * 43758.5453);
-             diffuseColor.rgb *= mix(0.94, 1.06, detail);`
+             diffuseColor.rgb *= mix(vec3(1.0), detailColor * 1.22, 0.16);
+             diffuseColor.rgb *= mix(0.93, 1.07, detail);
+             diffuseColor.rgb *= mix(0.84, 1.0, detailAo);`
+        );
+        shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <roughnessmap_fragment>',
+            `#include <roughnessmap_fragment>
+             float detailRough = texture2D(detailRoughnessMap, vMapUv * 42.0).g;
+             roughnessFactor = clamp(roughnessFactor * mix(0.78, 1.12, detailRough), 0.38, 1.0);`
         );
     };
 
@@ -812,6 +1361,8 @@ Game.buildTerrainMeshes = () => {
         Game.groundPlane.visible = false;
     }
 
+    Game._addTerrainSurfaceDetails();
+
     // ── Shared structure textures (wall PBR set in repo + procedural roof tiles) ──
     const wallColorBase = texLoader.load('textures/wall_color.jpg');
     const wallNormalBase = texLoader.load('textures/wall_normal.jpg');
@@ -821,10 +1372,26 @@ Game.buildTerrainMeshes = () => {
     });
     wallColorBase.colorSpace = THREE.SRGBColorSpace;
     const roofTexBase = Game._makeRoofTexture();
-    // CC0 wood (OpenGameArt) used as tree bark
-    const barkTex = texLoader.load('textures/oga/wood.jpg');
-    barkTex.wrapS = barkTex.wrapT = THREE.RepeatWrapping;
-    barkTex.colorSpace = THREE.SRGBColorSpace;
+    Game._sharedTextures = Game._sharedTextures || {};
+    const leavesTex = Game._sharedTextures.leaves || (() => {
+        const tex = texLoader.load('textures/leaves.png');
+        tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+        tex.repeat.set(1, 1);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.anisotropy = Math.min(4, Game.renderer.capabilities.getMaxAnisotropy());
+        Game._sharedTextures.leaves = tex;
+        return tex;
+    })();
+    const grassBladeTex = Game._sharedTextures.grassBlade || (() => {
+        const tex = Game._makeGrassBladeTexture();
+        Game._sharedTextures.grassBlade = tex;
+        return tex;
+    })();
+    const craterTex = texLoader.load('textures/crater.png');
+    craterTex.wrapS = craterTex.wrapT = THREE.ClampToEdgeWrapping;
+    craterTex.colorSpace = THREE.SRGBColorSpace;
 
     // Clone a base texture and set its tiling (so each surface tiles correctly)
     const tiled = (base, rx, ry) => {
@@ -834,6 +1401,128 @@ Game.buildTerrainMeshes = () => {
         t.repeat.set(rx, ry);
         return t;
     };
+
+    const foliageCardGeo = new THREE.PlaneGeometry(1, 1);
+    Game._foliageWindMaterials = [];
+
+    const foliageCardMat = Game._attachFoliageWind(new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        emissive: 0x12200c,
+        emissiveIntensity: 0.08,
+        map: leavesTex,
+        alphaTest: 0.34,
+        side: THREE.DoubleSide,
+        roughness: 0.92,
+        metalness: 0.0,
+    }), { strength: 0.026, speed: 0.7, flutter: 0.008 });
+    foliageCardMat.name = 'shared-foliage-leaf-cards';
+    const foliageDepthMat = Game._attachFoliageWind(new THREE.MeshDepthMaterial({
+        depthPacking: THREE.RGBADepthPacking,
+        map: leavesTex,
+        alphaTest: 0.34,
+        side: THREE.DoubleSide,
+    }), { strength: 0.026, speed: 0.7, flutter: 0.008 });
+
+    // ── Shared CC0 bark + EZ-Tree foliage helpers (trees and hedge shrubs) ──
+    // Trees/bushes use EZ-Tree (MIT) GEOMETRY only, rendered with CC0 textures
+    // (Poly Haven oak bark + our leaf card) so we stay within the CC0 asset rule.
+    const barkColor = texLoader.load('textures/bark_color.jpg');
+    barkColor.wrapS = barkColor.wrapT = THREE.RepeatWrapping;
+    barkColor.colorSpace = THREE.SRGBColorSpace;
+    barkColor.anisotropy = Math.min(4, Game.renderer.capabilities.getMaxAnisotropy());
+    const barkNormal = texLoader.load('textures/bark_normal.jpg');
+    barkNormal.wrapS = barkNormal.wrapT = THREE.RepeatWrapping;
+    const barkMat = new THREE.MeshStandardMaterial({
+        map: barkColor, normalMap: barkNormal, roughness: 0.76, metalness: 0.0,
+    });
+    barkMat.name = 'eztree-bark';
+
+    // Generate one EZ-Tree prototype: returns baked branch + leaf geometry and
+    // the natural height (for scale normalisation). Pure math, no GPU/DOM work.
+    const makeFoliageProto = (seed, configure) => {
+        const tree = new Game.EZTree.Tree();
+        tree.options.seed = seed;
+        configure(tree.options);
+        tree.generate();
+        tree.updateMatrixWorld(true);
+        const bgeo = tree.branchesMesh.geometry.clone();
+        bgeo.applyMatrix4(tree.branchesMesh.matrixWorld);
+        const lgeo = tree.leavesMesh.geometry.clone();
+        lgeo.applyMatrix4(tree.leavesMesh.matrixWorld);
+        bgeo.computeBoundingBox();
+        const nh = Math.max(0.001, bgeo.boundingBox.max.y - bgeo.boundingBox.min.y);
+        [tree.branchesMesh, tree.leavesMesh].forEach(m => {   // free EZ-Tree's own maps
+            const mt = m.material;
+            if (!mt) return;
+            if (mt.map) mt.map.dispose();
+            if (mt.normalMap) mt.normalMap.dispose();
+            mt.dispose();
+        });
+        return { bgeo, lgeo, nh };
+    };
+
+    // Instance prototypes across positions ({x, z, height, scale}). World height
+    // of each instance ~= height * scale * scaleK. One draw call per prototype.
+    const placeFoliage = (protos, positions, scaleK, namePrefix) => {
+        if (!protos.length || !positions.length) return;
+        const buckets = Array.from({ length: protos.length }, () => []);
+        positions.forEach((t, i) => buckets[i % protos.length].push(t));
+        const dummy = new THREE.Object3D();
+        const color = new THREE.Color();
+        protos.forEach((proto, p) => {
+            const list = buckets[p];
+            if (!list.length) return;
+            const branches = new THREE.InstancedMesh(proto.bgeo, barkMat, list.length);
+            const leaves = new THREE.InstancedMesh(proto.lgeo, foliageCardMat, list.length);
+            branches.name = namePrefix + '-branches-' + p;
+            leaves.name = namePrefix + '-leaves-' + p;
+            branches.castShadow = true;
+            branches.receiveShadow = true;
+            leaves.castShadow = true;
+            leaves.receiveShadow = true;
+            leaves.customDepthMaterial = foliageDepthMat;
+            for (let i = 0; i < list.length; i++) {
+                const t = list[i];
+                const baseY = Game.getHeight(t.x, t.z);
+                const s = (t.height * t.scale * scaleK) / proto.nh;
+                dummy.position.set(t.x, baseY - (t.sink || 0), t.z);
+                dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
+                dummy.scale.set(s, s, s);
+                dummy.updateMatrix();
+                branches.setMatrixAt(i, dummy.matrix);
+                leaves.setMatrixAt(i, dummy.matrix);
+                color.setHSL(0.26 + Game.rand(-0.03, 0.07), 0.42 + Game.rand(0, 0.18), 0.33 + Game.rand(0, 0.14));
+                leaves.setColorAt(i, color);
+            }
+            branches.instanceMatrix.needsUpdate = true;
+            leaves.instanceMatrix.needsUpdate = true;
+            if (leaves.instanceColor) leaves.instanceColor.needsUpdate = true;
+            branches.computeBoundingSphere();
+            leaves.computeBoundingSphere();
+            Game.terrainGroup.add(branches);
+            Game.terrainGroup.add(leaves);
+        });
+    };
+
+    const grassBladeGeo = new THREE.PlaneGeometry(0.22, 0.92, 1, 3);
+    grassBladeGeo.translate(0, 0.46, 0);
+    const grassBladeMat = Game._attachFoliageWind(new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        emissive: 0x101608,
+        emissiveIntensity: 0.045,
+        map: grassBladeTex,
+        alphaTest: 0.22,
+        side: THREE.DoubleSide,
+        roughness: 0.96,
+        metalness: 0,
+    }), { strength: 0.075, speed: 1.15, flutter: 0.018 });
+    grassBladeMat.name = 'shared-undergrowth-blades';
+    const grassDepthMat = Game._attachFoliageWind(new THREE.MeshDepthMaterial({
+        depthPacking: THREE.RGBADepthPacking,
+        map: grassBladeTex,
+        alphaTest: 0.22,
+        side: THREE.DoubleSide,
+    }), { strength: 0.075, speed: 1.15, flutter: 0.018 });
 
     // Warm stone/plaster wall tints + terracotta roof tints (reference palette)
     const PLASTER = [0xc8bca2, 0xbcae93, 0xd0c4ac, 0xb6ab93, 0xc2b8a0];
@@ -1034,41 +1723,133 @@ Game.buildTerrainMeshes = () => {
             if (Game.terrain[ty][tx].type === 'hedge') hedgeTiles.push({ tx, ty });
         }
     }
-    {
-        const bushGeo = new THREE.IcosahedronGeometry(1, 1);
-        const bp = bushGeo.attributes.position;
-        for (let i = 0; i < bp.count; i++) {
-            const jitter = 0.8 + Math.random() * 0.4;
-            bp.setXYZ(i, bp.getX(i) * jitter, bp.getY(i) * jitter * 0.55, bp.getZ(i) * jitter);
+    if (hedgeTiles.length && Game.EZTree && Game.EZTree.Tree) {
+        // Hedgerow shrubs: short, bushy EZ-Tree prototypes instanced along hedges
+        // (replaces the old faceted icosahedron blobs).
+        const shrubProtos = [];
+        for (let p = 0; p < 2; p++) {
+            shrubProtos.push(makeFoliageProto(7001 + p * 97, (o) => {
+                o.type = 'deciduous';
+                o.branch.levels = 2;
+                o.branch.children = { 0: 5, 1: 3, 2: 2 };
+                o.branch.sections = { 0: 4, 1: 3, 2: 3, 3: 2 };
+                o.branch.segments = { 0: 5, 1: 4, 2: 3, 3: 3 };
+                o.branch.length = { 0: 9 + p * 2, 1: 7, 2: 4, 3: 3 };
+                o.branch.radius = { 0: 0.9, 1: 0.5, 2: 0.3, 3: 0.2 };
+                o.branch.angle = { 1: 62, 2: 60, 3: 60 };
+                o.branch.gnarliness = { 0: 0.16, 1: 0.25, 2: 0.2, 3: 0.1 };
+                o.leaves.type = 'oak';
+                o.leaves.billboard = 'double';
+                o.leaves.count = 8;
+                o.leaves.size = 4.0;
+                o.leaves.sizeVariance = 0.8;
+                o.leaves.start = 0.0;
+            }));
         }
-        bushGeo.computeVertexNormals();
-
         const perTile = 2;
-        if (hedgeTiles.length) {
-            const mat = new THREE.MeshStandardMaterial({ color: 0x3a5a2a, roughness: 0.95, flatShading: true });
-            const inst = new THREE.InstancedMesh(bushGeo, mat, hedgeTiles.length * perTile);
-            const dummy = new THREE.Object3D();
-            const color = new THREE.Color();
-            let n = 0;
-            hedgeTiles.forEach(({ tx, ty }) => {
-                for (let k = 0; k < perTile; k++) {
-                    const x = tx * T + Game.rand(0.5, T - 0.5);
-                    const z = ty * T + Game.rand(0.5, T - 0.5);
-                    const s = Game.rand(0.9, 1.4);
-                    dummy.position.set(x, Game.getHeight(x, z) + 0.45 * s, z);
-                    dummy.scale.set(s * 1.3, s, s * 1.3);
-                    dummy.rotation.set(0, Game.rand(0, Math.PI * 2), 0);
-                    dummy.updateMatrix();
-                    inst.setMatrixAt(n, dummy.matrix);
-                    color.setHSL(0.28 + Game.rand(-0.03, 0.03), 0.45, 0.24 + Game.rand(0, 0.07));
-                    inst.setColorAt(n, color);
-                    n++;
-                }
+        const shrubPositions = [];
+        hedgeTiles.forEach(({ tx, ty }) => {
+            for (let k = 0; k < perTile; k++) {
+                shrubPositions.push({
+                    x: tx * T + Game.rand(0.5, T - 0.5),
+                    z: ty * T + Game.rand(0.5, T - 0.5),
+                    height: 1.0,
+                    scale: Game.rand(0.8, 1.25),
+                    sink: 0.2,
+                });
+            }
+        });
+        placeFoliage(shrubProtos, shrubPositions, 2.4, 'hedge-shrub');
+    }
+
+    // ── Forest-style instanced undergrowth: one blade mesh, many varied instances ──
+    {
+        const maxBlades = Math.floor(9500 * (Game.TERRAIN_DETAIL_DENSITY || 1));
+        const blades = [];
+        const addBlade = (x, z, type, sizeMul = 1) => {
+            if (blades.length >= maxBlades) return;
+            const nearRoad =
+                Game.getTileAtWorld(x + T, z)?.type === 'road' ||
+                Game.getTileAtWorld(x - T, z)?.type === 'road' ||
+                Game.getTileAtWorld(x, z + T)?.type === 'road' ||
+                Game.getTileAtWorld(x, z - T)?.type === 'road';
+            const baseH = type === 'dense_forest' ? Game.rand(0.88, 1.45)
+                : type === 'forest' ? Game.rand(0.68, 1.18)
+                    : type === 'hedge' ? Game.rand(0.46, 0.86)
+                        : type === 'orchard' ? Game.rand(0.46, 0.78)
+                            : Game.rand(0.34, 0.62);
+            blades.push({
+                x,
+                z,
+                type,
+                height: baseH * sizeMul * (nearRoad ? 0.72 : 1),
+                width: Game.rand(0.55, 1.25) * sizeMul,
+                yaw: Game.rand(0, Math.PI * 2),
+                lean: Game.rand(-0.22, 0.22),
             });
+        };
+
+        for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
+            for (let tx = 0; tx < Game.MAP_COLS; tx++) {
+                const tile = Game.terrain[ty][tx];
+                const type = tile.type;
+                let count = 0;
+                if (type === 'dense_forest') count = Game.randi(5, 8);
+                else if (type === 'forest') count = Game.randi(3, 5);
+                else if (type === 'orchard') count = Game.randi(1, 3);
+                else if ((type === 'grass' || type === 'pasture') && Math.random() < 0.13) count = 1;
+                else if (type === 'stubble' && Math.random() < 0.08) count = 1;
+
+                for (let i = 0; i < count; i++) {
+                    addBlade(
+                        tx * T + Game.rand(0.18, T - 0.18),
+                        ty * T + Game.rand(0.18, T - 0.18),
+                        type,
+                        type === 'dense_forest' || type === 'forest' ? 1.1 : 0.82
+                    );
+                }
+            }
+        }
+
+        hedgeTiles.forEach(({ tx, ty }) => {
+            const horizontal = Game.getTile(tx - 1, ty)?.type === 'hedge' || Game.getTile(tx + 1, ty)?.type === 'hedge';
+            for (let i = 0; i < 4; i++) {
+                addBlade(
+                    tx * T + (horizontal ? Game.rand(0.1, T - 0.1) : Game.rand(T * 0.32, T * 0.68)),
+                    ty * T + (horizontal ? Game.rand(T * 0.32, T * 0.68) : Game.rand(0.1, T - 0.1)),
+                    'hedge',
+                    0.95
+                );
+            }
+        });
+
+        if (blades.length) {
+            const inst = new THREE.InstancedMesh(grassBladeGeo, grassBladeMat, blades.length);
+            inst.name = 'forest-undergrowth-blades';
             inst.castShadow = true;
             inst.receiveShadow = true;
+            inst.customDepthMaterial = grassDepthMat;
+            const dummy = new THREE.Object3D();
+            const color = new THREE.Color();
+
+            blades.forEach((b, i) => {
+                dummy.position.set(b.x, Game.getHeight(b.x, b.z) + 0.03, b.z);
+                dummy.rotation.set(b.lean * 0.35, b.yaw, b.lean);
+                dummy.scale.set(b.width, b.height, 1);
+                dummy.updateMatrix();
+                inst.setMatrixAt(i, dummy.matrix);
+
+                if (b.type === 'dense_forest') color.setHSL(0.29 + Game.rand(-0.025, 0.035), 0.38 + Game.rand(0, 0.13), 0.24 + Game.rand(0, 0.1));
+                else if (b.type === 'forest') color.setHSL(0.285 + Game.rand(-0.03, 0.04), 0.40 + Game.rand(0, 0.15), 0.27 + Game.rand(0, 0.12));
+                else if (b.type === 'hedge') color.setHSL(0.28 + Game.rand(-0.035, 0.045), 0.44 + Game.rand(0, 0.17), 0.29 + Game.rand(0, 0.13));
+                else if (b.type === 'stubble') color.setHSL(0.15 + Game.rand(-0.02, 0.03), 0.32 + Game.rand(0, 0.12), 0.31 + Game.rand(0, 0.11));
+                else color.setHSL(0.23 + Game.rand(-0.04, 0.04), 0.34 + Game.rand(0, 0.14), 0.29 + Game.rand(0, 0.13));
+                inst.setColorAt(i, color);
+            });
+
             inst.instanceMatrix.needsUpdate = true;
             if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+            inst.computeBoundingSphere();
             Game.terrainGroup.add(inst);
         }
     }
@@ -1136,79 +1917,32 @@ Game.buildTerrainMeshes = () => {
         }
 
         const treeCount = treePositions.length;
-        if (treeCount > 0) {
-            const trunkGeo = new THREE.CylinderGeometry(0.09, 0.16, 1, 5);
-
-            const makeCanopyGeo = () => {
-                const geo = new THREE.IcosahedronGeometry(1, 1);
-                const cpos = geo.attributes.position;
-                for (let v = 0; v < cpos.count; v++) {
-                    const jitter = 0.75 + Math.random() * 0.5;
-                    const yFactor = cpos.getY(v) < 0 ? 0.45 : 1.0;
-                    cpos.setXYZ(v, cpos.getX(v) * jitter, cpos.getY(v) * jitter * yFactor, cpos.getZ(v) * jitter);
-                }
-                geo.computeVertexNormals();
-                return geo;
-            };
-
-            const trunkMat = new THREE.MeshStandardMaterial({
-                color: 0x6b4a33, roughness: 0.95,
-                map: tiled(barkTex, 1, 2),
-            });
-            const canopyMatLow = new THREE.MeshStandardMaterial({ color: 0x2d5a22, roughness: 0.92, flatShading: true });
-            const canopyMatTop = new THREE.MeshStandardMaterial({ color: 0x4a8a34, roughness: 0.88, flatShading: true });
-
-            const trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
-            const canopyLow = new THREE.InstancedMesh(makeCanopyGeo(), canopyMatLow, treeCount);
-            const canopyTop = new THREE.InstancedMesh(makeCanopyGeo(), canopyMatTop, treeCount);
-            trunkMesh.castShadow = true;
-            canopyLow.castShadow = true;
-            canopyTop.castShadow = false;
-            canopyLow.receiveShadow = true;
-            canopyTop.receiveShadow = true;
-
-            const dummy = new THREE.Object3D();
-            const color = new THREE.Color();
-
-            for (let i = 0; i < treeCount; i++) {
-                const t = treePositions[i];
-                const baseY = Game.getHeight(t.x, t.z);
-                const trunkH = t.height * 0.42 * t.scale;
-                const baseR = t.height * 0.36 * t.scale;
-                const rot = Math.random() * Math.PI * 2;
-
-                dummy.position.set(t.x, baseY + trunkH / 2, t.z);
-                dummy.scale.set(t.scale, trunkH, t.scale);
-                dummy.rotation.set(0, rot, 0);
-                dummy.updateMatrix();
-                trunkMesh.setMatrixAt(i, dummy.matrix);
-                color.setHSL(0.08, 0.35, 0.22 + Math.random() * 0.08);
-                trunkMesh.setColorAt(i, color);
-
-                const offX = (Math.random() - 0.5) * 0.3;
-                const offZ = (Math.random() - 0.5) * 0.3;
-                dummy.position.set(t.x + offX, baseY + trunkH * 0.95, t.z + offZ);
-                dummy.scale.set(baseR * 1.05, baseR * 0.7, baseR * 1.05);
-                dummy.rotation.set(0, rot + 1.0, 0);
-                dummy.updateMatrix();
-                canopyLow.setMatrixAt(i, dummy.matrix);
-                color.setHSL(0.27 + Math.random() * 0.07, 0.45 + Math.random() * 0.15, 0.22 + Math.random() * 0.08);
-                canopyLow.setColorAt(i, color);
-
-                dummy.position.set(t.x, baseY + trunkH * 1.35, t.z);
-                dummy.scale.set(baseR * 0.65, baseR * 0.5, baseR * 0.65);
-                dummy.rotation.set(0, rot + 2.5, 0);
-                dummy.updateMatrix();
-                canopyTop.setMatrixAt(i, dummy.matrix);
-                color.setHSL(0.26 + Math.random() * 0.09, 0.45 + Math.random() * 0.18, 0.32 + Math.random() * 0.12);
-                canopyTop.setColorAt(i, color);
+        if (treeCount > 0 && Game.EZTree && Game.EZTree.Tree) {
+            // A few prototype trees, generated once, then instanced across every
+            // tree position. Geometry is EZ-Tree (MIT); rendered with CC0 textures
+            // via the shared helpers above (oak bark + leaf cards).
+            const treeProtos = [];
+            for (let p = 0; p < 4; p++) {
+                treeProtos.push(makeFoliageProto(1009 + p * 131, (o) => {
+                    o.type = 'deciduous';
+                    // 2 levels + a modest, large-leaf canopy keeps the triangle
+                    // budget sane (leaves.count is PER branch, so it multiplies fast).
+                    o.branch.levels = 2;
+                    o.branch.children = { 0: 5 + (p % 2), 1: 4, 2: 2 };
+                    o.branch.sections = { 0: 5, 1: 4, 2: 3, 3: 2 };
+                    o.branch.segments = { 0: 6, 1: 4, 2: 3, 3: 3 };
+                    o.branch.length = { 0: 32 + p * 4, 1: 20, 2: 9, 3: 4 };
+                    o.branch.radius = { 0: 1.7, 1: 0.7, 2: 0.5, 3: 0.4 };
+                    o.branch.gnarliness = { 0: 0.06 + p * 0.02, 1: 0.2, 2: 0.2, 3: 0.1 };
+                    o.leaves.type = 'oak';
+                    o.leaves.billboard = 'double';
+                    o.leaves.count = 7;
+                    o.leaves.size = 5.4;
+                    o.leaves.sizeVariance = 0.85;
+                    o.leaves.start = 0.1;
+                }));
             }
-
-            [trunkMesh, canopyLow, canopyTop].forEach(m => {
-                m.instanceMatrix.needsUpdate = true;
-                if (m.instanceColor) m.instanceColor.needsUpdate = true;
-                Game.terrainGroup.add(m);
-            });
+            placeFoliage(treeProtos, treePositions, 1.7, 'tree');
         }
     }
 
@@ -1283,16 +2017,18 @@ Game.buildTerrainMeshes = () => {
     Game.craters.forEach(c => {
         const baseY = Game.getHeight(c.x, c.z);
         const geo = new THREE.CircleGeometry(c.r, 16);
-        const mat = new THREE.MeshStandardMaterial({
-            color: 0x2a2218,
-            roughness: 1.0,
+        const mat = new THREE.MeshBasicMaterial({
+            color: 0x5a4935,
+            map: craterTex,
             transparent: true,
-            opacity: 0.25,
+            opacity: 0.42,
             depthWrite: false,
         });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.rotation.x = -Math.PI / 2;
+        mesh.rotation.z = Game.rand(0, Math.PI * 2);
         mesh.position.set(c.x, baseY + 0.04, c.z);
+        mesh.renderOrder = 3;
         Game.terrainGroup.add(mesh);
     });
 

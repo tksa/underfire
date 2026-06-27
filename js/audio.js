@@ -11,7 +11,11 @@ Game.Audio = (() => {
     const FILES = {
         rifle: ['sounds/rwm/rifle1.ogg', 'sounds/shot_02.ogg'],
         mg: ['sounds/rwm/mg_tank_burst.ogg', 'sounds/rwm/mg_heavy.ogg', 'sounds/rwm/smg_burst.ogg'],
-        cannon: ['sounds/rwm/explo_tankdir.ogg', 'sounds/rwm/faustshot.ogg', 'sounds/rwm/atrifle.ogg'],
+        // Tank/AT/field-gun report. RWM: explo_tankdir = tank direct fire, gunshot =
+        // field-gun/cannon report. The panzerfaust whoosh + AT-rifle crack lived here
+        // before and made tank guns sound wrong, so they're out of the cannon pool.
+        cannon: ['sounds/rwm/explo_tankdir.ogg', 'sounds/rwm/gunshot.ogg',
+            'sounds/rwm/gunshot.1.ogg', 'sounds/rwm/gunshot.2.ogg'],
         explosion: ['sounds/rwm/smallexplosion.ogg', 'sounds/rwm/defaultexplosion.ogg',
             'sounds/rwm/howitzerexplosion.ogg', 'sounds/bang_05.ogg'],
     };

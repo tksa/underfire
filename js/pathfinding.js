@@ -35,15 +35,30 @@ Game.findPath = (unit, startX, startZ, endX, endZ) => {
         else return [];
     }
 
-    const open = [];
-    const openMap = new Map();
+    // Binary min-heap open set + lazy duplicates (cheap decrease-key). A plain
+    // sorted array is fine on a 100x100 grid but pathological on the larger
+    // GLB-map grid, where cross-map orders expand many nodes.
+    const heap = [];
+    const hpush = (n) => {
+        heap.push(n); let i = heap.length - 1;
+        while (i > 0) { const p = (i - 1) >> 1; if (heap[p].f <= heap[i].f) break; const t = heap[p]; heap[p] = heap[i]; heap[i] = t; i = p; }
+    };
+    const hpop = () => {
+        const top = heap[0], last = heap.pop();
+        if (heap.length) {
+            heap[0] = last; let i = 0; const n = heap.length;
+            for (; ;) { let s = i; const l = 2 * i + 1, r = 2 * i + 2; if (l < n && heap[l].f < heap[s].f) s = l; if (r < n && heap[r].f < heap[s].f) s = r; if (s === i) break; const t = heap[s]; heap[s] = heap[i]; heap[i] = t; i = s; }
+        }
+        return top;
+    };
+    const gScore = new Map();
     const closed = new Set();
 
     const startKey = `${start.tx},${start.ty}`;
     const node = { tx: start.tx, ty: start.ty, g: 0, h: Game.heuristic(start, end), f: 0, parent: null };
     node.f = node.g + node.h;
-    open.push(node);
-    openMap.set(startKey, node);
+    hpush(node);
+    gScore.set(startKey, 0);
 
     const dirs = [
         [1, 0], [-1, 0], [0, 1], [0, -1],
@@ -52,14 +67,14 @@ Game.findPath = (unit, startX, startZ, endX, endZ) => {
 
     let best = node;
     let safety = 0;
-    while (open.length && safety++ < 3000) {
-        open.sort((a, b) => a.f - b.f);
-        const current = open.shift();
+    const maxNodes = Game.MAP_COLS * Game.MAP_ROWS;   // full-grid ceiling (heap keeps this fast)
+    while (heap.length && safety++ < maxNodes) {
+        const current = hpop();
         const currentKey = `${current.tx},${current.ty}`;
-        openMap.delete(currentKey);
+        if (closed.has(currentKey)) continue;   // stale heap duplicate
+        closed.add(currentKey);
         if (current.h < best.h) best = current;
         if (current.tx === end.tx && current.ty === end.ty) { best = current; break; }
-        closed.add(currentKey);
 
         for (const [dx, dy] of dirs) {
             const ntx = current.tx + dx, nty = current.ty + dy;
@@ -69,16 +84,11 @@ Game.findPath = (unit, startX, startZ, endX, endZ) => {
             if (!isFinite(cost)) continue;
             const diag = (dx !== 0 && dy !== 0) ? 1.4 : 1.0;
             const ng = current.g + cost * diag;
-            let neighbor = openMap.get(nkey);
-            if (!neighbor) {
-                neighbor = { tx: ntx, ty: nty, g: ng, h: Game.heuristic({ tx: ntx, ty: nty }, end), f: 0, parent: current };
-                neighbor.f = neighbor.g + neighbor.h;
-                open.push(neighbor);
-                openMap.set(nkey, neighbor);
-            } else if (ng < neighbor.g) {
-                neighbor.g = ng;
-                neighbor.f = neighbor.g + neighbor.h;
-                neighbor.parent = current;
+            const prev = gScore.get(nkey);
+            if (prev === undefined || ng < prev) {
+                gScore.set(nkey, ng);
+                const h = Game.heuristic({ tx: ntx, ty: nty }, end);
+                hpush({ tx: ntx, ty: nty, g: ng, h, f: ng + h, parent: current });
             }
         }
     }

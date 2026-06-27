@@ -18,11 +18,31 @@ used under CC-BY 3.0. Icons made by:
   Source: "4K Seamless Grass Dirt Ground Texture with all Shader Maps", CC0.
   Files: `textures/oga/ground_detail_nrm.jpg`, `ground_detail_ao.jpg`, `ground_detail_color.jpg`
   (downscaled to 1024 to fit the texture-memory budget).
-- **Wood** (tree bark) — from "Ground Textures Free", CC0.
-  File: `textures/oga/wood.jpg` (downscaled to 512).
+- **Wood** — from "Ground Textures Free", CC0. File: `textures/oga/wood.jpg`
+  (downscaled to 512). Was the tree bark; superseded by the oak bark below.
+
+## Textures (Poly Haven, CC0)
+- **Jolcham Oak Bark 01** (tree bark colour + normal) — used on the trunks/branches
+  of the EZ-Tree trees. Source: [polyhaven.com](https://polyhaven.com/a/jolcham_oak_bark_01), CC0.
+  Files: `textures/bark_color.jpg`, `textures/bark_normal.jpg` (1K, downscaled to 512x1024).
 
 Procedurally generated in-engine (no external source): terrain color map, roof tiles,
-vehicle/infantry weathering.
+vehicle/infantry weathering. Tree geometry is generated at runtime by EZ-Tree (see
+Code Libraries); only the CC0 textures above are bundled.
+
+## Code Libraries
+All loaded at runtime from a pinned CDN (jsDelivr) via the importmap; not bundled,
+and no build step.
+
+- **EZ-Tree** by Daniel Greenheck — procedural tree generator, **MIT licence**.
+  We use its geometry only and render it with the CC0 bark/leaf textures above.
+  Source: https://github.com/dgreenheck/ez-tree
+- **postprocessing** by Raoul van Rüschen (pmndrs) — bloom, tilt-shift depth-of-field,
+  colour grading, vignette and SMAA, **MIT licence**.
+  Source: https://github.com/pmndrs/postprocessing
+- **Three JS Upscaler** by Elijah Brown (DevsDaddy) — FSR-like edge-enhancing
+  upscaling shader, **MIT licence**. The shader is ported into `js/engine.js`.
+  Source: https://github.com/DevsDaddy/threejs-upscaler
 
 ## Sound Effects (OpenGameArt.org, CC0)
 - **25 CC0 bang / firework SFX** — bangs, cannon, and shots used for rifle fire,
