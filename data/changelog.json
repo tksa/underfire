@@ -1,8 +1,18 @@
 {
  "version": "v0.7.0-dev",
- "build": "2445f36",
+ "build": "b2fd4bc",
  "generated": "2026-06-27",
  "commits": [
+  {
+   "hash": "b2fd4bc",
+   "date": "2026-06-27",
+   "subject": "friendly infantry step aside from own tanks (never crushed)"
+  },
+  {
+   "hash": "a5eb1ab",
+   "date": "2026-06-27",
+   "subject": "bump version to v0.7.0-dev"
+  },
   {
    "hash": "2445f36",
    "date": "2026-06-27",
@@ -62,16 +72,6 @@
    "hash": "8deaa3f",
    "date": "2026-06-26",
    "subject": "data-driven unit roster (data/units.csv) + full RWM roster import"
-  },
-  {
-   "hash": "16e6d8f",
-   "date": "2026-06-26",
-   "subject": "engineer sandbags, troop transport, towing (RWM)"
-  },
-  {
-   "hash": "6f76464",
-   "date": "2026-06-26",
-   "subject": "morale officer-aura, chain of command, mine warfare refinement"
   }
  ]
 }
