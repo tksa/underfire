@@ -1,8 +1,13 @@
 {
- "version": "v0.6.0-dev",
- "build": "5b12c14",
+ "version": "v0.7.0-dev",
+ "build": "2445f36",
  "generated": "2026-06-27",
  "commits": [
+  {
+   "hash": "2445f36",
+   "date": "2026-06-27",
+   "subject": "refresh data/changelog.json (Latest Updates)"
+  },
   {
    "hash": "5b12c14",
    "date": "2026-06-27",
@@ -67,11 +72,6 @@
    "hash": "6f76464",
    "date": "2026-06-26",
    "subject": "morale officer-aura, chain of command, mine warfare refinement"
-  },
-  {
-   "hash": "8499c41",
-   "date": "2026-06-26",
-   "subject": "towed-gun deploy/limber (RWM siege) + RWM logic reference"
   }
  ]
 }

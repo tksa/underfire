@@ -1,0 +1,25 @@
+# Cloudflare Pages cache rules.
+# This is a no-build static site that updates in place, so force the edge and the
+# browser to revalidate the volatile files on every request. Without this,
+# Cloudflare can serve stale JS/CSS even though the loader appends a ?v= buster
+# (the query string is not always part of the cache key).
+
+# HTML is the entry point (inline CSS lives here) - never serve a stale copy.
+/
+  Cache-Control: no-cache
+/*.html
+  Cache-Control: no-cache
+
+# Game scripts and generated data - always revalidate.
+/js/*
+  Cache-Control: no-cache
+/data/*
+  Cache-Control: no-cache
+
+# Long-lived, rarely-changed binary assets can be cached.
+/textures/*
+  Cache-Control: public, max-age=86400
+/sounds/*
+  Cache-Control: public, max-age=86400
+/models/*
+  Cache-Control: public, max-age=86400

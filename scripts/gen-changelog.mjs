@@ -6,7 +6,7 @@
 import { execSync } from 'child_process';
 import { writeFileSync } from 'fs';
 
-const VERSION = 'v0.6.0-dev';
+const VERSION = 'v0.7.0-dev';
 const N = 14;
 
 const raw = execSync(`git log -${N} --date=short --pretty=format:%h%x1f%ad%x1f%s`, { encoding: 'utf8' });
