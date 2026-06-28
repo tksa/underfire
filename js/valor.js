@@ -37,9 +37,28 @@ uniform float uTime;       // animates the grain
 uniform float uChiaro;     // chiaroscuro local-contrast (unsharp) amount
 uniform float uSfumato;    // far edge-softening amount
 uniform float uSfumatoStart;// depth where softening begins (0..1)
+uniform float uGradeDesat; // global palette desaturation (documentary look)
+uniform float uGradeTemp;  // colour temperature (-1 cool .. +1 warm)
+uniform float uFoliageSat; // saturation multiplier for green (foliage) hues
+uniform float uMetalDesat; // extra desaturation for low-sat (metal/concrete)
+uniform float uSkinWarm;   // warmth boost for skin/warm hues
 
 float valorLuma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 float valorHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+
+// HSV helpers (Sam Hocevar, public domain) for the pseudo-semantic grade.
+vec3 valorRgb2hsv(vec3 c) {
+    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+    float d = q.x - min(q.w, q.y);
+    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-10)), d / (q.x + 1e-10), q.x);
+}
+vec3 valorHsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
 
 // 5-tap cross blur of the pass input (pmndrs provides inputBuffer + texelSize).
 vec3 valorBlur(vec2 uv) {
@@ -73,6 +92,25 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
     c = mix(c, vec3(valorLuma(c)), f * uDesat);   // lose saturation with distance
     c = mix(c, uFogColor, f * uTint);             // tint toward haze
 
+    // Spatial-aware-ish grade: no material-ID buffer, so the "category" is
+    // inferred from hue/saturation and graded per-band (the cheap stand-in for
+    // the doc's semantic LUT). Foliage greens, warm skin, and grey metal each
+    // respond differently, then a global palette desat + temperature on top.
+    {
+        vec3 hsv = valorRgb2hsv(c);
+        float foliage = smoothstep(0.20, 0.30, hsv.x) * (1.0 - smoothstep(0.45, 0.55, hsv.x));
+        hsv.y *= mix(1.0, uFoliageSat, foliage);
+        float warm = (1.0 - smoothstep(0.12, 0.18, hsv.x)) * smoothstep(0.0, 0.04, hsv.x);
+        hsv.y += uSkinWarm * 0.15 * warm;
+        float greyish = 1.0 - smoothstep(0.10, 0.30, hsv.y);   // already low-sat = metal/concrete
+        hsv.y *= mix(1.0, 1.0 - uMetalDesat, greyish);
+        hsv.y *= (1.0 - uGradeDesat);                          // global archival desat
+        c = valorHsv2rgb(clamp(hsv, 0.0, 4.0));
+        c.r += uGradeTemp * 0.05;                              // temperature
+        c.b -= uGradeTemp * 0.05;
+        c = max(c, 0.0);
+    }
+
     // Film grain / scumble (animated, mild).
     if (uGrain > 0.0) {
         float n = valorHash(uv + fract(uTime) * 1.7) - 0.5;
@@ -105,6 +143,11 @@ Game._makeValorEffect = () => {
                     ['uChiaro', new THREE.Uniform(0.2)],
                     ['uSfumato', new THREE.Uniform(0.3)],
                     ['uSfumatoStart', new THREE.Uniform(0.45)],
+                    ['uGradeDesat', new THREE.Uniform(0.05)],
+                    ['uGradeTemp', new THREE.Uniform(0.0)],
+                    ['uFoliageSat', new THREE.Uniform(1.05)],
+                    ['uMetalDesat', new THREE.Uniform(0.25)],
+                    ['uSkinWarm', new THREE.Uniform(0.3)],
                 ]),
             });
         }
@@ -126,6 +169,11 @@ Game._valorDefaults = {
     valorChiaro: 0.2,
     valorSfumato: 0.3,
     valorSfumatoStart: 0.45,
+    valorGradeDesat: 0.05,
+    valorGradeTemp: 0.0,
+    valorFoliageSat: 1.05,
+    valorMetalDesat: 0.25,
+    valorSkinWarm: 0.3,
 };
 
 /**
@@ -176,6 +224,11 @@ Game._valorControlDefs = () => {
         { group: 'VALOR', key: 'valorChiaro', label: 'Chiaroscuro (local contrast)', min: 0, max: 1, step: 0.01, apply: v => set('uChiaro', v) },
         { group: 'VALOR', key: 'valorSfumato', label: 'Sfumato (far soften)', min: 0, max: 1, step: 0.01, apply: v => set('uSfumato', v) },
         { group: 'VALOR', key: 'valorSfumatoStart', label: 'Sfumato Start', min: 0, max: 1, step: 0.01, apply: v => set('uSfumatoStart', v) },
+        { group: 'VALOR Grade', key: 'valorGradeDesat', label: 'Palette Desaturate', min: 0, max: 1, step: 0.01, apply: v => set('uGradeDesat', v) },
+        { group: 'VALOR Grade', key: 'valorGradeTemp', label: 'Temperature (cool/warm)', min: -1, max: 1, step: 0.01, apply: v => set('uGradeTemp', v) },
+        { group: 'VALOR Grade', key: 'valorFoliageSat', label: 'Foliage Saturation', min: 0, max: 2, step: 0.01, apply: v => set('uFoliageSat', v) },
+        { group: 'VALOR Grade', key: 'valorMetalDesat', label: 'Metal Desaturate', min: 0, max: 1, step: 0.01, apply: v => set('uMetalDesat', v) },
+        { group: 'VALOR Grade', key: 'valorSkinWarm', label: 'Skin Warmth', min: 0, max: 1, step: 0.01, apply: v => set('uSkinWarm', v) },
     ];
 };
 
@@ -214,6 +267,61 @@ Game._valorMatControlDefs = () => {
         { group: 'VALOR Materials', key: 'valorMatWet', label: 'Wetness', min: 0, max: 1, step: 0.01, apply: v => { u().wet.value = v; } },
         { group: 'VALOR Materials', key: 'valorMatSnow', label: 'Snow', min: 0, max: 1, step: 0.01, apply: v => { u().snow.value = v; } },
     ];
+};
+
+// Inject the shared world-space weathering (dirt / edge-wear / wetness / snow)
+// into a MeshStandard onBeforeCompile shader. Used by both unit materials
+// (_addWeathering) and the terrain material, so one set of sliders weathers the
+// whole battlefield. opts.wear=false skips edge-wear (ground doesn't scuff).
+Game._valorWeatherInject = (shader, opts = {}) => {
+    const vu = Game._valorMatUniforms ? Game._valorMatUniforms() : null;
+    if (!vu) return;
+    const wear = opts.wear !== false;
+    shader.uniforms.uvMaster = vu.master;
+    shader.uniforms.uvDirt = vu.dirt;
+    shader.uniforms.uvWear = vu.wear;
+    shader.uniforms.uvWet = vu.wet;
+    shader.uniforms.uvSnow = vu.snow;
+
+    if (shader.vertexShader.indexOf('vValorWP') < 0) {
+        shader.vertexShader = 'varying vec3 vValorWP;\nvarying vec3 vValorWN;\n' + shader.vertexShader.replace(
+            '#include <begin_vertex>',
+            `#include <begin_vertex>
+             vValorWP = (modelMatrix * vec4(transformed, 1.0)).xyz;
+             vValorWN = normalize(mat3(modelMatrix) * normal);`
+        );
+    }
+
+    shader.fragmentShader = 'uniform float uvMaster, uvDirt, uvWear, uvWet, uvSnow;\nvarying vec3 vValorWP;\nvarying vec3 vValorWN;\n' + shader.fragmentShader;
+
+    shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+         {
+           float vUp = clamp(vValorWN.y, 0.0, 1.0);
+           float g1 = fract(sin(dot(floor(vValorWP.xz * 1.6), vec2(12.9898, 78.233))) * 43758.545);
+           float g2 = fract(sin(dot(vValorWP.xz * 0.55, vec2(39.34, 11.13))) * 43758.545);
+           // grime: pools low + in non-up-facing cavities
+           float grime = uvMaster * uvDirt * mix(g1, g2, 0.5) * (0.45 + 0.55 * (1.0 - vUp));
+           diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.40, 0.36, 0.30), grime);
+           ${wear ? `// edge wear: paint scuff / bare metal on up-facing convex spots
+           float wr = uvMaster * uvWear * smoothstep(0.72, 1.0, vUp) * g2;
+           diffuseColor.rgb += wr * 0.10;` : ``}
+           // snow blanket on top faces
+           float sn = uvMaster * uvSnow * smoothstep(0.42, 1.0, vUp);
+           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.90, 0.92, 0.96), sn);
+         }`
+    );
+
+    shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <roughnessmap_fragment>',
+        `#include <roughnessmap_fragment>
+         {
+           float vUp = clamp(vValorWN.y, 0.0, 1.0);
+           float wet = uvMaster * uvWet * (0.35 + 0.65 * vUp);
+           roughnessFactor = clamp(roughnessFactor + uvMaster * uvDirt * 0.12 - wet * 0.45, 0.04, 1.0);
+         }`
+    );
 };
 
 // Per-frame: animate the grain and keep the haze tint matched to the scene fog

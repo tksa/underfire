@@ -1355,6 +1355,8 @@ Game.buildTerrainMeshes = () => {
              float detailRough = texture2D(detailRoughnessMap, vMapUv * 42.0).g;
              roughnessFactor = clamp(roughnessFactor * mix(0.78, 1.12, detailRough), 0.38, 1.0);`
         );
+        // VALOR Stage 3: ground grime / wetness / snow (no edge-wear on terrain).
+        if (Game._valorWeatherInject) Game._valorWeatherInject(shader, { wear: false });
     };
 
     Game.terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);

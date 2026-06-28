@@ -503,6 +503,7 @@ Game.postfxValuesText = () => {
         `  lighting:       { sun: ${f(s.sunIntensity)}, ambient: ${f(s.ambientIntensity)}, cloudShadows: ${f(s.cloudShadow)} },`,
         `  valor:          { enable: ${s.valorEnable ? 'true' : 'false'}, exposure: ${f(s.valorExposure)}, aerial: ${f(s.valorAerial)}, aerialStart: ${f(s.valorAerialStart)}, aerialEnd: ${f(s.valorAerialEnd)}, desat: ${f(s.valorDesat)}, tint: ${f(s.valorTint)}, grain: ${f(s.valorGrain)}, chiaro: ${f(s.valorChiaro)}, sfumato: ${f(s.valorSfumato)}, sfumatoStart: ${f(s.valorSfumatoStart)} },`,
         `  valorMat:       { enable: ${s.valorMatEnable ? 'true' : 'false'}, dirt: ${f(s.valorMatDirt)}, wear: ${f(s.valorMatWear)}, wet: ${f(s.valorMatWet)}, snow: ${f(s.valorMatSnow)} },`,
+        `  valorGrade:     { desat: ${f(s.valorGradeDesat)}, temp: ${f(s.valorGradeTemp)}, foliageSat: ${f(s.valorFoliageSat)}, metalDesat: ${f(s.valorMetalDesat)}, skinWarm: ${f(s.valorSkinWarm)} },`,
         '}',
     ].join('\n');
 };
