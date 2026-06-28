@@ -1282,6 +1282,13 @@ Game.buildTerrainMeshes = () => {
     const terrainMasks = Game.buildTerrainMaterialMaps();
 
     const texLoader = new THREE.TextureLoader();
+    // Cache-bust asset URLs. Cloudflare can negatively-cache a 404 at an edge POP
+    // during the brief window between a code deploy and its assets landing; bump
+    // ASSET_V whenever a bundled texture is added/changed so the edge re-fetches.
+    const ASSET_V = '7';
+    const _texLoad = texLoader.load.bind(texLoader);
+    texLoader.load = (url, ...rest) =>
+        _texLoad(url + (url.indexOf('?') >= 0 ? '&' : '?') + 'v=' + ASSET_V, ...rest);
     const terrainDetailColor = texLoader.load('textures/oga/ground_detail_color.jpg');
     terrainDetailColor.wrapS = terrainDetailColor.wrapT = THREE.RepeatWrapping;
     terrainDetailColor.colorSpace = THREE.SRGBColorSpace;
