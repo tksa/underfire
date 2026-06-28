@@ -191,13 +191,16 @@ Game.setupValor = () => {
         Game.valorPass = pass;
 
         Game.postfxState = Game.postfxState || {};
-        const defaults = Object.assign({}, Game._valorDefaults, Game._valorMatDefaults, Game._valorDecalDefaults);
+        const defaults = Object.assign({}, Game._valorDefaults, Game._valorMatDefaults,
+            Game._valorDecalDefaults, Game._valorFoliageDefaults);
         for (const k in defaults) {
             if (Game.postfxState[k] === undefined) Game.postfxState[k] = defaults[k];
         }
-        Game._valorMatUniforms(); // ensure shared material uniforms exist
-        // Push initial state into the effect + material + decal settings.
-        Game._valorControlDefs().concat(Game._valorMatControlDefs(), Game._valorDecalControlDefs())
+        Game._valorMatUniforms();      // ensure shared material uniforms exist
+        Game._valorTreeBlurUniform();  // ensure foliage blur uniform exists
+        // Push initial state into the effect + material + decal + foliage settings.
+        Game._valorControlDefs()
+            .concat(Game._valorMatControlDefs(), Game._valorDecalControlDefs(), Game._valorFoliageControlDefs())
             .forEach(d => { try { d.apply(Game.postfxState[d.key]); } catch (e) { /* ignore */ } });
         return true;
     } catch (e) {
@@ -286,6 +289,38 @@ Game._valorDecalControlDefs = () => {
     ];
 };
 
+// ── Foliage: tunable tree/leaf blur. Shared uniform so the slider softens all
+// leaf cards at once (the foliage material injects it in _attachFoliageWind).
+Game._valorFoliageDefaults = { valorTreeBlur: 0.012 };
+Game._valorTreeBlurUniform = () => {
+    if (!Game._treeBlurU) Game._treeBlurU = new Game.THREE.Uniform(Game._valorFoliageDefaults.valorTreeBlur);
+    return Game._treeBlurU;
+};
+
+// Inject a 9-tap UV-kernel blur of the colour map into a MeshStandard shader,
+// driven by the shared tree-blur uniform. Applied to BOTH leaf cards and bark so
+// the whole tree model softens together. Safe to call once per material.
+Game._valorTreeBlurInject = (shader) => {
+    if (!Game.THREE) return;
+    shader.uniforms.uTreeBlur = Game._valorTreeBlurUniform();
+    if (shader.fragmentShader.indexOf('uniform float uTreeBlur;') >= 0) return; // already injected
+    shader.fragmentShader = 'uniform float uTreeBlur;\n' + shader.fragmentShader.replace(
+        '#include <map_fragment>',
+        `#ifdef USE_MAP
+         float tbB = uTreeBlur;
+         vec4 tbCol = texture2D(map, vMapUv) * 0.25
+             + (texture2D(map, vMapUv + vec2(tbB, 0.0)) + texture2D(map, vMapUv - vec2(tbB, 0.0))
+              + texture2D(map, vMapUv + vec2(0.0, tbB)) + texture2D(map, vMapUv - vec2(0.0, tbB))) * 0.125
+             + (texture2D(map, vMapUv + vec2(tbB, tbB)) + texture2D(map, vMapUv - vec2(tbB, tbB))
+              + texture2D(map, vMapUv + vec2(tbB, -tbB)) + texture2D(map, vMapUv - vec2(tbB, -tbB))) * 0.0625;
+         diffuseColor *= tbCol;
+         #endif`
+    );
+};
+Game._valorFoliageControlDefs = () => [
+    { group: 'VALOR Foliage', key: 'valorTreeBlur', label: 'Tree Blur', min: 0, max: 0.06, step: 0.001, apply: v => { Game._valorTreeBlurUniform().value = v; } },
+];
+
 // Inject the shared world-space weathering (dirt / edge-wear / wetness / snow)
 // into a MeshStandard onBeforeCompile shader. Used by both unit materials
 // (_addWeathering) and the terrain material, so one set of sliders weathers the
@@ -309,20 +344,30 @@ Game._valorWeatherInject = (shader, opts = {}) => {
         );
     }
 
-    shader.fragmentShader = 'uniform float uvMaster, uvDirt, uvWear, uvWet, uvSnow;\nvarying vec3 vValorWP;\nvarying vec3 vValorWN;\n' + shader.fragmentShader;
+    // Smooth (interpolated) value noise — replaces the old floor()-cell hash that
+    // produced a hard axis-aligned grid ("tiles") on terrain and units.
+    shader.fragmentShader =
+        'uniform float uvMaster, uvDirt, uvWear, uvWet, uvSnow;\n' +
+        'varying vec3 vValorWP;\nvarying vec3 vValorWN;\n' +
+        'float valorVN(vec2 p){ vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f);' +
+        ' float a=fract(sin(dot(i,vec2(12.9898,78.233)))*43758.545);' +
+        ' float b=fract(sin(dot(i+vec2(1.0,0.0),vec2(12.9898,78.233)))*43758.545);' +
+        ' float c=fract(sin(dot(i+vec2(0.0,1.0),vec2(12.9898,78.233)))*43758.545);' +
+        ' float d=fract(sin(dot(i+vec2(1.0,1.0),vec2(12.9898,78.233)))*43758.545);' +
+        ' return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }\n' +
+        shader.fragmentShader;
 
     shader.fragmentShader = shader.fragmentShader.replace(
         '#include <color_fragment>',
         `#include <color_fragment>
          {
            float vUp = clamp(vValorWN.y, 0.0, 1.0);
-           float g1 = fract(sin(dot(floor(vValorWP.xz * 1.6), vec2(12.9898, 78.233))) * 43758.545);
-           float g2 = fract(sin(dot(vValorWP.xz * 0.55, vec2(39.34, 11.13))) * 43758.545);
-           // grime: pools low + in non-up-facing cavities
-           float grime = uvMaster * uvDirt * mix(g1, g2, 0.5) * (0.45 + 0.55 * (1.0 - vUp));
+           // smooth multi-octave grime (organic, no cell edges)
+           float gn = valorVN(vValorWP.xz * 0.6) * 0.65 + valorVN(vValorWP.xz * 2.3) * 0.35;
+           float grime = uvMaster * uvDirt * gn * (0.45 + 0.55 * (1.0 - vUp));
            diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.40, 0.36, 0.30), grime);
            ${wear ? `// edge wear: paint scuff / bare metal on up-facing convex spots
-           float wr = uvMaster * uvWear * smoothstep(0.72, 1.0, vUp) * g2;
+           float wr = uvMaster * uvWear * smoothstep(0.72, 1.0, vUp) * gn;
            diffuseColor.rgb += wr * 0.10;` : ``}
            // snow blanket on top faces
            float sn = uvMaster * uvSnow * smoothstep(0.42, 1.0, vUp);

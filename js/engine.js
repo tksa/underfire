@@ -485,6 +485,7 @@ Game._postfxControlDefs = () => {
         ...(Game._valorControlDefs ? Game._valorControlDefs() : []),
         ...(Game._valorMatControlDefs ? Game._valorMatControlDefs() : []),
         ...(Game._valorDecalControlDefs ? Game._valorDecalControlDefs() : []),
+        ...(Game._valorFoliageControlDefs ? Game._valorFoliageControlDefs() : []),
     ];
 };
 
@@ -506,6 +507,7 @@ Game.postfxValuesText = () => {
         `  valorMat:       { enable: ${s.valorMatEnable ? 'true' : 'false'}, dirt: ${f(s.valorMatDirt)}, wear: ${f(s.valorMatWear)}, wet: ${f(s.valorMatWet)}, snow: ${f(s.valorMatSnow)} },`,
         `  valorGrade:     { desat: ${f(s.valorGradeDesat)}, temp: ${f(s.valorGradeTemp)}, foliageSat: ${f(s.valorFoliageSat)}, metalDesat: ${f(s.valorMetalDesat)}, skinWarm: ${f(s.valorSkinWarm)} },`,
         `  valorDecals:    { scorch: ${s.valorScorchEnable ? 'true' : 'false'}, opacity: ${f(s.valorScorchOpacity)}, max: ${f(s.valorScorchMax)} },`,
+        `  valorFoliage:   { treeBlur: ${f(s.valorTreeBlur)} },`,
         '}',
     ].join('\n');
 };

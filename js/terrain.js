@@ -629,6 +629,10 @@ Game._attachFoliageWind = (material, options = {}) => {
              transformed.x += foliageGust * foliageWindStrength * foliageBend;
              transformed.z += cos(foliagePhase * 1.43) * foliageFlutter * foliageBend;`
         );
+
+        // VALOR: optional tree/foliage blur — soften the leaf cards (live-tunable).
+        if (options.blur && Game._valorTreeBlurInject) Game._valorTreeBlurInject(shader);
+
         material.userData.foliageShader = shader;
     };
 
@@ -1423,7 +1427,7 @@ Game.buildTerrainMeshes = () => {
         side: THREE.DoubleSide,
         roughness: 0.92,
         metalness: 0.0,
-    }), { strength: 0.026, speed: 0.7, flutter: 0.008 });
+    }), { strength: 0.026, speed: 0.7, flutter: 0.008, blur: true });
     foliageCardMat.name = 'shared-foliage-leaf-cards';
     const foliageDepthMat = Game._attachFoliageWind(new THREE.MeshDepthMaterial({
         depthPacking: THREE.RGBADepthPacking,
@@ -1445,6 +1449,9 @@ Game.buildTerrainMeshes = () => {
         map: barkColor, normalMap: barkNormal, roughness: 0.76, metalness: 0.0,
     });
     barkMat.name = 'eztree-bark';
+    // VALOR: blur the trunk/branches too, so the whole tree model softens with
+    // the same Tree Blur slider (leaf cards are handled via _attachFoliageWind).
+    barkMat.onBeforeCompile = (shader) => { if (Game._valorTreeBlurInject) Game._valorTreeBlurInject(shader); };
 
     // Generate one EZ-Tree prototype: returns baked branch + leaf geometry and
     // the natural height (for scale normalisation). Pure math, no GPU/DOM work.
@@ -1871,9 +1878,9 @@ Game.buildTerrainMeshes = () => {
             for (let tx = 0; tx < Game.MAP_COLS; tx++) {
                 const tile = Game.terrain[ty][tx];
                 if (tile.type === 'forest' || tile.type === 'dense_forest') {
-                    // Forest density halved (was 3-5 dense / 1-3 forest) — the
-                    // canopy read far too thick. Dense cores keep at least one.
-                    const count = tile.type === 'dense_forest' ? Game.randi(1, 3) : Game.randi(0, 2);
+                    // Forest density: clusters read too thick, so dense cores are
+                    // 1-2 and ordinary forest 0-2 (plus a global 30% thin below).
+                    const count = tile.type === 'dense_forest' ? Game.randi(1, 2) : Game.randi(0, 2);
                     for (let i = 0; i < count; i++) {
                         treePositions.push({
                             x: tx * T + Game.rand(0.3, T - 0.3),
@@ -1925,6 +1932,12 @@ Game.buildTerrainMeshes = () => {
                 height: Game.rand(2.0, 3.6),
                 scale: Game.rand(0.7, 1.2)
             });
+        }
+
+        // Global thinning: render ~30% fewer trees overall (forests, treelines,
+        // orchards and lone trees alike) — the map read too wooded.
+        for (let i = treePositions.length - 1; i >= 0; i--) {
+            if (Math.random() < 0.30) treePositions.splice(i, 1);
         }
 
         const treeCount = treePositions.length;
