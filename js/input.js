@@ -445,9 +445,11 @@ Game.handleMouseSelection = () => {
             }
         }
 
-        // Method 2: Screen-space fallback (if world pick missed)
+        // Method 2: Screen-space fallback (if world pick missed). Kept tight so a
+        // click on empty ground between units deselects instead of grabbing the
+        // nearest one (left-click empty = deselect).
         if (!picked) {
-            let bestScreenDist = 400; // 20px squared
+            let bestScreenDist = 169; // 13px squared
             for (const unit of Game.units) {
                 if (!unit.alive || unit.team !== Game.TEAM.FRENCH) continue;
                 const sp = Game.worldToScreen(unit.x, unit.z);
@@ -500,6 +502,10 @@ Game.handleMouseSelection = () => {
             u.mesh.userData.selectionRing.visible = Game.selection.has(u.id);
         }
     });
+
+    // Deselecting must hide the green formation-preview rings right away — they
+    // were only cleared on mousemove, so they lingered until the cursor moved.
+    if (Game.selection.size === 0 && Game._clearFormationPreview) Game._clearFormationPreview();
 };
 
 Game.handleInputEvents = () => {

@@ -569,8 +569,10 @@ Game.updateFoliageKnockdown = (dt) => {
     Game._fkdTimer = (Game._fkdTimer || 0) - dt;
     const scan = Game._fkdTimer <= 0;
     if (scan) Game._fkdTimer = 0.1;
+    // Any living tank flattens nearby foliage — even one that has stalled against
+    // a sapling (the old speed gate meant a stuck tank never crushed it).
     const tanks = scan
-        ? Game.units.filter(u => u.alive && Game.isTank(u.kind) && (u.currentSpeed || 0) > 0.6)
+        ? Game.units.filter(u => u.alive && Game.isTank(u.kind))
         : null;
 
     const up = Game._fkdUp || (Game._fkdUp = new THREE.Vector3(0, 1, 0));

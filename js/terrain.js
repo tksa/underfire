@@ -1533,9 +1533,10 @@ Game.buildTerrainMeshes = () => {
                 dummy.updateMatrix();
                 branches.setMatrixAt(i, dummy.matrix);
                 leaves.setMatrixAt(i, dummy.matrix);
-                // Register small trees + all bushes so a tank can knock them flat.
+                // Register small/medium trees + all bushes so a tank knocks them
+                // flat (only the very largest trees resist).
                 const worldH = t.height * t.scale * scaleK;
-                if ((namePrefix === 'hedge-shrub' || worldH < 4.0) && Game.foliageKD) {
+                if ((namePrefix === 'hedge-shrub' || worldH < 6.5) && Game.foliageKD) {
                     Game.foliageKD.push({
                         leaves, branches, idx: i,
                         x: t.x, y: baseY - (t.sink || 0), z: t.z,
