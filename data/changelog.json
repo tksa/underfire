@@ -1,77 +1,77 @@
 {
  "version": "v0.7.0-dev",
- "build": "b2fd4bc",
- "generated": "2026-06-27",
+ "build": "1d8235c",
+ "generated": "2026-06-28",
  "commits": [
   {
-   "hash": "b2fd4bc",
-   "date": "2026-06-27",
-   "subject": "friendly infantry step aside from own tanks (never crushed)"
+   "hash": "1d8235c",
+   "date": "2026-06-28",
+   "subject": "no ring on any unselected friendly"
   },
   {
-   "hash": "a5eb1ab",
-   "date": "2026-06-27",
-   "subject": "bump version to v0.7.0-dev"
+   "hash": "9372f74",
+   "date": "2026-06-28",
+   "subject": "graphics: use texture_grid_brown ground detail"
   },
   {
-   "hash": "2445f36",
-   "date": "2026-06-27",
-   "subject": "refresh data/changelog.json (Latest Updates)"
+   "hash": "648eb70",
+   "date": "2026-06-28",
+   "subject": "tanks knock down small trees + bushes (pivot/fall about base)"
   },
   {
-   "hash": "5b12c14",
-   "date": "2026-06-27",
-   "subject": "EZ-Tree trees/hedges, postprocessing, FSR-like upscaler, road + debug overhaul"
+   "hash": "1e21ef9",
+   "date": "2026-06-28",
+   "subject": "graphics: hedges get own soft-blend (Hedge Blend)"
   },
   {
-   "hash": "1a73000",
-   "date": "2026-06-26",
-   "subject": "refresh data/changelog.json (Latest Updates)"
+   "hash": "399df76",
+   "date": "2026-06-28",
+   "subject": "graphics: crisp leaves for hedge bushes"
   },
   {
-   "hash": "3762114",
-   "date": "2026-06-26",
-   "subject": "replace command-bar emojis with SVG icons (game-icons.net, CC-BY)"
+   "hash": "761d3e0",
+   "date": "2026-06-28",
+   "subject": "tree blur is now a soft-blend (feathered alpha), not texture smear"
   },
   {
-   "hash": "0b3da30",
-   "date": "2026-06-26",
-   "subject": "grenades, hold-fire, tank-crush, multi-plane air strikes"
+   "hash": "b136689",
+   "date": "2026-06-28",
+   "subject": "smooth grime (kill tile grid)"
   },
   {
-   "hash": "9d4e7ed",
-   "date": "2026-06-26",
-   "subject": "refresh data/changelog.json"
+   "hash": "12acb86",
+   "date": "2026-06-28",
+   "subject": "bake tuned VALOR values as defaults"
   },
   {
-   "hash": "0cb0581",
-   "date": "2026-06-26",
-   "subject": "v0.6.0-dev"
+   "hash": "5368d56",
+   "date": "2026-06-28",
+   "subject": "VALOR stage 5"
   },
   {
-   "hash": "ab07e5b",
-   "date": "2026-06-26",
-   "subject": "dynamic enemy infantry"
+   "hash": "363e528",
+   "date": "2026-06-28",
+   "subject": "VALOR material weathering on terrain + stage 4 (semantic-ish grade)"
   },
   {
-   "hash": "8f9e747",
-   "date": "2026-06-26",
-   "subject": "stop edge-of-sight rotation jitter"
+   "hash": "9e827f7",
+   "date": "2026-06-28",
+   "subject": "VALOR stage 3 (material weathering) + upscaler off by default"
   },
   {
-   "hash": "c80ca75",
-   "date": "2026-06-26",
-   "subject": "split monolithic updateUnit into per-unit modules"
+   "hash": "2bec434",
+   "date": "2026-06-28",
+   "subject": "VALOR stage 2 (sfumato + chiaroscuro)"
   },
   {
-   "hash": "a583198",
-   "date": "2026-06-26",
-   "subject": "import all RWM units (614)"
+   "hash": "ae1aff5",
+   "date": "2026-06-28",
+   "subject": "VALOR stage 1"
   },
   {
-   "hash": "8deaa3f",
-   "date": "2026-06-26",
-   "subject": "data-driven unit roster (data/units.csv) + full RWM roster import"
+   "hash": "d733864",
+   "date": "2026-06-28",
+   "subject": "cache-bust bundled textures (ASSET_V)"
   }
  ]
 }
