@@ -139,6 +139,7 @@ Game.generateMap = () => {
     Game.buildings = [];
     Game.walls = [];
     Game.craters = [];
+    Game.foliageKD = [];   // knock-down-able foliage instances (bushes + small trees)
     Game.haystacks = [];
     Game.bridges = [];
     Game.church = null;
@@ -1525,12 +1526,22 @@ Game.buildTerrainMeshes = () => {
                 const t = list[i];
                 const baseY = Game.getHeight(t.x, t.z);
                 const s = (t.height * t.scale * scaleK) / proto.nh;
+                const ry = Math.random() * Math.PI * 2;
                 dummy.position.set(t.x, baseY - (t.sink || 0), t.z);
-                dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
+                dummy.rotation.set(0, ry, 0);
                 dummy.scale.set(s, s, s);
                 dummy.updateMatrix();
                 branches.setMatrixAt(i, dummy.matrix);
                 leaves.setMatrixAt(i, dummy.matrix);
+                // Register small trees + all bushes so a tank can knock them flat.
+                const worldH = t.height * t.scale * scaleK;
+                if ((namePrefix === 'hedge-shrub' || worldH < 4.0) && Game.foliageKD) {
+                    Game.foliageKD.push({
+                        leaves, branches, idx: i,
+                        x: t.x, y: baseY - (t.sink || 0), z: t.z,
+                        rotY: ry, s, dir: 0, fallT: 0, triggered: false,
+                    });
+                }
                 color.setHSL(0.26 + Game.rand(-0.03, 0.07), 0.42 + Game.rand(0, 0.18), 0.33 + Game.rand(0, 0.14));
                 leaves.setColorAt(i, color);
             }

@@ -292,7 +292,7 @@ Game._valorDecalControlDefs = () => {
 
 // ── Foliage: tunable tree/leaf blur. Shared uniform so the slider softens all
 // leaf cards at once (the foliage material injects it in _attachFoliageWind).
-Game._valorFoliageDefaults = { valorTreeBlur: 0.62, valorHedgeBlur: 0.3 };
+Game._valorFoliageDefaults = { valorTreeBlur: 0.62, valorHedgeBlur: 0.3, valorFoliageCrush: true };
 Game._valorTreeBlurUniform = () => {
     if (!Game._treeBlurU) Game._treeBlurU = new Game.THREE.Uniform(Game._valorFoliageDefaults.valorTreeBlur);
     return Game._treeBlurU;
@@ -321,6 +321,7 @@ Game._valorTreeBlurInject = (shader, uni) => {
 Game._valorFoliageControlDefs = () => [
     { group: 'VALOR Foliage', key: 'valorTreeBlur', label: 'Tree Blend (soft edges)', min: 0, max: 1, step: 0.01, apply: v => { Game._valorTreeBlurUniform().value = v; } },
     { group: 'VALOR Foliage', key: 'valorHedgeBlur', label: 'Hedge Blend (soft edges)', min: 0, max: 1, step: 0.01, apply: v => { Game._valorHedgeBlurUniform().value = v; } },
+    { group: 'VALOR Foliage', key: 'valorFoliageCrush', type: 'bool', label: 'Tanks Crush Foliage', apply: v => { Game.foliageKDEnabled = !!v; } },
 ];
 
 // Inject the shared world-space weathering (dirt / edge-wear / wetness / snow)

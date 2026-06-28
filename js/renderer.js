@@ -552,6 +552,66 @@ Game.updateScorch3D = (dt) => {
     }
 };
 
+// ═══════════════════════════════════════════════════════
+//  Foliage knock-down: a moving tank flattens small trees + bushes
+// ═══════════════════════════════════════════════════════
+// Standard game technique (cf. Arma 3): a flattened plant pivots/falls about its
+// trunk base toward the impact direction. Each eligible instance was registered
+// in Game.foliageKD with its standing transform + InstancedMesh refs; here we
+// rebuild that one instance's matrix as it tips over and lock it flat.
+Game.updateFoliageKnockdown = (dt) => {
+    if (Game.foliageKDEnabled === false) return;
+    const list = Game.foliageKD;
+    if (!list || !list.length) return;
+    const THREE = Game.THREE;
+
+    // Trigger scan is throttled; the tip-over animation runs every frame.
+    Game._fkdTimer = (Game._fkdTimer || 0) - dt;
+    const scan = Game._fkdTimer <= 0;
+    if (scan) Game._fkdTimer = 0.1;
+    const tanks = scan
+        ? Game.units.filter(u => u.alive && Game.isTank(u.kind) && (u.currentSpeed || 0) > 0.6)
+        : null;
+
+    const up = Game._fkdUp || (Game._fkdUp = new THREE.Vector3(0, 1, 0));
+    const pos = Game._fkdPos || (Game._fkdPos = new THREE.Vector3());
+    const scl = Game._fkdScl || (Game._fkdScl = new THREE.Vector3());
+    const qY = Game._fkdQY || (Game._fkdQY = new THREE.Quaternion());
+    const qT = Game._fkdQT || (Game._fkdQT = new THREE.Quaternion());
+    const axis = Game._fkdAxis || (Game._fkdAxis = new THREE.Vector3());
+    const mat = Game._fkdMat || (Game._fkdMat = new THREE.Matrix4());
+    const dirty = new Set();
+
+    for (const r of list) {
+        if (!r.triggered && scan && tanks.length) {
+            for (const tk of tanks) {
+                const rr = tk.size * 1.1 + 0.5;
+                if (Game.distSq(tk.x, tk.z, r.x, r.z) < rr * rr) {
+                    r.triggered = true; r.dir = tk.angle; r.fallT = 0;
+                    break;
+                }
+            }
+        }
+        if (r.triggered && r.fallT < 1) {
+            r.fallT = Math.min(1, r.fallT + dt / 0.55);
+            const e = 1 - (1 - r.fallT) * (1 - r.fallT);  // ease-out
+            const angle = e * 1.45;                        // ~83° flat
+            pos.set(r.x, r.y, r.z);
+            qY.setFromAxisAngle(up, r.rotY);
+            axis.set(Math.sin(r.dir), 0, -Math.cos(r.dir));
+            if (axis.lengthSq() < 1e-6) axis.set(1, 0, 0);
+            axis.normalize();
+            qT.setFromAxisAngle(axis, angle).multiply(qY);  // tilt (world) after yaw
+            scl.set(r.s, r.s, r.s);
+            mat.compose(pos, qT, scl);
+            r.leaves.setMatrixAt(r.idx, mat);
+            r.branches.setMatrixAt(r.idx, mat);
+            dirty.add(r.leaves); dirty.add(r.branches);
+        }
+    }
+    dirty.forEach(m => { m.instanceMatrix.needsUpdate = true; });
+};
+
 /**
  * Update smoke effects (textured billboard sprites).
  */
