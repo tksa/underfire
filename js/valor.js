@@ -34,15 +34,38 @@ uniform float uTint;       // far fog-colour tint amount (0..1)
 uniform vec3  uFogColor;   // haze colour (synced to scene fog / sky)
 uniform float uGrain;      // film-grain amount (0..~0.2)
 uniform float uTime;       // animates the grain
+uniform float uChiaro;     // chiaroscuro local-contrast (unsharp) amount
+uniform float uSfumato;    // far edge-softening amount
+uniform float uSfumatoStart;// depth where softening begins (0..1)
 
 float valorLuma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 float valorHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
 
-void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
-    vec3 c = inputColor.rgb;
+// 5-tap cross blur of the pass input (pmndrs provides inputBuffer + texelSize).
+vec3 valorBlur(vec2 uv) {
+    vec2 px = texelSize;
+    vec3 s = texture2D(inputBuffer, uv).rgb * 0.4;
+    s += texture2D(inputBuffer, uv + vec2(px.x, 0.0)).rgb * 0.15;
+    s += texture2D(inputBuffer, uv - vec2(px.x, 0.0)).rgb * 0.15;
+    s += texture2D(inputBuffer, uv + vec2(0.0, px.y)).rgb * 0.15;
+    s += texture2D(inputBuffer, uv - vec2(0.0, px.y)).rgb * 0.15;
+    return s;
+}
 
-    // Exposure (linear tone scale).
-    c *= uExposure;
+void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
+    vec3 c = inputColor.rgb * uExposure;
+
+    // Shared neighbour blur (reused by chiaroscuro + sfumato), exposure-matched.
+    vec3 blur = valorBlur(uv) * uExposure;
+
+    // Chiaroscuro: local-contrast unsharp — crisper forms / value hierarchy.
+    if (uChiaro > 0.0) c += (c - blur) * uChiaro;
+
+    // Sfumato: blend toward the blur with distance to soften far low-poly edges.
+    if (uSfumato > 0.0) {
+        float sf = clamp((depth - uSfumatoStart) / max(1.0 - uSfumatoStart, 1e-4), 0.0, 1.0) * uSfumato;
+        c = mix(c, blur, sf);
+    }
 
     // Aerial perspective: contribution rises with distance.
     float d = clamp((depth - uAerialStart) / max(uAerialEnd - uAerialStart, 1e-4), 0.0, 1.0);
@@ -79,6 +102,9 @@ Game._makeValorEffect = () => {
                     ['uFogColor', new THREE.Uniform(new THREE.Color(0.62, 0.66, 0.72))],
                     ['uGrain', new THREE.Uniform(0.04)],
                     ['uTime', new THREE.Uniform(0.0)],
+                    ['uChiaro', new THREE.Uniform(0.2)],
+                    ['uSfumato', new THREE.Uniform(0.3)],
+                    ['uSfumatoStart', new THREE.Uniform(0.45)],
                 ]),
             });
         }
@@ -97,6 +123,9 @@ Game._valorDefaults = {
     valorDesat: 0.7,
     valorTint: 0.35,
     valorGrain: 0.04,
+    valorChiaro: 0.2,
+    valorSfumato: 0.3,
+    valorSfumatoStart: 0.45,
 };
 
 /**
@@ -141,6 +170,9 @@ Game._valorControlDefs = () => {
         { group: 'VALOR', key: 'valorDesat', label: 'Far Desaturate', min: 0, max: 1, step: 0.01, apply: v => set('uDesat', v) },
         { group: 'VALOR', key: 'valorTint', label: 'Haze Tint', min: 0, max: 1, step: 0.01, apply: v => set('uTint', v) },
         { group: 'VALOR', key: 'valorGrain', label: 'Film Grain', min: 0, max: 0.2, step: 0.005, apply: v => set('uGrain', v) },
+        { group: 'VALOR', key: 'valorChiaro', label: 'Chiaroscuro (local contrast)', min: 0, max: 1, step: 0.01, apply: v => set('uChiaro', v) },
+        { group: 'VALOR', key: 'valorSfumato', label: 'Sfumato (far soften)', min: 0, max: 1, step: 0.01, apply: v => set('uSfumato', v) },
+        { group: 'VALOR', key: 'valorSfumatoStart', label: 'Sfumato Start', min: 0, max: 1, step: 0.01, apply: v => set('uSfumatoStart', v) },
     ];
 };
 

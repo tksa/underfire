@@ -500,7 +500,7 @@ Game.postfxValuesText = () => {
         `  brightContrast: { brightness: ${f(s.brightness)}, contrast: ${f(s.contrast)} },`,
         `  vignette:       { offset: ${f(s.vignetteOffset)}, darkness: ${f(s.vignetteDarkness)} },`,
         `  lighting:       { sun: ${f(s.sunIntensity)}, ambient: ${f(s.ambientIntensity)}, cloudShadows: ${f(s.cloudShadow)} },`,
-        `  valor:          { enable: ${s.valorEnable ? 'true' : 'false'}, exposure: ${f(s.valorExposure)}, aerial: ${f(s.valorAerial)}, aerialStart: ${f(s.valorAerialStart)}, aerialEnd: ${f(s.valorAerialEnd)}, desat: ${f(s.valorDesat)}, tint: ${f(s.valorTint)}, grain: ${f(s.valorGrain)} },`,
+        `  valor:          { enable: ${s.valorEnable ? 'true' : 'false'}, exposure: ${f(s.valorExposure)}, aerial: ${f(s.valorAerial)}, aerialStart: ${f(s.valorAerialStart)}, aerialEnd: ${f(s.valorAerialEnd)}, desat: ${f(s.valorDesat)}, tint: ${f(s.valorTint)}, grain: ${f(s.valorGrain)}, chiaro: ${f(s.valorChiaro)}, sfumato: ${f(s.valorSfumato)}, sfumatoStart: ${f(s.valorSfumatoStart)} },`,
         '}',
     ].join('\n');
 };

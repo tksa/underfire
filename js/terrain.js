@@ -1869,7 +1869,9 @@ Game.buildTerrainMeshes = () => {
             for (let tx = 0; tx < Game.MAP_COLS; tx++) {
                 const tile = Game.terrain[ty][tx];
                 if (tile.type === 'forest' || tile.type === 'dense_forest') {
-                    const count = tile.type === 'dense_forest' ? Game.randi(3, 5) : Game.randi(1, 3);
+                    // Forest density halved (was 3-5 dense / 1-3 forest) — the
+                    // canopy read far too thick. Dense cores keep at least one.
+                    const count = tile.type === 'dense_forest' ? Game.randi(1, 3) : Game.randi(0, 2);
                     for (let i = 0; i < count; i++) {
                         treePositions.push({
                             x: tx * T + Game.rand(0.3, T - 0.3),
