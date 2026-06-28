@@ -396,7 +396,7 @@ Game._upscaleFrag = `
     }`;
 
 Game._setupUpscaler = () => {
-    const f = Game.upscaleFactor != null ? Game.upscaleFactor : 1.02;
+    const f = Game.upscaleFactor != null ? Game.upscaleFactor : 1.0;  // upscaler off by default
     Game.upscaleFactor = f;
     if (!(f > 1.001) || !Game.composer) { Game.upscale = null; return; }
     Game.composer.autoRenderToScreen = false;   // keep the result in outputBuffer
@@ -483,6 +483,7 @@ Game._postfxControlDefs = () => {
         { group: 'Lighting', key: 'ambientIntensity', label: 'Ambient', min: 0, max: 5, step: 0.05, apply: v => { Game._dbgAmbientBase = v; if (Game.ambient) Game.ambient.intensity = v; } },
         { group: 'Lighting', key: 'cloudShadow', label: 'Cloud Shadows', min: 0, max: 0.5, step: 0.01, apply: v => { Game._dbgCloudBase = v; } },
         ...(Game._valorControlDefs ? Game._valorControlDefs() : []),
+        ...(Game._valorMatControlDefs ? Game._valorMatControlDefs() : []),
     ];
 };
 
@@ -501,6 +502,7 @@ Game.postfxValuesText = () => {
         `  vignette:       { offset: ${f(s.vignetteOffset)}, darkness: ${f(s.vignetteDarkness)} },`,
         `  lighting:       { sun: ${f(s.sunIntensity)}, ambient: ${f(s.ambientIntensity)}, cloudShadows: ${f(s.cloudShadow)} },`,
         `  valor:          { enable: ${s.valorEnable ? 'true' : 'false'}, exposure: ${f(s.valorExposure)}, aerial: ${f(s.valorAerial)}, aerialStart: ${f(s.valorAerialStart)}, aerialEnd: ${f(s.valorAerialEnd)}, desat: ${f(s.valorDesat)}, tint: ${f(s.valorTint)}, grain: ${f(s.valorGrain)}, chiaro: ${f(s.valorChiaro)}, sfumato: ${f(s.valorSfumato)}, sfumatoStart: ${f(s.valorSfumatoStart)} },`,
+        `  valorMat:       { enable: ${s.valorMatEnable ? 'true' : 'false'}, dirt: ${f(s.valorMatDirt)}, wear: ${f(s.valorMatWear)}, wet: ${f(s.valorMatWet)}, snow: ${f(s.valorMatSnow)} },`,
         '}',
     ].join('\n');
 };

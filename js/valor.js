@@ -143,11 +143,14 @@ Game.setupValor = () => {
         Game.valorPass = pass;
 
         Game.postfxState = Game.postfxState || {};
-        for (const k in Game._valorDefaults) {
-            if (Game.postfxState[k] === undefined) Game.postfxState[k] = Game._valorDefaults[k];
+        const defaults = Object.assign({}, Game._valorDefaults, Game._valorMatDefaults);
+        for (const k in defaults) {
+            if (Game.postfxState[k] === undefined) Game.postfxState[k] = defaults[k];
         }
-        // Push initial state into the effect.
-        Game._valorControlDefs().forEach(d => { try { d.apply(Game.postfxState[d.key]); } catch (e) { /* ignore */ } });
+        Game._valorMatUniforms(); // ensure shared material uniforms exist
+        // Push initial state into the effect + material uniforms.
+        Game._valorControlDefs().concat(Game._valorMatControlDefs())
+            .forEach(d => { try { d.apply(Game.postfxState[d.key]); } catch (e) { /* ignore */ } });
         return true;
     } catch (e) {
         console.warn('VALOR setup failed, base pipeline kept:', e);
@@ -173,6 +176,43 @@ Game._valorControlDefs = () => {
         { group: 'VALOR', key: 'valorChiaro', label: 'Chiaroscuro (local contrast)', min: 0, max: 1, step: 0.01, apply: v => set('uChiaro', v) },
         { group: 'VALOR', key: 'valorSfumato', label: 'Sfumato (far soften)', min: 0, max: 1, step: 0.01, apply: v => set('uSfumato', v) },
         { group: 'VALOR', key: 'valorSfumatoStart', label: 'Sfumato Start', min: 0, max: 1, step: 0.01, apply: v => set('uSfumatoStart', v) },
+    ];
+};
+
+// ── Stage 3: semantic material weathering ──────────────────────────────────
+// Shared uniforms referenced by every weathered material (Game._addWeathering),
+// so one debug slider drives dirt/wear/wetness/snow across the whole army. The
+// master uniform scales everything to zero for an instant, recompile-free off.
+Game._valorMatDefaults = {
+    valorMatEnable: true,
+    valorMatDirt: 0.45,
+    valorMatWear: 0.30,
+    valorMatWet: 0.0,
+    valorMatSnow: 0.0,
+};
+
+Game._valorMatUniforms = () => {
+    if (!Game._valorMatU) {
+        const U = Game.THREE.Uniform;
+        Game._valorMatU = {
+            master: new U(1.0),
+            dirt: new U(Game._valorMatDefaults.valorMatDirt),
+            wear: new U(Game._valorMatDefaults.valorMatWear),
+            wet: new U(Game._valorMatDefaults.valorMatWet),
+            snow: new U(Game._valorMatDefaults.valorMatSnow),
+        };
+    }
+    return Game._valorMatU;
+};
+
+Game._valorMatControlDefs = () => {
+    const u = () => Game._valorMatUniforms();
+    return [
+        { group: 'VALOR Materials', key: 'valorMatEnable', type: 'bool', label: 'Material Weathering', apply: v => { u().master.value = v ? 1.0 : 0.0; } },
+        { group: 'VALOR Materials', key: 'valorMatDirt', label: 'Dirt / Grime', min: 0, max: 1, step: 0.01, apply: v => { u().dirt.value = v; } },
+        { group: 'VALOR Materials', key: 'valorMatWear', label: 'Edge Wear', min: 0, max: 1, step: 0.01, apply: v => { u().wear.value = v; } },
+        { group: 'VALOR Materials', key: 'valorMatWet', label: 'Wetness', min: 0, max: 1, step: 0.01, apply: v => { u().wet.value = v; } },
+        { group: 'VALOR Materials', key: 'valorMatSnow', label: 'Snow', min: 0, max: 1, step: 0.01, apply: v => { u().snow.value = v; } },
     ];
 };
 

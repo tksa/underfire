@@ -530,6 +530,8 @@ Game.getArmorFacing = (target, shooterX, shooterZ) =>
 Game._addWeathering = (mat, intensity = 0.15) => {
     // vNormal is not declared for flat-shaded materials — injection would not compile
     if (mat.flatShading) return;
+    // Shared, live-tunable VALOR material uniforms (Stage 3); null if VALOR absent.
+    const vu = Game._valorMatUniforms ? Game._valorMatUniforms() : null;
     mat.onBeforeCompile = (shader) => {
         shader.uniforms.wearSeed = { value: Math.random() * 100 };
         shader.fragmentShader = 'uniform float wearSeed;\n' + shader.fragmentShader;
@@ -546,6 +548,55 @@ Game._addWeathering = (mat, intensity = 0.15) => {
              diffuseColor.rgb *= mix(1.0 - ${intensity.toFixed(2)}, 1.0 + ${(intensity * 0.3).toFixed(2)}, wear);
              diffuseColor.rgb -= edgeDark;`
         );
+
+        // ── VALOR Stage 3: shared world-space dirt / edge-wear / wetness / snow.
+        // Driven by global uniforms so debug sliders weather the whole army at
+        // once; uvMaster scales to zero for an instant, recompile-free off.
+        if (vu) {
+            shader.uniforms.uvMaster = vu.master;
+            shader.uniforms.uvDirt = vu.dirt;
+            shader.uniforms.uvWear = vu.wear;
+            shader.uniforms.uvWet = vu.wet;
+            shader.uniforms.uvSnow = vu.snow;
+
+            shader.vertexShader = 'varying vec3 vValorWP;\nvarying vec3 vValorWN;\n' + shader.vertexShader.replace(
+                '#include <begin_vertex>',
+                `#include <begin_vertex>
+                 vValorWP = (modelMatrix * vec4(transformed, 1.0)).xyz;
+                 vValorWN = normalize(mat3(modelMatrix) * normal);`
+            );
+
+            shader.fragmentShader = 'uniform float uvMaster, uvDirt, uvWear, uvWet, uvSnow;\nvarying vec3 vValorWP;\nvarying vec3 vValorWN;\n' + shader.fragmentShader;
+
+            shader.fragmentShader = shader.fragmentShader.replace(
+                '#include <color_fragment>',
+                `#include <color_fragment>
+                 {
+                   float vUp = clamp(vValorWN.y, 0.0, 1.0);
+                   float g1 = fract(sin(dot(floor(vValorWP.xz * 1.6), vec2(12.9898, 78.233))) * 43758.545);
+                   float g2 = fract(sin(dot(vValorWP.xz * 0.55, vec2(39.34, 11.13))) * 43758.545);
+                   // grime: sits low and in non-up-facing cavities
+                   float grime = uvMaster * uvDirt * mix(g1, g2, 0.5) * (0.45 + 0.55 * (1.0 - vUp));
+                   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.40, 0.36, 0.30), grime);
+                   // edge wear: paint scuff / bare metal on up-facing convex spots
+                   float wr = uvMaster * uvWear * smoothstep(0.72, 1.0, vUp) * g2;
+                   diffuseColor.rgb += wr * 0.10;
+                   // snow blanket on top faces
+                   float sn = uvMaster * uvSnow * smoothstep(0.42, 1.0, vUp);
+                   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.90, 0.92, 0.96), sn);
+                 }`
+            );
+
+            shader.fragmentShader = shader.fragmentShader.replace(
+                '#include <roughnessmap_fragment>',
+                `#include <roughnessmap_fragment>
+                 {
+                   float vUp = clamp(vValorWN.y, 0.0, 1.0);
+                   float wet = uvMaster * uvWet * (0.35 + 0.65 * vUp);
+                   roughnessFactor = clamp(roughnessFactor + uvMaster * uvDirt * 0.12 - wet * 0.45, 0.04, 1.0);
+                 }`
+            );
+        }
     };
 };
 
