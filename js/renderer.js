@@ -474,6 +474,84 @@ Game._getFlashTex = () => {
     return Game._flashTex;
 };
 
+// ═══════════════════════════════════════════════════════
+//  VALOR Stage 5: persistent scorch decals (battlefield scars)
+// ═══════════════════════════════════════════════════════
+// Explosions leave flat, soft-edged burn marks on the ground that persist for
+// the rest of the battle (the doc's "battlefield remembers events"). Pooled flat
+// quads (DecalGeometry doesn't instance and is heavy) with a procedural radial
+// texture — no new assets, capped so the count never runs away.
+Game.scorchDecals = Game.scorchDecals || [];
+Game.scorchCfg = Game.scorchCfg || { enable: true, opacity: 0.55, max: 140 };
+
+// Lazy procedural scorch texture: dark soot core fading to transparent, with a
+// little noise so repeats don't look identical.
+Game._getScorchTex = () => {
+    if (Game._scorchTex) return Game._scorchTex;
+    const THREE = Game.THREE;
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
+    g.addColorStop(0.0, 'rgba(12,10,8,0.95)');
+    g.addColorStop(0.45, 'rgba(26,22,18,0.7)');
+    g.addColorStop(0.8, 'rgba(40,34,28,0.25)');
+    g.addColorStop(1.0, 'rgba(40,34,28,0.0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 128, 128);
+    // speckle so edges read as scattered ejecta, not a clean disc
+    for (let i = 0; i < 120; i++) {
+        const a = Math.random() * Math.PI * 2, rr = 20 + Math.random() * 42;
+        const x = 64 + Math.cos(a) * rr, y = 64 + Math.sin(a) * rr;
+        ctx.fillStyle = `rgba(10,8,6,${0.10 + Math.random() * 0.25})`;
+        ctx.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 2);
+    }
+    Game._scorchTex = new THREE.CanvasTexture(c);
+    Game._scorchTex.colorSpace = THREE.SRGBColorSpace;
+    return Game._scorchTex;
+};
+
+// Record a burn mark. Radius scales with the blast; oldest scars retire first.
+Game.addScorch = (x, z, r = 1.5) => {
+    if (!Game.scorchCfg.enable || !Game.THREE || !Game.effectsGroup) return;
+    Game.scorchDecals.push({ x, z, r, rot: Game.rand(0, Math.PI * 2), age: 0, mesh: null });
+    // Retire oldest beyond the cap.
+    while (Game.scorchDecals.length > Game.scorchCfg.max) {
+        const old = Game.scorchDecals.shift();
+        if (old.mesh) {
+            Game.effectsGroup.remove(old.mesh);
+            old.mesh.geometry.dispose();
+            old.mesh.material.dispose();
+        }
+    }
+};
+
+Game.updateScorch3D = (dt) => {
+    const THREE = Game.THREE;
+    if (!Game.scorchDecals.length) return;
+    for (const s of Game.scorchDecals) {
+        s.age += dt;
+        if (!s.mesh) {
+            const geo = new THREE.PlaneGeometry(s.r * 2.4, s.r * 2.4);
+            geo.rotateX(-Math.PI / 2);
+            const mat = new THREE.MeshBasicMaterial({
+                map: Game._getScorchTex(),
+                transparent: true, opacity: 0, depthWrite: false,
+                polygonOffset: true, polygonOffsetFactor: -4,
+            });
+            s.mesh = new THREE.Mesh(geo, mat);
+            s.mesh.rotation.y = s.rot;
+            s.mesh.position.set(s.x, (Game.getHeight ? Game.getHeight(s.x, s.z) : 0) + 0.04, s.z);
+            s.mesh.renderOrder = 2;
+            s.mesh.raycast = () => { };
+            Game.effectsGroup.add(s.mesh);
+        }
+        // Quick fade-in, then hold at the configured opacity.
+        const target = Game.scorchCfg.opacity;
+        s.mesh.material.opacity = Math.min(target, s.age * target * 3.0);
+    }
+};
+
 /**
  * Update smoke effects (textured billboard sprites).
  */

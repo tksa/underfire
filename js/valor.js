@@ -191,13 +191,13 @@ Game.setupValor = () => {
         Game.valorPass = pass;
 
         Game.postfxState = Game.postfxState || {};
-        const defaults = Object.assign({}, Game._valorDefaults, Game._valorMatDefaults);
+        const defaults = Object.assign({}, Game._valorDefaults, Game._valorMatDefaults, Game._valorDecalDefaults);
         for (const k in defaults) {
             if (Game.postfxState[k] === undefined) Game.postfxState[k] = defaults[k];
         }
         Game._valorMatUniforms(); // ensure shared material uniforms exist
-        // Push initial state into the effect + material uniforms.
-        Game._valorControlDefs().concat(Game._valorMatControlDefs())
+        // Push initial state into the effect + material + decal settings.
+        Game._valorControlDefs().concat(Game._valorMatControlDefs(), Game._valorDecalControlDefs())
             .forEach(d => { try { d.apply(Game.postfxState[d.key]); } catch (e) { /* ignore */ } });
         return true;
     } catch (e) {
@@ -266,6 +266,23 @@ Game._valorMatControlDefs = () => {
         { group: 'VALOR Materials', key: 'valorMatWear', label: 'Edge Wear', min: 0, max: 1, step: 0.01, apply: v => { u().wear.value = v; } },
         { group: 'VALOR Materials', key: 'valorMatWet', label: 'Wetness', min: 0, max: 1, step: 0.01, apply: v => { u().wet.value = v; } },
         { group: 'VALOR Materials', key: 'valorMatSnow', label: 'Snow', min: 0, max: 1, step: 0.01, apply: v => { u().snow.value = v; } },
+    ];
+};
+
+// ── Stage 5: persistent scorch decals (battlefield scars). Settings live on
+// Game.scorchCfg (defined in renderer.js); these sliders drive it.
+Game._valorDecalDefaults = {
+    valorScorchEnable: true,
+    valorScorchOpacity: 0.55,
+    valorScorchMax: 140,
+};
+
+Game._valorDecalControlDefs = () => {
+    const cfg = () => (Game.scorchCfg = Game.scorchCfg || { enable: true, opacity: 0.55, max: 140 });
+    return [
+        { group: 'VALOR Decals', key: 'valorScorchEnable', type: 'bool', label: 'Scorch Marks', apply: v => { cfg().enable = !!v; } },
+        { group: 'VALOR Decals', key: 'valorScorchOpacity', label: 'Scorch Opacity', min: 0, max: 1, step: 0.01, apply: v => { cfg().opacity = v; } },
+        { group: 'VALOR Decals', key: 'valorScorchMax', label: 'Scorch Max Count', min: 0, max: 400, step: 10, apply: v => { cfg().max = Math.round(v); } },
     ];
 };
 

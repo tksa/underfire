@@ -484,6 +484,7 @@ Game._postfxControlDefs = () => {
         { group: 'Lighting', key: 'cloudShadow', label: 'Cloud Shadows', min: 0, max: 0.5, step: 0.01, apply: v => { Game._dbgCloudBase = v; } },
         ...(Game._valorControlDefs ? Game._valorControlDefs() : []),
         ...(Game._valorMatControlDefs ? Game._valorMatControlDefs() : []),
+        ...(Game._valorDecalControlDefs ? Game._valorDecalControlDefs() : []),
     ];
 };
 
@@ -504,6 +505,7 @@ Game.postfxValuesText = () => {
         `  valor:          { enable: ${s.valorEnable ? 'true' : 'false'}, exposure: ${f(s.valorExposure)}, aerial: ${f(s.valorAerial)}, aerialStart: ${f(s.valorAerialStart)}, aerialEnd: ${f(s.valorAerialEnd)}, desat: ${f(s.valorDesat)}, tint: ${f(s.valorTint)}, grain: ${f(s.valorGrain)}, chiaro: ${f(s.valorChiaro)}, sfumato: ${f(s.valorSfumato)}, sfumatoStart: ${f(s.valorSfumatoStart)} },`,
         `  valorMat:       { enable: ${s.valorMatEnable ? 'true' : 'false'}, dirt: ${f(s.valorMatDirt)}, wear: ${f(s.valorMatWear)}, wet: ${f(s.valorMatWet)}, snow: ${f(s.valorMatSnow)} },`,
         `  valorGrade:     { desat: ${f(s.valorGradeDesat)}, temp: ${f(s.valorGradeTemp)}, foliageSat: ${f(s.valorFoliageSat)}, metalDesat: ${f(s.valorMetalDesat)}, skinWarm: ${f(s.valorSkinWarm)} },`,
+        `  valorDecals:    { scorch: ${s.valorScorchEnable ? 'true' : 'false'}, opacity: ${f(s.valorScorchOpacity)}, max: ${f(s.valorScorchMax)} },`,
         '}',
     ].join('\n');
 };

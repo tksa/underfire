@@ -377,6 +377,9 @@ Game.indirectShells = [];
 Game.addBlastFlash = (x, z, scale = 1) => {
     Game.muzzleFlashes = Game.muzzleFlashes || [];
     Game.muzzleFlashes.push({ x, z, r: 0.9 * scale, life: 0.2, total: 0.2, big: true, mesh: null });
+    // VALOR Stage 5: leave a persistent scorch scar for real explosions (skip the
+    // small muzzle/MG-hit flashes). Radius scales with the blast.
+    if (scale >= 0.6 && Game.addScorch) Game.addScorch(x, z, 1.1 * scale);
 };
 
 /**
@@ -1883,6 +1886,7 @@ Game.tick = (now) => {
         if (Game.updateSmokeClouds) Game.updateSmokeClouds(dt);
         if (Game.updateTracers3D) Game.updateTracers3D(dt);
         if (Game.updateSmoke3D) Game.updateSmoke3D(dt);
+        if (Game.updateScorch3D) Game.updateScorch3D(dt);
         if (Game.updateTracks3D) Game.updateTracks3D(dt);
         Game.updateMines(dt);
         Game.updateTowing(dt);
