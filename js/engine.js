@@ -354,6 +354,9 @@ Game.setupPostFX = () => {
             cloudShadow: Game._dbgCloudBase != null ? Game._dbgCloudBase : 0,
             antialias: true,
         };
+        // VALOR realism passes (aerial perspective, grain, exposure) layered on
+        // top. Self-contained and degradable: a failure leaves the base intact.
+        if (Game.setupValor) { Game.setupValor(); Game._applyComposerSize(); }
         Game.buildPostFXDebugUI();
         return true;
     } catch (e) {
@@ -479,6 +482,7 @@ Game._postfxControlDefs = () => {
         { group: 'Lighting', key: 'sunIntensity', label: 'Sun Intensity', min: 0, max: 6, step: 0.05, apply: v => { Game._dbgSunBase = v; if (Game.sun) Game.sun.intensity = v; } },
         { group: 'Lighting', key: 'ambientIntensity', label: 'Ambient', min: 0, max: 5, step: 0.05, apply: v => { Game._dbgAmbientBase = v; if (Game.ambient) Game.ambient.intensity = v; } },
         { group: 'Lighting', key: 'cloudShadow', label: 'Cloud Shadows', min: 0, max: 0.5, step: 0.01, apply: v => { Game._dbgCloudBase = v; } },
+        ...(Game._valorControlDefs ? Game._valorControlDefs() : []),
     ];
 };
 
@@ -496,6 +500,7 @@ Game.postfxValuesText = () => {
         `  brightContrast: { brightness: ${f(s.brightness)}, contrast: ${f(s.contrast)} },`,
         `  vignette:       { offset: ${f(s.vignetteOffset)}, darkness: ${f(s.vignetteDarkness)} },`,
         `  lighting:       { sun: ${f(s.sunIntensity)}, ambient: ${f(s.ambientIntensity)}, cloudShadows: ${f(s.cloudShadow)} },`,
+        `  valor:          { enable: ${s.valorEnable ? 'true' : 'false'}, exposure: ${f(s.valorExposure)}, aerial: ${f(s.valorAerial)}, aerialStart: ${f(s.valorAerialStart)}, aerialEnd: ${f(s.valorAerialEnd)}, desat: ${f(s.valorDesat)}, tint: ${f(s.valorTint)}, grain: ${f(s.valorGrain)} },`,
         '}',
     ].join('\n');
 };

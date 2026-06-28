@@ -1,0 +1,156 @@
+/**
+ * Under Fire — valor.js
+ * VALOR (Visual Adaptive Layered Object Realism) — incremental realism passes
+ * layered on top of the existing pmndrs/postprocessing pipeline (engine.js).
+ *
+ * Stage 1 (this file): a single cheap full-screen "finish" Effect that adds three
+ * old-master / atmospheric cues the base pipeline doesn't have:
+ *   - Exposure          (global tone scale)
+ *   - Aerial perspective (depth-aware distance desaturation + haze/fog tint —
+ *                         makes the battlefield feel deep and hides far LOD)
+ *   - Film grain / scumble (subtle broken optical texture so surfaces aren't
+ *                           clinically clean)
+ *
+ * Everything is one extra EffectPass (one draw), fully degradable: a master
+ * toggle disables the pass, and a setup failure leaves the base pipeline intact.
+ * All parameters are live-tunable from the debug panel (backtick `) — the
+ * controls are merged into the existing Post-processing section.
+ *
+ * The camera is orthographic, so the depth-buffer value is already linear across
+ * [near, far]; aerial perspective can use it directly as a 0..1 distance.
+ *
+ * Loaded as a classic script before main.js; wired in from Game.setupPostFX.
+ */
+
+// Fragment shader for the pmndrs Effect. With EffectAttribute.DEPTH the entry
+// point receives the (linear, for ortho) depth as the third argument.
+Game._valorFinishFrag = `
+uniform float uExposure;
+uniform float uAerial;     // overall aerial-perspective strength (0..1)
+uniform float uAerialStart;// depth where haze begins (0..1)
+uniform float uAerialEnd;  // depth where haze is full (0..1)
+uniform float uDesat;      // far desaturation amount (0..1)
+uniform float uTint;       // far fog-colour tint amount (0..1)
+uniform vec3  uFogColor;   // haze colour (synced to scene fog / sky)
+uniform float uGrain;      // film-grain amount (0..~0.2)
+uniform float uTime;       // animates the grain
+
+float valorLuma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+float valorHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+
+void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
+    vec3 c = inputColor.rgb;
+
+    // Exposure (linear tone scale).
+    c *= uExposure;
+
+    // Aerial perspective: contribution rises with distance.
+    float d = clamp((depth - uAerialStart) / max(uAerialEnd - uAerialStart, 1e-4), 0.0, 1.0);
+    float f = d * uAerial;
+    c = mix(c, vec3(valorLuma(c)), f * uDesat);   // lose saturation with distance
+    c = mix(c, uFogColor, f * uTint);             // tint toward haze
+
+    // Film grain / scumble (animated, mild).
+    if (uGrain > 0.0) {
+        float n = valorHash(uv + fract(uTime) * 1.7) - 0.5;
+        c += n * uGrain;
+    }
+
+    outputColor = vec4(c, inputColor.a);
+}
+`;
+
+// Build the VALOR Effect instance. Done at call time (not load time) so the
+// pmndrs Effect base class and THREE are guaranteed present.
+Game._makeValorEffect = () => {
+    const PF = Game.PostFX, THREE = Game.THREE;
+    class ValorFinishEffect extends PF.Effect {
+        constructor() {
+            super('ValorFinish', Game._valorFinishFrag, {
+                attributes: PF.EffectAttribute.DEPTH,
+                blendFunction: PF.BlendFunction.NORMAL,
+                uniforms: new Map([
+                    ['uExposure', new THREE.Uniform(1.0)],
+                    ['uAerial', new THREE.Uniform(0.35)],
+                    ['uAerialStart', new THREE.Uniform(0.25)],
+                    ['uAerialEnd', new THREE.Uniform(1.0)],
+                    ['uDesat', new THREE.Uniform(0.7)],
+                    ['uTint', new THREE.Uniform(0.35)],
+                    ['uFogColor', new THREE.Uniform(new THREE.Color(0.62, 0.66, 0.72))],
+                    ['uGrain', new THREE.Uniform(0.04)],
+                    ['uTime', new THREE.Uniform(0.0)],
+                ]),
+            });
+        }
+    }
+    return new ValorFinishEffect();
+};
+
+// Default tunables, merged into Game.postfxState so the existing debug UI +
+// copy-values box pick them up for free.
+Game._valorDefaults = {
+    valorEnable: true,
+    valorExposure: 1.0,
+    valorAerial: 0.35,
+    valorAerialStart: 0.25,
+    valorAerialEnd: 1.0,
+    valorDesat: 0.7,
+    valorTint: 0.35,
+    valorGrain: 0.04,
+};
+
+/**
+ * Add the VALOR finishing pass to the existing composer. Returns true on success.
+ * Safe to fail: on any error the base pipeline is untouched.
+ */
+Game.setupValor = () => {
+    const PF = Game.PostFX;
+    if (!PF || !PF.Effect || !PF.EffectAttribute || !Game.composer || !Game.camera) return false;
+    try {
+        const eff = Game._makeValorEffect();
+        const pass = new PF.EffectPass(Game.camera, eff);
+        Game.composer.addPass(pass);
+        Game.valor = { effect: eff, time: 0 };
+        Game.valorPass = pass;
+
+        Game.postfxState = Game.postfxState || {};
+        for (const k in Game._valorDefaults) {
+            if (Game.postfxState[k] === undefined) Game.postfxState[k] = Game._valorDefaults[k];
+        }
+        // Push initial state into the effect.
+        Game._valorControlDefs().forEach(d => { try { d.apply(Game.postfxState[d.key]); } catch (e) { /* ignore */ } });
+        return true;
+    } catch (e) {
+        console.warn('VALOR setup failed, base pipeline kept:', e);
+        Game.valor = null;
+        Game.valorPass = null;
+        return false;
+    }
+};
+
+// Debug-panel control descriptors (merged into Game._postfxControlDefs()).
+Game._valorControlDefs = () => {
+    const u = () => (Game.valor && Game.valor.effect && Game.valor.effect.uniforms) || null;
+    const set = (name, v) => { const m = u(); if (m) m.get(name).value = v; };
+    return [
+        { group: 'VALOR', key: 'valorEnable', type: 'bool', label: 'VALOR Enable', apply: v => { if (Game.valorPass) Game.valorPass.enabled = !!v; } },
+        { group: 'VALOR', key: 'valorExposure', label: 'Exposure', min: 0.3, max: 2.0, step: 0.01, apply: v => set('uExposure', v) },
+        { group: 'VALOR', key: 'valorAerial', label: 'Aerial Strength', min: 0, max: 1, step: 0.01, apply: v => set('uAerial', v) },
+        { group: 'VALOR', key: 'valorAerialStart', label: 'Aerial Start', min: 0, max: 1, step: 0.01, apply: v => set('uAerialStart', v) },
+        { group: 'VALOR', key: 'valorAerialEnd', label: 'Aerial End', min: 0, max: 1, step: 0.01, apply: v => set('uAerialEnd', v) },
+        { group: 'VALOR', key: 'valorDesat', label: 'Far Desaturate', min: 0, max: 1, step: 0.01, apply: v => set('uDesat', v) },
+        { group: 'VALOR', key: 'valorTint', label: 'Haze Tint', min: 0, max: 1, step: 0.01, apply: v => set('uTint', v) },
+        { group: 'VALOR', key: 'valorGrain', label: 'Film Grain', min: 0, max: 0.2, step: 0.005, apply: v => set('uGrain', v) },
+    ];
+};
+
+// Per-frame: animate the grain and keep the haze tint matched to the scene fog
+// (so dawn/dusk/overcast haze stays coherent). Called from the game loop.
+Game.updateValor = (dt) => {
+    if (!Game.valor || !Game.valorPass || !Game.valorPass.enabled) return;
+    const u = Game.valor.effect.uniforms;
+    Game.valor.time += (dt || 0.016);
+    u.get('uTime').value = Game.valor.time;
+    const fog = Game.scene && Game.scene.fog;
+    if (fog && fog.color) u.get('uFogColor').value.copy(fog.color);
+};

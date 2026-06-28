@@ -13,6 +13,7 @@ import {
     BloomEffect, TiltShiftEffect, HueSaturationEffect,
     BrightnessContrastEffect, VignetteEffect, SMAAEffect,
     BlendFunction, KernelSize,
+    Effect, EffectAttribute,
 } from 'postprocessing';
 window.THREE = THREE;
 window.Game.THREE = THREE;
@@ -26,6 +27,7 @@ window.Game.PostFX = {           // pmndrs/postprocessing (MIT), loaded from CDN
     BloomEffect, TiltShiftEffect, HueSaturationEffect,
     BrightnessContrastEffect, VignetteEffect, SMAAEffect,
     BlendFunction, KernelSize,
+    Effect, EffectAttribute,
 };
 
 // ═══════════════════════════════════════════════════════
@@ -1899,6 +1901,9 @@ Game.tick = (now) => {
     // Order markers animate even while paused (orders are issued during pause)
     if (Game.updateOrderMarkers) Game.updateOrderMarkers(dt);
     if (Game.updateFoliage) Game.updateFoliage(dt);
+
+    // VALOR finishing pass: animate grain + sync haze tint (runs while paused too)
+    if (Game.updateValor) Game.updateValor(dt);
 
     // Ambient + engine audio bed (runs regardless of pause)
     if (Game.Audio && Game.Audio.updateAmbient) Game.Audio.updateAmbient(dt);
