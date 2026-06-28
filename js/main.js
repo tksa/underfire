@@ -1158,6 +1158,8 @@ Game.initFogOfWar = () => {
         map: Game._fogTex,
         transparent: true,
         depthWrite: false,
+        depthTest: false,   // dim by map position regardless of height, so tall
+                            // tree tops don't poke above the sheet and stay bright
         side: THREE.DoubleSide,
     });
     Game._fogMesh = new THREE.Mesh(fogGeo, fogMat);

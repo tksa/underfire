@@ -197,7 +197,8 @@ Game.setupValor = () => {
             if (Game.postfxState[k] === undefined) Game.postfxState[k] = defaults[k];
         }
         Game._valorMatUniforms();      // ensure shared material uniforms exist
-        Game._valorTreeBlurUniform();  // ensure foliage blur uniform exists
+        Game._valorTreeBlurUniform();  // ensure foliage blur uniforms exist
+        Game._valorHedgeBlurUniform();
         // Push initial state into the effect + material + decal + foliage settings.
         Game._valorControlDefs()
             .concat(Game._valorMatControlDefs(), Game._valorDecalControlDefs(), Game._valorFoliageControlDefs())
@@ -291,19 +292,23 @@ Game._valorDecalControlDefs = () => {
 
 // ── Foliage: tunable tree/leaf blur. Shared uniform so the slider softens all
 // leaf cards at once (the foliage material injects it in _attachFoliageWind).
-Game._valorFoliageDefaults = { valorTreeBlur: 0.62 };
+Game._valorFoliageDefaults = { valorTreeBlur: 0.62, valorHedgeBlur: 0.3 };
 Game._valorTreeBlurUniform = () => {
     if (!Game._treeBlurU) Game._treeBlurU = new Game.THREE.Uniform(Game._valorFoliageDefaults.valorTreeBlur);
     return Game._treeBlurU;
 };
+Game._valorHedgeBlurUniform = () => {
+    if (!Game._hedgeBlurU) Game._hedgeBlurU = new Game.THREE.Uniform(Game._valorFoliageDefaults.valorHedgeBlur);
+    return Game._hedgeBlurU;
+};
 
 // Soft-blend ("overlay blur"): instead of smearing the texture, feather the
-// alpha edge and ease overall opacity so the tree melds into the scene behind it
-// rather than reading as a hard cut-out. Shared 0..1 softness uniform; applied to
-// leaf cards AND bark (both materials are set transparent so alpha takes effect).
-Game._valorTreeBlurInject = (shader) => {
+// alpha edge and ease overall opacity so foliage melds into the scene behind it
+// rather than reading as a hard cut-out. Trees and hedges pass their OWN softness
+// uniform so each tunes separately. Applied to materials set transparent.
+Game._valorTreeBlurInject = (shader, uni) => {
     if (!Game.THREE) return;
-    shader.uniforms.uTreeBlur = Game._valorTreeBlurUniform();
+    shader.uniforms.uTreeBlur = uni || Game._valorTreeBlurUniform();
     if (shader.fragmentShader.indexOf('uniform float uTreeBlur;') >= 0) return; // already injected
     shader.fragmentShader = 'uniform float uTreeBlur;\n' + shader.fragmentShader.replace(
         '#include <alphatest_fragment>',
@@ -315,6 +320,7 @@ Game._valorTreeBlurInject = (shader) => {
 };
 Game._valorFoliageControlDefs = () => [
     { group: 'VALOR Foliage', key: 'valorTreeBlur', label: 'Tree Blend (soft edges)', min: 0, max: 1, step: 0.01, apply: v => { Game._valorTreeBlurUniform().value = v; } },
+    { group: 'VALOR Foliage', key: 'valorHedgeBlur', label: 'Hedge Blend (soft edges)', min: 0, max: 1, step: 0.01, apply: v => { Game._valorHedgeBlurUniform().value = v; } },
 ];
 
 // Inject the shared world-space weathering (dirt / edge-wear / wetness / snow)

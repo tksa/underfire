@@ -630,8 +630,9 @@ Game._attachFoliageWind = (material, options = {}) => {
              transformed.z += cos(foliagePhase * 1.43) * foliageFlutter * foliageBend;`
         );
 
-        // VALOR: optional tree/foliage blur — soften the leaf cards (live-tunable).
-        if (options.blur && Game._valorTreeBlurInject) Game._valorTreeBlurInject(shader);
+        // VALOR: optional soft-blend — feather the leaf cards (live-tunable). The
+        // blurUniform lets trees and hedges use independent softness values.
+        if (options.blur && Game._valorTreeBlurInject) Game._valorTreeBlurInject(shader, options.blurUniform);
 
         material.userData.foliageShader = shader;
     };
@@ -1438,18 +1439,23 @@ Game.buildTerrainMeshes = () => {
         side: THREE.DoubleSide,
     }), { strength: 0.026, speed: 0.7, flutter: 0.008 });
 
-    // Crisp leaf material for hedge shrubs — bushes keep hard alpha-test edges
-    // (the soft-blend reads well on trees but not on low bushes). Wind only.
+    // Hedge-shrub leaf material — soft-blend like the trees, but driven by its
+    // OWN hedge-blend uniform so bushes can be tuned separately from trees.
     const shrubLeafMat = Game._attachFoliageWind(new THREE.MeshStandardMaterial({
         color: 0xffffff,
         emissive: 0x12200c,
         emissiveIntensity: 0.08,
         map: leavesTex,
-        alphaTest: 0.34,
+        alphaTest: 0.06,
+        transparent: true,
+        depthWrite: true,
         side: THREE.DoubleSide,
         roughness: 0.92,
         metalness: 0.0,
-    }), { strength: 0.03, speed: 0.9, flutter: 0.01 });
+    }), {
+        strength: 0.03, speed: 0.9, flutter: 0.01, blur: true,
+        blurUniform: Game._valorHedgeBlurUniform ? Game._valorHedgeBlurUniform() : null,
+    });
     shrubLeafMat.name = 'shared-shrub-leaf-cards';
 
     // ── Shared CC0 bark + EZ-Tree foliage helpers (trees and hedge shrubs) ──
