@@ -1423,7 +1423,9 @@ Game.buildTerrainMeshes = () => {
         emissive: 0x12200c,
         emissiveIntensity: 0.08,
         map: leavesTex,
-        alphaTest: 0.34,
+        alphaTest: 0.06,           // low cut: keep the feathered edge for soft-blend
+        transparent: true,         // so the VALOR soft-blend alpha actually blends
+        depthWrite: true,          // still occlude properly (limits sort artifacts)
         side: THREE.DoubleSide,
         roughness: 0.92,
         metalness: 0.0,
@@ -1447,10 +1449,11 @@ Game.buildTerrainMeshes = () => {
     barkNormal.wrapS = barkNormal.wrapT = THREE.RepeatWrapping;
     const barkMat = new THREE.MeshStandardMaterial({
         map: barkColor, normalMap: barkNormal, roughness: 0.76, metalness: 0.0,
+        transparent: true, depthWrite: true,   // allow the soft-blend opacity ease
     });
     barkMat.name = 'eztree-bark';
-    // VALOR: blur the trunk/branches too, so the whole tree model softens with
-    // the same Tree Blur slider (leaf cards are handled via _attachFoliageWind).
+    // VALOR: soft-blend the trunk/branches too, so the whole tree model melds
+    // into the scene with the same slider (leaf cards via _attachFoliageWind).
     barkMat.onBeforeCompile = (shader) => { if (Game._valorTreeBlurInject) Game._valorTreeBlurInject(shader); };
 
     // Generate one EZ-Tree prototype: returns baked branch + leaf geometry and

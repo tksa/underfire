@@ -291,34 +291,30 @@ Game._valorDecalControlDefs = () => {
 
 // ── Foliage: tunable tree/leaf blur. Shared uniform so the slider softens all
 // leaf cards at once (the foliage material injects it in _attachFoliageWind).
-Game._valorFoliageDefaults = { valorTreeBlur: 0.012 };
+Game._valorFoliageDefaults = { valorTreeBlur: 0.4 };
 Game._valorTreeBlurUniform = () => {
     if (!Game._treeBlurU) Game._treeBlurU = new Game.THREE.Uniform(Game._valorFoliageDefaults.valorTreeBlur);
     return Game._treeBlurU;
 };
 
-// Inject a 9-tap UV-kernel blur of the colour map into a MeshStandard shader,
-// driven by the shared tree-blur uniform. Applied to BOTH leaf cards and bark so
-// the whole tree model softens together. Safe to call once per material.
+// Soft-blend ("overlay blur"): instead of smearing the texture, feather the
+// alpha edge and ease overall opacity so the tree melds into the scene behind it
+// rather than reading as a hard cut-out. Shared 0..1 softness uniform; applied to
+// leaf cards AND bark (both materials are set transparent so alpha takes effect).
 Game._valorTreeBlurInject = (shader) => {
     if (!Game.THREE) return;
     shader.uniforms.uTreeBlur = Game._valorTreeBlurUniform();
     if (shader.fragmentShader.indexOf('uniform float uTreeBlur;') >= 0) return; // already injected
     shader.fragmentShader = 'uniform float uTreeBlur;\n' + shader.fragmentShader.replace(
-        '#include <map_fragment>',
-        `#ifdef USE_MAP
-         float tbB = uTreeBlur;
-         vec4 tbCol = texture2D(map, vMapUv) * 0.25
-             + (texture2D(map, vMapUv + vec2(tbB, 0.0)) + texture2D(map, vMapUv - vec2(tbB, 0.0))
-              + texture2D(map, vMapUv + vec2(0.0, tbB)) + texture2D(map, vMapUv - vec2(0.0, tbB))) * 0.125
-             + (texture2D(map, vMapUv + vec2(tbB, tbB)) + texture2D(map, vMapUv - vec2(tbB, tbB))
-              + texture2D(map, vMapUv + vec2(tbB, -tbB)) + texture2D(map, vMapUv - vec2(tbB, -tbB))) * 0.0625;
-         diffuseColor *= tbCol;
-         #endif`
+        '#include <alphatest_fragment>',
+        `// VALOR soft-blend: widen the alpha falloff and ease opacity with softness
+         float tbSoft = clamp(uTreeBlur, 0.0, 1.0);
+         diffuseColor.a = smoothstep(0.0, 0.25 + tbSoft * 0.65, diffuseColor.a) * (1.0 - tbSoft * 0.35);
+         #include <alphatest_fragment>`
     );
 };
 Game._valorFoliageControlDefs = () => [
-    { group: 'VALOR Foliage', key: 'valorTreeBlur', label: 'Tree Blur', min: 0, max: 0.06, step: 0.001, apply: v => { Game._valorTreeBlurUniform().value = v; } },
+    { group: 'VALOR Foliage', key: 'valorTreeBlur', label: 'Tree Blend (soft edges)', min: 0, max: 1, step: 0.01, apply: v => { Game._valorTreeBlurUniform().value = v; } },
 ];
 
 // Inject the shared world-space weathering (dirt / edge-wear / wetness / snow)
