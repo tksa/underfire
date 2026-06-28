@@ -1295,7 +1295,7 @@ Game.buildTerrainMeshes = () => {
     const _texLoad = texLoader.load.bind(texLoader);
     texLoader.load = (url, ...rest) =>
         _texLoad(url + (url.indexOf('?') >= 0 ? '&' : '?') + 'v=' + ASSET_V, ...rest);
-    const terrainDetailColor = texLoader.load('textures/oga/ground_detail_color.jpg');
+    const terrainDetailColor = texLoader.load('textures/texture_grid_brown.png');
     terrainDetailColor.wrapS = terrainDetailColor.wrapT = THREE.RepeatWrapping;
     terrainDetailColor.colorSpace = THREE.SRGBColorSpace;
     terrainDetailColor.anisotropy = Math.min(4, Game.renderer.capabilities.getMaxAnisotropy());

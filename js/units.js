@@ -875,8 +875,9 @@ Game._createUnitMesh = (unit) => {
     group.userData.healthBarCanvas = hbCanvas;
     group.userData.healthBarTex = hbTex;
 
-    // Team indicator ring (always visible, subtle)
-    if (unit.team === Game.TEAM.FRENCH) {
+    // Team indicator ring (always visible, subtle) — vehicles only. Foot troops
+    // show no ring unless selected (the selection ring above handles that).
+    if (unit.team === Game.TEAM.FRENCH && Game.isTank(unit.kind)) {
         const indGeo = new THREE.RingGeometry(ringRadius - 0.15, ringRadius - 0.08, 24);
         const indMat = new THREE.MeshBasicMaterial({
             color: 0x8cc0ff,
