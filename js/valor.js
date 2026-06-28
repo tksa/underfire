@@ -131,23 +131,23 @@ Game._makeValorEffect = () => {
                 attributes: PF.EffectAttribute.DEPTH,
                 blendFunction: PF.BlendFunction.NORMAL,
                 uniforms: new Map([
-                    ['uExposure', new THREE.Uniform(1.0)],
+                    ['uExposure', new THREE.Uniform(1.31)],
                     ['uAerial', new THREE.Uniform(0.35)],
                     ['uAerialStart', new THREE.Uniform(0.25)],
                     ['uAerialEnd', new THREE.Uniform(1.0)],
-                    ['uDesat', new THREE.Uniform(0.7)],
-                    ['uTint', new THREE.Uniform(0.35)],
+                    ['uDesat', new THREE.Uniform(0.52)],
+                    ['uTint', new THREE.Uniform(0.3)],
                     ['uFogColor', new THREE.Uniform(new THREE.Color(0.62, 0.66, 0.72))],
-                    ['uGrain', new THREE.Uniform(0.04)],
+                    ['uGrain', new THREE.Uniform(0.02)],
                     ['uTime', new THREE.Uniform(0.0)],
-                    ['uChiaro', new THREE.Uniform(0.2)],
+                    ['uChiaro', new THREE.Uniform(0.12)],
                     ['uSfumato', new THREE.Uniform(0.3)],
                     ['uSfumatoStart', new THREE.Uniform(0.45)],
-                    ['uGradeDesat', new THREE.Uniform(0.05)],
-                    ['uGradeTemp', new THREE.Uniform(0.0)],
-                    ['uFoliageSat', new THREE.Uniform(1.05)],
-                    ['uMetalDesat', new THREE.Uniform(0.25)],
-                    ['uSkinWarm', new THREE.Uniform(0.3)],
+                    ['uGradeDesat', new THREE.Uniform(0.09)],
+                    ['uGradeTemp', new THREE.Uniform(0.02)],
+                    ['uFoliageSat', new THREE.Uniform(0.66)],
+                    ['uMetalDesat', new THREE.Uniform(0.42)],
+                    ['uSkinWarm', new THREE.Uniform(0.5)],
                 ]),
             });
         }
@@ -159,21 +159,21 @@ Game._makeValorEffect = () => {
 // copy-values box pick them up for free.
 Game._valorDefaults = {
     valorEnable: true,
-    valorExposure: 1.0,
+    valorExposure: 1.31,
     valorAerial: 0.35,
     valorAerialStart: 0.25,
     valorAerialEnd: 1.0,
-    valorDesat: 0.7,
-    valorTint: 0.35,
-    valorGrain: 0.04,
-    valorChiaro: 0.2,
+    valorDesat: 0.52,
+    valorTint: 0.3,
+    valorGrain: 0.02,
+    valorChiaro: 0.12,
     valorSfumato: 0.3,
     valorSfumatoStart: 0.45,
-    valorGradeDesat: 0.05,
-    valorGradeTemp: 0.0,
-    valorFoliageSat: 1.05,
-    valorMetalDesat: 0.25,
-    valorSkinWarm: 0.3,
+    valorGradeDesat: 0.09,
+    valorGradeTemp: 0.02,
+    valorFoliageSat: 0.66,
+    valorMetalDesat: 0.42,
+    valorSkinWarm: 0.5,
 };
 
 /**
@@ -238,9 +238,9 @@ Game._valorControlDefs = () => {
 // master uniform scales everything to zero for an instant, recompile-free off.
 Game._valorMatDefaults = {
     valorMatEnable: true,
-    valorMatDirt: 0.45,
-    valorMatWear: 0.30,
-    valorMatWet: 0.0,
+    valorMatDirt: 0.81,
+    valorMatWear: 0.56,
+    valorMatWet: 0.43,
     valorMatSnow: 0.0,
 };
 
@@ -273,12 +273,12 @@ Game._valorMatControlDefs = () => {
 // Game.scorchCfg (defined in renderer.js); these sliders drive it.
 Game._valorDecalDefaults = {
     valorScorchEnable: true,
-    valorScorchOpacity: 0.55,
+    valorScorchOpacity: 0.5,
     valorScorchMax: 140,
 };
 
 Game._valorDecalControlDefs = () => {
-    const cfg = () => (Game.scorchCfg = Game.scorchCfg || { enable: true, opacity: 0.55, max: 140 });
+    const cfg = () => (Game.scorchCfg = Game.scorchCfg || { enable: true, opacity: 0.5, max: 140 });
     return [
         { group: 'VALOR Decals', key: 'valorScorchEnable', type: 'bool', label: 'Scorch Marks', apply: v => { cfg().enable = !!v; } },
         { group: 'VALOR Decals', key: 'valorScorchOpacity', label: 'Scorch Opacity', min: 0, max: 1, step: 0.01, apply: v => { cfg().opacity = v; } },

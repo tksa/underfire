@@ -482,7 +482,7 @@ Game._getFlashTex = () => {
 // quads (DecalGeometry doesn't instance and is heavy) with a procedural radial
 // texture — no new assets, capped so the count never runs away.
 Game.scorchDecals = Game.scorchDecals || [];
-Game.scorchCfg = Game.scorchCfg || { enable: true, opacity: 0.55, max: 140 };
+Game.scorchCfg = Game.scorchCfg || { enable: true, opacity: 0.5, max: 140 };
 
 // Lazy procedural scorch texture: dark soot core fading to transparent, with a
 // little noise so repeats don't look identical.
