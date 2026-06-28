@@ -291,7 +291,7 @@ Game._valorDecalControlDefs = () => {
 
 // ── Foliage: tunable tree/leaf blur. Shared uniform so the slider softens all
 // leaf cards at once (the foliage material injects it in _attachFoliageWind).
-Game._valorFoliageDefaults = { valorTreeBlur: 0.4 };
+Game._valorFoliageDefaults = { valorTreeBlur: 0.62 };
 Game._valorTreeBlurUniform = () => {
     if (!Game._treeBlurU) Game._treeBlurU = new Game.THREE.Uniform(Game._valorFoliageDefaults.valorTreeBlur);
     return Game._treeBlurU;

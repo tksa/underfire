@@ -1438,6 +1438,20 @@ Game.buildTerrainMeshes = () => {
         side: THREE.DoubleSide,
     }), { strength: 0.026, speed: 0.7, flutter: 0.008 });
 
+    // Crisp leaf material for hedge shrubs — bushes keep hard alpha-test edges
+    // (the soft-blend reads well on trees but not on low bushes). Wind only.
+    const shrubLeafMat = Game._attachFoliageWind(new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        emissive: 0x12200c,
+        emissiveIntensity: 0.08,
+        map: leavesTex,
+        alphaTest: 0.34,
+        side: THREE.DoubleSide,
+        roughness: 0.92,
+        metalness: 0.0,
+    }), { strength: 0.03, speed: 0.9, flutter: 0.01 });
+    shrubLeafMat.name = 'shared-shrub-leaf-cards';
+
     // ── Shared CC0 bark + EZ-Tree foliage helpers (trees and hedge shrubs) ──
     // Trees/bushes use EZ-Tree (MIT) GEOMETRY only, rendered with CC0 textures
     // (Poly Haven oak bark + our leaf card) so we stay within the CC0 asset rule.
@@ -1482,8 +1496,9 @@ Game.buildTerrainMeshes = () => {
 
     // Instance prototypes across positions ({x, z, height, scale}). World height
     // of each instance ~= height * scale * scaleK. One draw call per prototype.
-    const placeFoliage = (protos, positions, scaleK, namePrefix) => {
+    const placeFoliage = (protos, positions, scaleK, namePrefix, leafMat) => {
         if (!protos.length || !positions.length) return;
+        const lMat = leafMat || foliageCardMat;   // trees get the soft-blend leaf; shrubs pass a crisp one
         const buckets = Array.from({ length: protos.length }, () => []);
         positions.forEach((t, i) => buckets[i % protos.length].push(t));
         const dummy = new THREE.Object3D();
@@ -1492,7 +1507,7 @@ Game.buildTerrainMeshes = () => {
             const list = buckets[p];
             if (!list.length) return;
             const branches = new THREE.InstancedMesh(proto.bgeo, barkMat, list.length);
-            const leaves = new THREE.InstancedMesh(proto.lgeo, foliageCardMat, list.length);
+            const leaves = new THREE.InstancedMesh(proto.lgeo, lMat, list.length);
             branches.name = namePrefix + '-branches-' + p;
             leaves.name = namePrefix + '-leaves-' + p;
             branches.castShadow = true;
@@ -1778,7 +1793,7 @@ Game.buildTerrainMeshes = () => {
                 });
             }
         });
-        placeFoliage(shrubProtos, shrubPositions, 2.4, 'hedge-shrub');
+        placeFoliage(shrubProtos, shrubPositions, 2.4, 'hedge-shrub', shrubLeafMat);
     }
 
     // ── Forest-style instanced undergrowth: one blade mesh, many varied instances ──
