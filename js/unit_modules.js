@@ -422,7 +422,7 @@ Game.uMod.move = (unit, ctx) => {
                     if (unit._trackDist > 1.2) {
                         unit._trackDist = 0;
                         Game.trackMarks = Game.trackMarks || [];
-                        Game.trackMarks.push({ x: unit.x, z: unit.z, angle: unit.angle, size: unit.size, life: 15.0, total: 15.0, mesh: null });
+                        Game.trackMarks.push({ x: unit.x, z: unit.z, angle: unit.angle, size: unit.size, team: unit.team, life: 15.0, total: 15.0, mesh: null });
                     }
                 } else {
                 const angleDelta = Game.angleDiff(unit.angle, ang);
@@ -472,6 +472,7 @@ Game.uMod.move = (unit, ctx) => {
                             x: unit.x, z: unit.z,
                             angle: unit.angle,
                             size: unit.size,
+                            team: unit.team,
                             life: 15.0, total: 15.0,
                             mesh: null
                         });
@@ -495,6 +496,7 @@ Game.uMod.move = (unit, ctx) => {
                             x: unit.x, z: unit.z,
                             angle: unit.angle,
                             size: unit.size,
+                            team: unit.team,
                             life: 15.0, total: 15.0,
                             mesh: null
                         });

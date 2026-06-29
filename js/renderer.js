@@ -369,6 +369,11 @@ Game.updateTracks3D = (dt) => {
             const opacity = (tr.life / tr.total) * 0.4;
             tr.mesh.children.forEach(c => c.material.opacity = opacity);
         }
+
+        // Enemy tracks must not leak movement through the fog — only show them
+        // where the player currently has vision. Friendly tracks always show.
+        const enemyTrack = tr.team && tr.team !== Game.TEAM.FRENCH;
+        tr.mesh.visible = !enemyTrack || !Game.isFogVisible || Game.isFogVisible(tr.x, tr.z);
     }
 };
 
