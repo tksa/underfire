@@ -92,8 +92,11 @@ Game._populateBuildingModel = (rec, srcModel) => {
     // houses as the footprint's long side fits — a row/street for big footprints.
     const S = Game.BUILDING_SCALE;
     const houseW = Math.max(0.5, S * mw);           // frontage in world units
-    const count = Math.max(1, Math.round(longLen / houseW));
-    const cell = longLen / count;
+    // Only as many houses as FIT without overlapping (floor, not round) and place
+    // them exactly one house-width apart. Overlapping houses z-fight on their
+    // roofs/walls, which looks like phantom "damage" / a doubled building.
+    const count = Math.max(1, Math.floor(longLen / houseW + 0.05));
+    const cell = houseW;                             // edge-to-edge, never overlap
 
     rec.houses = [];
     for (let k = 0; k < count; k++) {
@@ -228,18 +231,24 @@ Game._collapseBuilding = (rec) => {
         }
     }
 
-    // Anyone garrisoned inside is buried — eject survivors, heavily hurt/kill.
+    // Anyone garrisoned inside when it comes down: random fate — most are buried,
+    // a few scramble clear (badly shaken and wounded).
     (rec.occupants || []).slice().forEach(id => {
         const u = Game.getUnitById ? Game.getUnitById(id) : null;
         if (!u) return;
         Game.ungarrisonUnit(u);
-        if (u.alive) {
-            u.hp -= 70; u.suppressionValue = 100; u.shaken = 1.2;
-            if (u.hp <= 0) {
-                u.alive = false; u.hp = 0;
-                if (u.mesh) u.mesh.visible = false;
-                if (Game.selection.has(u.id)) Game.selection.delete(u.id);
-            }
+        if (!u.alive) return;
+        if (Math.random() < 0.7) {                 // killed in the collapse
+            u.alive = false; u.hp = 0;
+            if (u.mesh) u.mesh.visible = false;
+            if (Game.selection.has(u.id)) Game.selection.delete(u.id);
+        } else {                                    // escaped, hurt + shaken
+            u.hp = Math.max(1, u.hp - Game.rand(30, 60));
+            u.suppressionValue = 100; u.shaken = 1.6;
+            u.stance = 'prone'; u._autoStance = true;
+            u.x = rec.cx + Game.rand(-rec.w * 0.5 - 1, rec.w * 0.5 + 1);
+            u.z = rec.cz + Game.rand(-rec.d * 0.5 - 1, rec.d * 0.5 + 1);
+            if (u.mesh) u.mesh.visible = true;
         }
     });
     rec.occupants = [];
@@ -299,8 +308,12 @@ Game.buildingAtScreen = (screenX, screenY) => {
 // Apply blast/impact damage to any building within `radius` of (x,z). Called
 // from the explosion system, so tanks (HE), grenades, mortars and air strikes
 // all chip buildings down through their damage states.
-Game.damageBuildingAt = (x, z, amount, radius = 1.5) => {
+// opts.maxLevel caps how far this hit can damage a building (e.g. small arms
+// only ever scuff it to light damage — they can't wreck masonry). The four HP
+// bands are 100-75-50-25-0%; a maxLevel of 1 floors HP just above the 50% line.
+Game.damageBuildingAt = (x, z, amount, radius = 1.5, opts) => {
     if (!Game.buildingRecords.length) return false;
+    const bandLow = [0.75, 0.5, 0.25, 0];
     let hit = false;
     const r2 = radius * radius;
     for (const rec of Game.buildingRecords) {
@@ -308,7 +321,14 @@ Game.damageBuildingAt = (x, z, amount, radius = 1.5) => {
         const dSq = Game._footprintDistSq(rec, x, z);
         if (dSq > r2) continue;
         const falloff = 1 - Math.sqrt(dSq) / (radius + 0.001);
+        const oldHp = rec.hp;
         rec.hp -= amount * Math.max(0.35, falloff) * (Game._buildingDmgMult || 1);
+        if (opts && opts.maxLevel != null) {
+            const floor = rec.maxHp * bandLow[Math.max(0, Math.min(3, opts.maxLevel))] + 0.1;
+            if (rec.hp < floor) rec.hp = floor;       // can't damage past the cap
+        }
+        // Troops inside take a share of the ACTUAL punishment (sheltered, reduced).
+        Game._hurtOccupants(rec, (oldHp - rec.hp) * 0.2);
         Game._buildingHitFx(rec, x, z);
         // Map HP → level (4 bands: 100-75-50-25-0%).
         const pct = rec.hp / rec.maxHp;
@@ -387,6 +407,12 @@ Game.buildingRecAt = (x, z) => {
 
 Game.buildingHasRoom = (rec) => !!rec && !rec.collapsed && rec.occupants.length < rec.capacity;
 
+// Troops firing from a building: elevated vantage (longer sight), firing through
+// windows with a clear field (longer range), and hard cover (very hard to hit).
+Game.GARRISON_SIGHT_MULT = 1.35;
+Game.GARRISON_RANGE_MULT = 1.25;
+Game.GARRISON_COVER = 0.9;
+
 // Put a unit inside a building (respecting capacity). Returns success.
 Game.garrisonUnit = (unit, rec) => {
     if (!unit || !unit.alive || !rec || rec.collapsed) return false;
@@ -395,10 +421,16 @@ Game.garrisonUnit = (unit, rec) => {
     rec.occupants.push(unit.id);
     unit._garrisoned = true;
     unit._garrisonRec = rec;
+    unit._enterRec = null;
     unit._garrisonPos = { x: rec.cx, z: rec.cz };
     unit.x = rec.cx + Game.rand(-rec.w * 0.3, rec.w * 0.3);
     unit.z = rec.cz + Game.rand(-rec.d * 0.3, rec.d * 0.3);
-    unit.coverBonus = 0.9;
+    // Combat bonuses (saved so they restore exactly on exit).
+    if (unit._preGarrisonSight == null) unit._preGarrisonSight = unit.sight;
+    if (unit._preGarrisonRange == null) unit._preGarrisonRange = unit.range;
+    unit.sight = unit._preGarrisonSight * Game.GARRISON_SIGHT_MULT;
+    unit.range = unit._preGarrisonRange * Game.GARRISON_RANGE_MULT;
+    unit.coverBonus = Game.GARRISON_COVER;
     unit.path = []; unit.moving = false;
     if (unit.mesh) unit.mesh.visible = false;
     return true;
@@ -411,8 +443,90 @@ Game.ungarrisonUnit = (unit) => {
     if (rec) { const i = rec.occupants.indexOf(unit.id); if (i >= 0) rec.occupants.splice(i, 1); }
     unit._garrisoned = false;
     unit._garrisonRec = null;
+    // Restore the unit's own sight/range.
+    if (unit._preGarrisonSight != null) { unit.sight = unit._preGarrisonSight; unit._preGarrisonSight = null; }
+    if (unit._preGarrisonRange != null) { unit.range = unit._preGarrisonRange; unit._preGarrisonRange = null; }
     unit.coverBonus = 0;
     if (unit.mesh) unit.mesh.visible = true;
+};
+
+// Occupancy summary for the HUD label: count, capacity, average health %.
+Game.buildingOccupantStats = (rec) => {
+    if (!rec || !rec.occupants || !rec.occupants.length) {
+        return { count: 0, capacity: rec ? rec.capacity : 0, avgHealthPct: 0 };
+    }
+    let sum = 0, n = 0;
+    for (const id of rec.occupants) {
+        const u = Game.getUnitById ? Game.getUnitById(id) : null;
+        if (!u) continue;
+        sum += Game.clamp((u.hp / (u.maxHp || u.hp || 1)) * 100, 0, 100);
+        n++;
+    }
+    return { count: n, capacity: rec.capacity, avgHealthPct: n ? Math.round(sum / n) : 0 };
+};
+
+// A building taking fire wounds the troops sheltering inside (reduced — they have
+// cover). Killed occupants are removed from the garrison.
+Game._hurtOccupants = (rec, amount) => {
+    if (!rec || !rec.occupants || !rec.occupants.length || amount <= 0) return;
+    rec.occupants.slice().forEach(id => {
+        const u = Game.getUnitById ? Game.getUnitById(id) : null;
+        if (!u || !u.alive) return;
+        u.hp -= amount;
+        u.suppressionValue = Game.clamp((u.suppressionValue || 0) + amount * 1.5, 0, 100);
+        u.shaken = Math.max(u.shaken || 0, 0.4);
+        if (u.hp <= 0) {
+            u.hp = 0; u.alive = false;
+            Game.ungarrisonUnit(u);
+            if (u.mesh) u.mesh.visible = false;
+            if (Game.selection.has(u.id)) Game.selection.delete(u.id);
+        }
+    });
+};
+
+// Order the selected infantry to move to a building and garrison on arrival.
+// Tanks/crews are ignored. Capacity is enforced on arrival (latecomers stop).
+Game.orderEnterBuilding = (rec) => {
+    if (!rec || rec.collapsed) { Game.pushMessage('Must target a standing building!', 1.4); return; }
+    const inf = Game.selectedPlayerUnits().filter(u => u.alive && !Game.isTank(u.kind) && !u._garrisoned);
+    if (!inf.length) { Game.pushMessage('Select infantry to enter a building.', 1.4); return; }
+    inf.forEach(u => {
+        u.forcedTargetId = null;
+        u.bombardX = null; u.bombardZ = null; u._bombarding = false;
+        u._faceAngle = null; u._faceUntil = 0;
+        u._enterRec = rec;
+        const np = Game.buildingNearPoint ? Game.buildingNearPoint(rec, u.x, u.z) : { x: rec.cx, z: rec.cz };
+        u.targetX = np.x; u.targetZ = np.z;
+        u.path = Game.findPath(u, u.x, u.z, np.x, np.z);
+        u.moving = true; u.orderMode = 'move'; u._combatReady = false; u._readyTimer = 0;
+        u.stopTimer = 0; u.orderDelay = Game.commandDelay ? Game.commandDelay(u) : 0;
+    });
+    if (Game.spawnOrderMarker) Game.spawnOrderMarker(rec.cx, rec.cz, 0x66ccff);
+    Game.pushMessage(`Entering building (${rec.occupants.length}/${rec.capacity}).`, 1.6);
+    if (Game.Audio) Game.Audio.voice('f_sold_move');
+};
+
+// Per-frame: units with an entry order garrison when they reach the building, or
+// stop short if it filled up before they got there.
+Game.updateBuildingEntry = (dt) => {
+    const units = Game.units;
+    if (!units) return;
+    for (const u of units) {
+        const rec = u._enterRec;
+        if (!rec) continue;
+        if (!u.alive || u._garrisoned) { u._enterRec = null; continue; }
+        if (rec.collapsed) { u._enterRec = null; continue; }
+        // Close enough to the footprint to step inside?
+        const near = Game._footprintDistSq ? Game._footprintDistSq(rec, u.x, u.z) <= 6.25 : false;
+        if (!near) continue;
+        if (Game.buildingHasRoom(rec)) {
+            Game.garrisonUnit(u, rec);                 // clears _enterRec, hides mesh
+        } else {
+            u._enterRec = null;
+            u.path = []; u.moving = false;
+            Game.pushMessage(`Building full (${rec.occupants.length}/${rec.capacity}).`, 1.4);
+        }
+    }
 };
 
 // ── Debug-panel controls (merged into the post-processing debug section) ────

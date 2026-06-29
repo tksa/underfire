@@ -16,7 +16,7 @@ Game.uMod = {};
 
 // Per-frame upkeep: cover value + decay the short-lived timers.
 Game.uMod.frame = (unit, ctx) => {
-    unit.coverBonus = Game.computeCover(unit);
+    unit.coverBonus = unit._garrisoned ? (Game.GARRISON_COVER || 0.9) : Game.computeCover(unit);
     unit.cooldownLeft = Math.max(0, unit.cooldownLeft - ctx.dt);
     unit.underFire = Math.max(0, unit.underFire - ctx.dt);
     unit.shaken = Math.max(0, unit.shaken - ctx.dt);
@@ -664,6 +664,16 @@ Game.updateUnit = (unit, dt) => {
     M.morale(unit, ctx);
     M.health(unit, ctx);
     if (!unit.alive) return;
+
+    // Garrisoned infantry hold their position and fire from the windows: they
+    // acquire + shoot (longer sight/range, hard cover) but never move or pursue.
+    if (unit._garrisoned) {
+        unit.path = []; unit.moving = false;
+        M.scan(unit, ctx);
+        M.fire(unit, ctx);
+        return;
+    }
+
     M.supply(unit, ctx);
     M.deploy(unit, ctx);
     M.scan(unit, ctx);

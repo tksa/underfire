@@ -114,7 +114,13 @@ Game.lineOfSight = (a, b) => {
         const x = a.x + dx * t, z = a.z + dz * t;
         const tile = Game.getTileAtWorld(x, z);
         if (!tile) return false;
-        if (tile.sightBlock) return false;   // walls + buildings: hard block
+        if (tile.sightBlock) {
+            // A garrisoned shooter fires from its windows — its OWN building must
+            // not block its line out (other buildings/walls still do).
+            const own = a && a._garrisonRec && Game._footprintDistSq
+                && Game._footprintDistSq(a._garrisonRec, x, z) <= 1.0;
+            if (!own) return false;          // walls + other buildings: hard block
+        }
         // Foliage / objects progressively obscure the line; enough of it blocks.
         switch (tile.type) {
             case 'dense_forest': vis *= 0.80; break;

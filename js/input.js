@@ -19,11 +19,12 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null) => {
 
     const offsets = Game.formationOffsets(chosen.length, 2.5);
     chosen.forEach((unit, i) => {
-        // A move order cancels any standing attack/bombard/facing commitment
+        // A move order cancels any standing attack/bombard/facing/enter commitment
         unit.forcedTargetId = null;
         unit.bombardX = null; unit.bombardZ = null;
         unit._bombarding = false;
         unit._faceAngle = null; unit._faceUntil = 0;
+        unit._enterRec = null;
         // Rotate offset to face movement direction
         const rx = offsets[i].x * Math.cos(angle) - offsets[i].z * Math.sin(angle);
         const rz = offsets[i].x * Math.sin(angle) + offsets[i].z * Math.cos(angle);
@@ -95,6 +96,7 @@ Game.orderRetreat = (x, z) => {
     chosen.forEach(u => {
         u.forcedTargetId = null;
         u.bombardX = null; u.bombardZ = null; u._bombarding = false;
+        u._enterRec = null;
         u.orderMode = 'retreat';
         u.retreating = true;
         const threat = (u._engageId != null ? Game.getUnitById(u._engageId) : null) || Game.nearestEnemy(u);
@@ -125,6 +127,7 @@ Game.orderAttackGround = (x, z) => {
         const w = Game.WEAPONS[u.weaponKey];
         if (!w || w.fireType === 'none' || (w.gameRange || 0) <= 0) return; // unarmed
         any = true;
+        u._enterRec = null;
         u.bombardX = x; u.bombardZ = z;
         u.forcedTargetId = null;
         u.orderMode = 'aggressive';
@@ -187,6 +190,7 @@ Game.orderAttackTarget = (target) => {
         const w = Game.WEAPONS[u.weaponKey];
         if (!w || w.fireType === 'none' || (w.gameRange || 0) <= 0) return; // unarmed
         any = true;
+        u._enterRec = null;
         if (w.fireType === 'indirect') {
             u.bombardX = target.x; u.bombardZ = target.z;
             u.forcedTargetId = null;
@@ -427,6 +431,21 @@ Game.handleMouseSelection = () => {
     const boxH = Math.abs(dy);
 
     if (boxW < 4 && boxH < 4) {
+        // Enter-building: if infantry are selected and the click lands on a
+        // building (and not on a friendly unit you meant to select instead),
+        // send the selected infantry in rather than changing the selection.
+        const enterInf = Game.selectedPlayerUnits().filter(u => u.alive && !Game.isTank(u.kind) && !u._garrisoned);
+        if (enterInf.length) {
+            const picked0 = Game.unitAtScreen && Game.unitAtScreen(mouse.dragCurrentX, mouse.dragCurrentY);
+            const onFriendly = picked0 && picked0.team === Game.TEAM.FRENCH;
+            if (!onFriendly) {
+                const gp = Game.screenToGround(mouse.dragCurrentX, mouse.dragCurrentY);
+                const rec = (Game.buildingAtScreen && Game.buildingAtScreen(mouse.dragCurrentX, mouse.dragCurrentY))
+                    || (gp && Game.buildingAt && Game.buildingAt(gp.x, gp.z));
+                if (rec && !rec.collapsed) { Game.orderEnterBuilding(rec); return; }
+            }
+        }
+
         // Click select — dual approach: world-space + screen-space
         let picked = null;
         let bestDist = Infinity;
@@ -594,9 +613,12 @@ Game.handleInputEvents = () => {
                         });
                         if (enemyUnit) {
                             Game.orderAttackTarget(enemyUnit);
-                        } else if (onBuilding && haveArmed) {
-                            // Right-click a building with armed units -> shell it.
-                            Game.orderAttackGround(onBuilding.cx, onBuilding.cz);
+                        } else if (onBuilding && !onBuilding.collapsed) {
+                            // Right-click a building: selected infantry move in and
+                            // garrison it; otherwise armed vehicles/AT shell it.
+                            const inf = Game.selectedPlayerUnits().filter(u => u.alive && !Game.isTank(u.kind) && !u._garrisoned);
+                            if (inf.length) Game.orderEnterBuilding(onBuilding);
+                            else if (haveArmed) Game.orderAttackGround(onBuilding.cx, onBuilding.cz);
                         } else if (Game.orderStance === 'attack') {
                             Game.orderAttackMove(ground.x, ground.z);
                         } else {

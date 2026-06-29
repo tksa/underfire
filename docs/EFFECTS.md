@@ -55,18 +55,39 @@ matched by name prefix; only one state visible at a time, undamaged by default.
 
 - **HP / states:** `BUILDING_MAX_HP` (460). Bands at 100/75/50/25% → states 0–3.
   A few hits to crack to state 1, many more to reach the wreck.
-- **Damage delivery:** right-click a building (armed units) shells it; tank HE +
-  all explosions damage via `Game.addBlastFlash → Game.damageBuildingAt`; non-HE
-  rounds chip on impact. LOS is validated to the building's near edge.
+- **Damage delivery:** tank HE + all explosions damage via `Game.addBlastFlash →
+  Game.damageBuildingAt`; non-HE rounds chip on impact. LOS is validated to the
+  building's near edge. **Light arms cap:** infantry rifles/MGs only ever scuff a
+  building to light damage (`damageBuildingAt(..., {maxLevel:1})` floors HP just
+  above 50%); only AP guns and tanks can wreck masonry.
 - **Hit FX:** throttled dust/smoke + masonry per hit (`Game._buildingHitFx`).
+- **Collapse delay:** wreck → groan + debris, full collapse 0.5–2.5s later
+  (`_scheduleCollapse` + `updateBuildings`), keeps blocking sight until it drops.
 - **Destruction:** big smoke burst — tall column + footprint dust
   (`Game._buildingDestroyedSmoke`); shows `House_3_heavy`, or procedural rubble
-  if no heavy-state mesh; stops sight-blocking; clears shellers; buries occupants.
-- **Garrison capacity:** footprint-scaled (`registerBuilding`, 2–12 troops),
-  occupancy-tracked, capacity-enforced enter/exit; collapse ejects + harms.
+  if no heavy-state mesh; stops sight-blocking; clears shellers.
 - **Debug:** Buildings → Damage × (shots to wreck), Smoke ×, Max HP (live).
 - **Placement:** one fixed scale (`BUILDING_SCALE` 5.5, no per-footprint resize);
-  long footprints tile a row of houses with rotation variety (180° flips + yaw).
+  long footprints tile a row of houses **edge-to-edge** (`floor` count + fixed
+  `cell = houseW` so adjacent houses never overlap — overlap z-fights and looks
+  like phantom damage) with rotation variety (180° flips + yaw).
+
+### Garrison (`js/buildings.js`, `js/garrison_ui.js`)
+Infantry occupy buildings and fight from the windows.
+- **Enter:** with infantry selected, left- or right-click a building to send them
+  in (`orderEnterBuilding` → move to the near edge → `updateBuildingEntry`
+  garrisons on arrival). Capacity is footprint-scaled (2–12); latecomers to a
+  full building stop and can't enter. Tanks/crews never garrison.
+- **Combat from cover:** garrisoned troops get +sight (×1.35), +range (×1.25) and
+  hard cover (0.9); they hold position and fire (no move/pursue). Their **own**
+  building doesn't block their line out (`lineOfSight` exemption) — but it blocks
+  incoming LOS, so they're hidden/protected and cleared mainly by shelling.
+- **Occupant damage:** building hits wound the troops inside (a fraction of the
+  HP actually dealt, `_hurtOccupants`); on **collapse** each occupant has a random
+  fate — ~70% buried (killed), the rest scramble out wounded + shaken.
+- **HUD:** a floating label above occupied/hovered buildings shows `n/cap` +
+  average health; hovering with infantry selected adds a `❯ enter` chevron
+  (or `FULL`).
 - **Adding a building model:** drop a Draco GLB with state nodes named
   `House_0_undam/House_1/House_2/House_3*` (separate objects, not joined). The
   DRACO decoder loads from jsDelivr (`js/engine.js`).

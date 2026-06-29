@@ -59,6 +59,10 @@ Game.syncUnitMeshes = (dt) => {
             return; // dead remnants skip the rest of the per-frame logic
         }
 
+        // Garrisoned troops are inside the building — keep their mesh hidden
+        // (they still scan + fire; tracers come from the building).
+        if (unit._garrisoned) { unit.mesh.visible = false; return; }
+
         // Drive skeletal animation (clip chosen from unit state) + advance mixer
         Game._updateModelAnimation(unit, dt);
 

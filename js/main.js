@@ -633,7 +633,13 @@ Game.fireAtGround = (unit, tx, tz, weapon) => {
             const ang = Math.atan2(iz - mz, ix - mx);
             Game._apGroundImpact(ix, iz, ang, isTank ? 1.0 : 0.7);
         }
-        if (Game.damageBuildingAt) Game.damageBuildingAt(ix, iz, (weapon.damage || 12) * 0.6, isTank ? 1.4 : 0.9);
+        if (Game.damageBuildingAt) {
+            // Light arms (infantry rifles/MGs) only ever scuff a building to light
+            // damage; AP guns and tanks can wreck it.
+            const lightArms = !isTank && (weapon.penetration || 0) < 2;
+            Game.damageBuildingAt(ix, iz, (weapon.damage || 12) * 0.6, isTank ? 1.4 : 0.9,
+                lightArms ? { maxLevel: 1 } : undefined);
+        }
     }
     // Muzzle flash is purely visual — keep it below the blast thresholds so a
     // unit firing next to a building doesn't damage it from its own muzzle.
@@ -1999,6 +2005,7 @@ Game.tick = (now) => {
         if (Game.updateWreckFx) Game.updateWreckFx(dt);
         if (Game.updateFires) Game.updateFires(dt);
         if (Game.updateBuildings) Game.updateBuildings(dt);
+        if (Game.updateBuildingEntry) Game.updateBuildingEntry(dt);
         if (Game.updateSmoke3D) Game.updateSmoke3D(dt);
         if (Game.updateScorch3D) Game.updateScorch3D(dt);
         if (Game.updateFoliageKnockdown) Game.updateFoliageKnockdown(dt);
@@ -2019,6 +2026,8 @@ Game.tick = (now) => {
 
     // Order markers animate even while paused (orders are issued during pause)
     if (Game.updateOrderMarkers) Game.updateOrderMarkers(dt);
+    // Garrison labels + enter affordance (runs while paused so you can read/queue)
+    if (Game.updateGarrisonUI) Game.updateGarrisonUI();
     if (Game.updateFoliage) Game.updateFoliage(dt);
 
     // VALOR finishing pass: animate grain + sync haze tint (runs while paused too)
