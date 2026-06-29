@@ -1177,7 +1177,10 @@ Game.makeUnit = (team, kind, x, z, opts = {}) => {
         rotationSpeed: base.rotationSpeed,
         cost: base.cost || 1,
         // Weapon stats (from weapon definition for quick access)
-        range: weaponDef.gameRange || 12,
+        // Artillery (indirect fire) reaches much farther — longer min + a boost.
+        range: weaponDef.fireType === 'indirect'
+            ? Math.max((weaponDef.gameRange || 0) * 1.5, 240)
+            : (weaponDef.gameRange || 12),
         damage: weaponDef.damage || 10,
         cooldown: weaponDef.cooldown || 1.0,
         accuracy: (weaponDef.accuracy?.medium) || 0.5,

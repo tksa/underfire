@@ -194,17 +194,27 @@ Game.uMod.engage = (unit, ctx) => {
     if (enemy && unit.forcedTargetId === enemy.id
         && weaponDef0 && weaponDef0.fireType !== 'indirect') {
         const dft = Game.dist(unit.x, unit.z, enemy.x, enemy.z);
-        const canHit = dft <= unit.range && Game.unitCanSee(unit, enemy);
-        if (canHit) {
+        const sees = Game.unitCanSee(unit, enemy);
+        const inRange = dft <= unit.range;
+        // Hysteresis: once a firing position (in range + LOS) is reached, HOLD it
+        // and only break to re-pursue if the target moves well outside range. This
+        // kills the "twitch"/humping where an edge-of-range or flickering-LOS unit
+        // toggled stop<->advance every frame.
+        if (inRange && sees) unit._inFiringPos = true;
+        else if (dft > unit.range * 1.18) unit._inFiringPos = false;
+
+        if (unit._inFiringPos) {
             unit.path = [];
             unit.moving = false;
-            unit.stopTimer = 0;
+            unit.stopTimer = Math.max(unit.stopTimer || 0, 0.15);
         } else {
             unit._pursueTimer = (unit._pursueTimer || 0) - dt;
+            // Require a meaningful target move (>5u) before re-pathing, and never
+            // re-path faster than ~1.2s — removes the rapid re-plan jitter.
             const targetMoved = !unit._pursueAnchor
-                || Game.distSq(unit._pursueAnchor.x, unit._pursueAnchor.z, enemy.x, enemy.z) > 9;
+                || Game.distSq(unit._pursueAnchor.x, unit._pursueAnchor.z, enemy.x, enemy.z) > 25;
             if (!unit.moving || unit._pursueTimer <= 0 || targetMoved) {
-                unit._pursueTimer = 0.5;
+                unit._pursueTimer = 1.2;
                 unit._pursueAnchor = { x: enemy.x, z: enemy.z };
                 const goalDist = Math.max(2, Math.min(unit.range * 0.85, dft * 0.6));
                 const ang = Game.angleTo(enemy.x, enemy.z, unit.x, unit.z);
@@ -215,13 +225,16 @@ Game.uMod.engage = (unit, ctx) => {
                 unit.stopTimer = 0;
             }
         }
+    } else {
+        unit._inFiringPos = false;
     }
 
     if (unit.orderMode === 'assault' && enemy && unit.path && unit.path.length) {
         const d = Game.dist(unit.x, unit.z, enemy.x, enemy.z);
-        if (d <= unit.range) {
+        if (d <= unit.range * 0.95) {
+            unit.path = [];               // clear the path so it doesn't keep stepping
             unit.moving = false;
-            unit.stopTimer = 0.5;
+            unit.stopTimer = Math.max(unit.stopTimer || 0, 0.6);
         }
     }
 };

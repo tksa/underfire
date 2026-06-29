@@ -22,10 +22,14 @@ Game.BUILDING_MODEL = 'models/fr_shop_house_1_states.glb';
 // State meshes are matched by name PREFIX, so suffix variants (House_3 vs
 // House_3_heavy) and the "_undam" tag all resolve.
 Game.BUILDING_STATES = ['House_0', 'House_1', 'House_2', 'House_3'];
-Game.BUILDING_MAX_HP = 220;
+// Tougher buildings: ~a few hits to crack to the first damage state, and a lot
+// more to reach the wrecked state (HP/4 per band at 100/75/50/25%).
+Game.BUILDING_MAX_HP = 460;
 // Houses are placed at ONE fixed scale (no per-footprint resizing/stretching).
 // The GLB is exported ~1 world-unit wide, so this is the in-world house size.
 Game.BUILDING_SCALE = 5.5;
+Game._buildingSmokeScale = 1;   // debug "Smoke ×" — scales hit/destruction smoke
+Game._buildingDmgMult = 1;      // debug "Damage ×" — scales damage dealt to buildings
 Game.buildingRecords = [];
 
 // Register one building (called from the terrain build loop). procMeshes are the
@@ -148,19 +152,9 @@ Game.setBuildingDamage = (rec, level) => {
     if (level >= 3 && noHeavyState) {
         Game._collapseBuilding(rec);
     } else if (level >= 3 && !rec._destroyedFx) {
-        // Heavy-damage state mesh exists — show it, plus a one-time smoke/dust burst.
+        // Heavy-damage state mesh exists — show it, plus a one-time big burst.
         rec._destroyedFx = true;
-        for (let i = 0; i < 6; i++) {
-            Game.smoke.push({
-                x: rec.cx + Game.rand(-rec.w * 0.4, rec.w * 0.4),
-                z: rec.cz + Game.rand(-rec.d * 0.4, rec.d * 0.4),
-                r: 1.8, life: 3.0, total: 3.0,
-                vx: Game.rand(-0.3, 0.3), vz: Game.rand(-0.4, -0.1), mesh: null,
-            });
-        }
-        if (Game.addScorch) Game.addScorch(rec.cx, rec.cz, Math.max(rec.w, rec.d) * 0.4);
-        Game.cameraShake = Math.max(Game.cameraShake || 0, 7);
-        if (Game.Audio) Game.Audio.explosion(rec.cx, rec.cz);
+        Game._buildingDestroyedSmoke(rec);
         Game.pushMessage('Building wrecked!', 1.6);
     }
 };
@@ -187,18 +181,8 @@ Game._collapseBuilding = (rec) => {
         m.castShadow = true; m.receiveShadow = true;
         rec.group.add(m);
     }
-    // Dust + smoke + scorch.
-    for (let i = 0; i < 6; i++) {
-        Game.smoke.push({
-            x: rec.cx + Game.rand(-rec.w * 0.4, rec.w * 0.4),
-            z: rec.cz + Game.rand(-rec.d * 0.4, rec.d * 0.4),
-            r: 1.8, life: 3.5, total: 3.5,
-            vx: Game.rand(-0.3, 0.3), vz: Game.rand(-0.4, -0.1), mesh: null,
-        });
-    }
-    if (Game.addScorch) Game.addScorch(rec.cx, rec.cz, Math.max(rec.w, rec.d) * 0.4);
-    Game.cameraShake = Math.max(Game.cameraShake || 0, 8);
-    if (Game.Audio) Game.Audio.explosion(rec.cx, rec.cz);
+    // Big dust/smoke burst.
+    Game._buildingDestroyedSmoke(rec);
 
     // Rubble no longer blocks sight (but the tile keeps cover for troops).
     const T = Game.TILE, b = rec.b;
@@ -289,7 +273,7 @@ Game.damageBuildingAt = (x, z, amount, radius = 1.5) => {
         const dSq = Game._footprintDistSq(rec, x, z);
         if (dSq > r2) continue;
         const falloff = 1 - Math.sqrt(dSq) / (radius + 0.001);
-        rec.hp -= amount * Math.max(0.35, falloff);
+        rec.hp -= amount * Math.max(0.35, falloff) * (Game._buildingDmgMult || 1);
         Game._buildingHitFx(rec, x, z);
         // Map HP → level (4 bands: 100-75-50-25-0%).
         const pct = rec.hp / rec.maxHp;
@@ -305,18 +289,44 @@ Game.damageBuildingAt = (x, z, amount, radius = 1.5) => {
 // damage-state mesh swap is handled separately in setBuildingDamage.
 Game._buildingHitFx = (rec, x, z) => {
     const now = Game.gameClock || 0;
-    if (rec._fxT && now - rec._fxT < 0.12) return;
+    if (rec._fxT && now - rec._fxT < 0.1) return;
     rec._fxT = now;
-    for (let i = 0; i < 2; i++) {
+    const sc = Game._buildingSmokeScale || 1;
+    const n = Math.max(1, Math.round(3 * sc));
+    for (let i = 0; i < n; i++) {
         Game.smoke.push({
-            x: x + Game.rand(-0.7, 0.7), z: z + Game.rand(-0.7, 0.7),
-            r: 0.9, life: 1.2, total: 1.2,
-            vx: Game.rand(-0.3, 0.3), vz: Game.rand(-0.5, -0.1), mesh: null,
+            x: x + Game.rand(-0.8, 0.8), z: z + Game.rand(-0.8, 0.8),
+            r: 1.5 * sc, life: 1.6, total: 1.6,
+            vx: Game.rand(-0.3, 0.3), vz: Game.rand(-0.6, -0.15), mesh: null,
         });
     }
-    if (Game.craters) Game.craters.push({ x, z, r: Game.rand(0.15, 0.35) });
-    if (Game.addScorch && Math.random() < 0.4) Game.addScorch(x, z, 0.7);
-    Game.cameraShake = Math.max(Game.cameraShake || 0, 1.5);
+    if (Game.craters) Game.craters.push({ x, z, r: Game.rand(0.2, 0.4) });
+    if (Game.addScorch && Math.random() < 0.5) Game.addScorch(x, z, 0.8);
+    Game.cameraShake = Math.max(Game.cameraShake || 0, 2);
+};
+
+// Big dust/smoke burst when a building is wrecked — tall central column + a
+// spread of debris dust across the footprint. Scaled by the debug Smoke ×.
+Game._buildingDestroyedSmoke = (rec) => {
+    const sc = Game._buildingSmokeScale || 1;
+    const w = rec.w, d = rec.d;
+    for (let i = 0; i < Math.round(5 * sc); i++) {       // central column
+        Game.smoke.push({
+            x: rec.cx + Game.rand(-0.7, 0.7), z: rec.cz + Game.rand(-0.7, 0.7),
+            r: (3.0 + Game.rand(0, 1.4)) * sc, life: 5.5, total: 5.5,
+            vx: Game.rand(-0.15, 0.15), vz: Game.rand(-0.3, -0.05), mesh: null,
+        });
+    }
+    for (let i = 0; i < Math.round(10 * sc); i++) {      // footprint debris dust
+        Game.smoke.push({
+            x: rec.cx + Game.rand(-w * 0.5, w * 0.5), z: rec.cz + Game.rand(-d * 0.5, d * 0.5),
+            r: (2.2 + Game.rand(0, 0.9)) * sc, life: 4.2, total: 4.2,
+            vx: Game.rand(-0.4, 0.4), vz: Game.rand(-0.5, -0.1), mesh: null,
+        });
+    }
+    if (Game.addScorch) Game.addScorch(rec.cx, rec.cz, Math.max(w, d) * 0.55);
+    Game.cameraShake = Math.max(Game.cameraShake || 0, 10);
+    if (Game.Audio) Game.Audio.explosion(rec.cx, rec.cz);
 };
 
 // Debug / testing: force a damage level on every building.
@@ -369,3 +379,21 @@ Game.ungarrisonUnit = (unit) => {
     unit.coverBonus = 0;
     if (unit.mesh) unit.mesh.visible = true;
 };
+
+// ── Debug-panel controls (merged into the post-processing debug section) ────
+Game.buildingDebugDefaults = { bldgDmgMult: 1, bldgSmokeScale: 1, bldgMaxHp: Game.BUILDING_MAX_HP };
+Game._buildingControlDefs = () => [
+    { group: 'Buildings', key: 'bldgDmgMult', label: 'Damage × (shots to wreck)', min: 0.2, max: 4, step: 0.1, apply: v => { Game._buildingDmgMult = v; } },
+    { group: 'Buildings', key: 'bldgSmokeScale', label: 'Smoke ×', min: 0.3, max: 4, step: 0.1, apply: v => { Game._buildingSmokeScale = v; } },
+    {
+        group: 'Buildings', key: 'bldgMaxHp', label: 'Max HP', min: 100, max: 1200, step: 20,
+        apply: v => {
+            Game.BUILDING_MAX_HP = Math.round(v);
+            (Game.buildingRecords || []).forEach(r => {       // rescale existing buildings live
+                const ratio = r.maxHp ? r.hp / r.maxHp : 1;
+                r.maxHp = Math.round(v);
+                r.hp = r.maxHp * ratio;
+            });
+        },
+    },
+];

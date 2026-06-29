@@ -53,6 +53,7 @@ Game.initEngine = () => {
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 200;
     sun.shadow.bias = -0.001;
+    sun.shadow.radius = 4;   // soft shadow edges (esp. trees); tunable in debug
     Game.scene.add(sun);
     Game.scene.add(sun.target);
     Game.sun = sun;
@@ -361,10 +362,17 @@ Game.setupPostFX = () => {
             ambientIntensity: Game._dbgAmbientBase != null ? Game._dbgAmbientBase : 2.1,
             cloudShadow: Game._dbgCloudBase != null ? Game._dbgCloudBase : 0,
             antialias: true,
+            shadowBlur: (Game.sun && Game.sun.shadow) ? Game.sun.shadow.radius : 4,
+            shadowStrength: (Game.sun && Game.sun.shadow && Game.sun.shadow.intensity !== undefined) ? Game.sun.shadow.intensity : 1,
         };
         // VALOR realism passes (aerial perspective, grain, exposure) layered on
         // top. Self-contained and degradable: a failure leaves the base intact.
         if (Game.setupValor) { Game.setupValor(); Game._applyComposerSize(); }
+        if (Game.buildingDebugDefaults) {
+            for (const k in Game.buildingDebugDefaults) {
+                if (Game.postfxState[k] === undefined) Game.postfxState[k] = Game.buildingDebugDefaults[k];
+            }
+        }
         Game.buildPostFXDebugUI();
         return true;
     } catch (e) {
@@ -490,10 +498,13 @@ Game._postfxControlDefs = () => {
         { group: 'Lighting', key: 'sunIntensity', label: 'Sun Intensity', min: 0, max: 6, step: 0.05, apply: v => { Game._dbgSunBase = v; if (Game.sun) Game.sun.intensity = v; } },
         { group: 'Lighting', key: 'ambientIntensity', label: 'Ambient', min: 0, max: 5, step: 0.05, apply: v => { Game._dbgAmbientBase = v; if (Game.ambient) Game.ambient.intensity = v; } },
         { group: 'Lighting', key: 'cloudShadow', label: 'Cloud Shadows', min: 0, max: 0.5, step: 0.01, apply: v => { Game._dbgCloudBase = v; } },
+        { group: 'Shadows', key: 'shadowBlur', label: 'Shadow Blur (trees)', min: 0, max: 14, step: 0.5, apply: v => { if (Game.sun && Game.sun.shadow) { Game.sun.shadow.radius = v; if (Game.renderer) Game.renderer.shadowMap.needsUpdate = true; } } },
+        { group: 'Shadows', key: 'shadowStrength', label: 'Shadow Strength', min: 0, max: 1, step: 0.02, apply: v => { if (Game.sun && Game.sun.shadow && Game.sun.shadow.intensity !== undefined) { Game.sun.shadow.intensity = v; if (Game.renderer) Game.renderer.shadowMap.needsUpdate = true; } } },
         ...(Game._valorControlDefs ? Game._valorControlDefs() : []),
         ...(Game._valorMatControlDefs ? Game._valorMatControlDefs() : []),
         ...(Game._valorDecalControlDefs ? Game._valorDecalControlDefs() : []),
         ...(Game._valorFoliageControlDefs ? Game._valorFoliageControlDefs() : []),
+        ...(Game._buildingControlDefs ? Game._buildingControlDefs() : []),
     ];
 };
 
