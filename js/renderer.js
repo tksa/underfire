@@ -622,12 +622,31 @@ Game.updateFoliageKnockdown = (dt) => {
 /**
  * Update smoke effects (textured billboard sprites).
  */
+// Dust colour from the ground it was kicked up from (doc §8/§20): dry tan, wet
+// dark, masonry/road grey, organic forest, white snow. An explicit s.tint wins
+// (e.g. black fuel-fire smoke).
+Game._dustColorAt = (x, z) => {
+    const t = Game.getTileAtWorld ? Game.getTileAtWorld(x, z) : null;
+    if (!t) return 0x9a8e78;
+    switch (t.type) {
+        case 'mud': case 'swamp': return 0x4a3e30;
+        case 'water': return 0xb9c2c4;
+        case 'snow': return 0xdfe4ea;
+        case 'road': case 'yard': case 'wall': case 'house': return 0x8d8a84;
+        case 'forest': case 'dense_forest': return 0x6a6048;
+        case 'wheat': case 'grass': case 'orchard': case 'field': case 'plowed': return 0x9a8a5e;
+        default: return 0x9a8e78;
+    }
+};
+
 Game.updateSmoke3D = (dt) => {
     const THREE = Game.THREE;
+    const lifeMul = Game.fxDustLife || 1;
+    const opMul = (Game.fxDustOpacity != null) ? Game.fxDustOpacity : 1;
 
     for (let i = Game.smoke.length - 1; i >= 0; i--) {
         const s = Game.smoke[i];
-        s.life -= dt;
+        s.life -= dt / lifeMul;
         s.x += (s.vx || 0) * dt;
         s.z += (s.vz || 0) * dt;
         s.r += dt * 0.6;
@@ -643,8 +662,8 @@ Game.updateSmoke3D = (dt) => {
         }
 
         if (!s.mesh) {
-            // Darker for big/explosion puffs, lighter grey for muzzle smoke
-            const shade = s.r > 1.2 ? 0x55504a : 0x8a8782;
+            const shade = (s.tint != null) ? s.tint
+                : (Game._dustColorAt ? Game._dustColorAt(s.x, s.z) : (s.r > 1.2 ? 0x55504a : 0x8a8782));
             const mat = new THREE.SpriteMaterial({
                 map: Game._getSmokeTex(),
                 color: shade,
@@ -661,10 +680,16 @@ Game.updateSmoke3D = (dt) => {
         {
             const t = s.life / s.total;              // 1 -> 0 over lifetime
             const age = 1 - t;
-            s.mesh.position.set(s.x, (s._baseY || 0) + age * 1.8, s.z);
+            s.mesh.position.set(s.x, (s._baseY || 0) + age * (s.rise || 1.8), s.z);
             s.mesh.scale.setScalar(s.r * 2.4);
-            const fadeIn = Math.min(1, age / 0.15);  // quick puff-in
-            s.mesh.material.opacity = 0.6 * fadeIn * t;
+            // Two-stage fade (doc §2.1): drop ~65% opacity in the first 35% of
+            // life, then a slow drifting tail.
+            const peak = ((s.maxOpacity != null) ? s.maxOpacity : 0.6) * opMul;
+            const op = age < 0.35
+                ? peak * (1 - 0.65 * (age / 0.35))
+                : peak * 0.35 * (1 - (age - 0.35) / 0.65);
+            const fadeIn = Math.min(1, age / 0.08);  // quick puff-in
+            s.mesh.material.opacity = Math.max(0, op * fadeIn);
         }
     }
 

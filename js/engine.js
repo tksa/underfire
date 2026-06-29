@@ -364,7 +364,16 @@ Game.setupPostFX = () => {
             antialias: true,
             shadowBlur: (Game.sun && Game.sun.shadow) ? Game.sun.shadow.radius : 4,
             shadowStrength: (Game.sun && Game.sun.shadow && Game.sun.shadow.intensity !== undefined) ? Game.sun.shadow.intensity : 1,
+            fxDustOpacity: (Game.fxDustOpacity != null) ? Game.fxDustOpacity : 1,
+            fxDustLife: (Game.fxDustLife != null) ? Game.fxDustLife : 1,
+            fxImpactDust: (Game.fxImpactDust != null) ? Game.fxImpactDust : 1,
+            fxShake: (Game.fxShake != null) ? Game.fxShake : 1,
         };
+        // Apply the FX defaults so the live globals exist before the panel opens.
+        Game.fxDustOpacity = Game.postfxState.fxDustOpacity;
+        Game.fxDustLife = Game.postfxState.fxDustLife;
+        Game.fxImpactDust = Game.postfxState.fxImpactDust;
+        Game.fxShake = Game.postfxState.fxShake;
         // VALOR realism passes (aerial perspective, grain, exposure) layered on
         // top. Self-contained and degradable: a failure leaves the base intact.
         if (Game.setupValor) { Game.setupValor(); Game._applyComposerSize(); }
@@ -500,6 +509,10 @@ Game._postfxControlDefs = () => {
         { group: 'Lighting', key: 'cloudShadow', label: 'Cloud Shadows', min: 0, max: 0.5, step: 0.01, apply: v => { Game._dbgCloudBase = v; } },
         { group: 'Shadows', key: 'shadowBlur', label: 'Shadow Blur (trees)', min: 0, max: 14, step: 0.5, apply: v => { if (Game.sun && Game.sun.shadow) { Game.sun.shadow.radius = v; if (Game.renderer) Game.renderer.shadowMap.needsUpdate = true; } } },
         { group: 'Shadows', key: 'shadowStrength', label: 'Shadow Strength', min: 0, max: 1, step: 0.02, apply: v => { if (Game.sun && Game.sun.shadow && Game.sun.shadow.intensity !== undefined) { Game.sun.shadow.intensity = v; if (Game.renderer) Game.renderer.shadowMap.needsUpdate = true; } } },
+        { group: 'Effects', key: 'fxDustOpacity', label: 'Dust Opacity', min: 0, max: 1.5, step: 0.05, apply: v => { Game.fxDustOpacity = v; } },
+        { group: 'Effects', key: 'fxDustLife', label: 'Dust Lifetime x', min: 0.3, max: 3, step: 0.1, apply: v => { Game.fxDustLife = v; } },
+        { group: 'Effects', key: 'fxImpactDust', label: 'Impact Dust x', min: 0, max: 3, step: 0.1, apply: v => { Game.fxImpactDust = v; } },
+        { group: 'Effects', key: 'fxShake', label: 'Camera Shake x', min: 0, max: 2, step: 0.05, apply: v => { Game.fxShake = v; } },
         ...(Game._valorControlDefs ? Game._valorControlDefs() : []),
         ...(Game._valorMatControlDefs ? Game._valorMatControlDefs() : []),
         ...(Game._valorDecalControlDefs ? Game._valorDecalControlDefs() : []),

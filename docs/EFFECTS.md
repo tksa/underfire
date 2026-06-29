@@ -89,6 +89,37 @@ matched by name prefix; only one state visible at a time, undamaged by default.
 
 ---
 
+## Impact & dust FX (doc-driven — `ww2_rts_realistic_effects_breakdown.md`)
+
+Staged realism pass over weapon impacts. Implemented stages:
+
+**Stage 1 — dust model (`js/renderer.js` `updateSmoke3D`, `js/main.js` `addBlastFlash`)**
+- **Two-stage opacity curve** (doc §2.1): every dust/smoke puff drops ~65% opacity
+  in the first 35% of its life, then a slow drifting tail (no more linear fade).
+- **Terrain-tinted dust** (`Game._dustColorAt`, doc §8/§20): dust is coloured by
+  the ground it was kicked up from — dry tan, wet dark, road/masonry grey, forest
+  organic, snow white, water mist. An explicit `s.tint` (e.g. black fuel smoke)
+  overrides. Per-puff `rise` and `maxOpacity` fields added.
+- **Richer HE impact** (doc §6.2): real explosions (`addBlastFlash` scale ≥ 0.6)
+  spawn a rising dirt column + a low ground shock ring + thrown clods, all scaled
+  by blast size. Muzzle flashes (< 0.6) stay clean.
+- **Distance-scaled camera shake** (doc §17): shake = blast × nearness-to-view;
+  distant shells in a big battle don't rattle the screen.
+
+**Stage 2 — AP vs HE ground impact (`js/main.js` `fireAtGround`, `_apGroundImpact`)**
+- **HE** craters + dust column, both sized by caliber (`heBlast`).
+- **AP / kinetic** (`Game._apGroundImpact`, doc §6.1/§15.2): a directional dirt
+  lance flung forward along the shell path + a spark + a narrow gouge scar, and
+  **no round crater**. Only penetrators (tanks, AT ≥ pen 2) throw the lance.
+
+**Debug — Effects group** (backtick panel): Dust Opacity, Dust Lifetime x,
+Impact Dust x, Camera Shake x (live globals `Game.fxDustOpacity/fxDustLife/fxImpactDust/fxShake`).
+
+Remaining staged work (planned): vehicle destroyed states + wreck smoke;
+terrain/weather dust modifiers + dust LOS block; fire + secondary explosions.
+
+---
+
 ## Shadows & fog (`js/engine.js`, `js/main.js`)
 
 - **Shadows:** soft default (`sun.shadow.radius` 4). Debug Shadows → Shadow Blur,

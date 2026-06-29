@@ -385,6 +385,63 @@ Game.addBlastFlash = (x, z, scale = 1) => {
     // Buildings take blast damage (tank HE, grenades, AT, mortars, air strikes
     // all funnel through here) — steps their damage state and finally collapses.
     if (scale >= 0.5 && Game.damageBuildingAt) Game.damageBuildingAt(x, z, 42 * scale, 2.2 * scale);
+
+    // FX §6.2 HE ground impact: a rising dirt column + a low shock ring + a few
+    // thrown clods, all scaled by blast size. Dust colour comes from the ground
+    // it was kicked up from (updateSmoke3D). Skip the tiny muzzle/MG flashes.
+    if (scale >= 0.6 && Game.smoke) {
+        const dustMul = (Game.fxImpactDust != null) ? Game.fxImpactDust : 1;
+        const n = Math.round((3 + scale * 3) * dustMul);
+        for (let i = 0; i < n; i++) {
+            const rr = scale * (0.4 + Math.random() * 0.7);
+            const life = 1.6 + scale * 1.6;
+            Game.smoke.push({
+                x: x + Game.rand(-rr, rr), z: z + Game.rand(-rr, rr),
+                r: (0.6 + Math.random() * 0.8) * scale,
+                life, total: life,
+                vx: Game.rand(-0.3, 0.3) * scale, vz: Game.rand(-0.3, 0.3) * scale,
+                rise: 1.3 + scale * 1.4, maxOpacity: 0.7, mesh: null,
+            });
+        }
+        // wide, brief low shock ring hugging the ground
+        Game.smoke.push({ x, z, r: 1.3 * scale, life: 0.55, total: 0.55, rise: 0.25, maxOpacity: 0.5, mesh: null });
+    }
+
+    // FX §17: camera shake scaled by blast size AND distance to the view centre,
+    // so distant shells in a big battle don't rattle the whole screen.
+    if (Game.cam) {
+        const d = Math.hypot(x - Game.cam.x, z - Game.cam.z);
+        const reach = (Game.cam.zoom || 20) * 2.5;
+        const near = Game.clamp(1 - d / reach, 0, 1);
+        const shakeMul = (Game.fxShake != null) ? Game.fxShake : 1;
+        Game.cameraShake = Math.max(Game.cameraShake || 0, scale * 6 * near * shakeMul);
+    }
+};
+
+// FX §6.1 / §15.2: an AP / kinetic round striking the ground reads as a
+// directional dirt lance flung forward along the shell's path, plus a spark and
+// a narrow gouge scar — NOT a round HE crater, and the dust thins fast.
+Game._apGroundImpact = (x, z, angle, scale = 1) => {
+    const dustMul = (Game.fxImpactDust != null) ? Game.fxImpactDust : 1;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const n = Math.round((2 + scale * 2) * dustMul);
+    for (let i = 0; i < n; i++) {
+        const fwd = (0.2 + Math.random() * 1.2) * scale;   // strung out forward
+        const life = 0.5 + scale * 0.7;
+        Game.smoke.push({
+            x: x + cos * fwd + Game.rand(-0.2, 0.2) * scale,
+            z: z + sin * fwd + Game.rand(-0.2, 0.2) * scale,
+            r: (0.3 + Math.random() * 0.4) * scale,
+            life, total: life,
+            vx: cos * (1.5 + Math.random()) * scale, vz: sin * (1.5 + Math.random()) * scale,
+            rise: 0.7 + Math.random() * 0.7, maxOpacity: 0.5, mesh: null,
+        });
+    }
+    // bright kinetic spark at the strike point
+    Game.muzzleFlashes = Game.muzzleFlashes || [];
+    Game.muzzleFlashes.push({ x, z, r: 0.35 * scale, life: 0.1, total: 0.1, big: false, mesh: null });
+    // narrow persistent gouge scar, offset slightly along travel
+    if (Game.addScorch) Game.addScorch(x + cos * 0.6 * scale, z + sin * 0.6 * scale, 0.4 * scale);
 };
 
 /**
@@ -530,12 +587,20 @@ Game.fireAtGround = (unit, tx, tz, weapon) => {
         }
     });
 
-    if (isTank && weapon.heBlast) {
-        Game.craters.push({ x: ix, z: iz, r: Game.rand(0.4, 0.8) });
-        if (Game.addBlastFlash) Game.addBlastFlash(ix, iz, 1.0);   // HE impact also damages buildings
-    } else if (Game.damageBuildingAt) {
-        // Direct (non-HE) rounds still chip a building they strike.
-        Game.damageBuildingAt(ix, iz, (weapon.damage || 12) * 0.6, isTank ? 1.4 : 0.9);
+    if (weapon.heBlast) {
+        // HE: round crater + dust column, both scaled by caliber (heBlast size).
+        const cal = Game.clamp(weapon.heBlast / 2.2, 0.7, 2.2);
+        Game.craters.push({ x: ix, z: iz, r: 0.4 * cal + Game.rand(0, 0.4 * cal) });
+        if (Game.addBlastFlash) Game.addBlastFlash(ix, iz, cal);   // HE impact also damages buildings
+    } else {
+        // AP / kinetic: directional gouge + spark, no crater. Only penetrators
+        // (tanks, AT guns) throw a visible dirt lance; small arms just chip.
+        const ap = isTank || (weapon.penetration || 0) >= 2;
+        if (ap && Game._apGroundImpact) {
+            const ang = Math.atan2(iz - mz, ix - mx);
+            Game._apGroundImpact(ix, iz, ang, isTank ? 1.0 : 0.7);
+        }
+        if (Game.damageBuildingAt) Game.damageBuildingAt(ix, iz, (weapon.damage || 12) * 0.6, isTank ? 1.4 : 0.9);
     }
     // Muzzle flash is purely visual — keep it below the blast thresholds so a
     // unit firing next to a building doesn't damage it from its own muzzle.
