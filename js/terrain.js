@@ -41,6 +41,13 @@ Game.TERRAIN_TEXELS_PER_TILE = 14;
 Game.TERRAIN_DETAIL_DENSITY = 0.58;
 
 Game._isBridgeTile = (tx, ty) => !!(Game.bridgeTiles || []).some(b => b.tx === tx && b.ty === ty);
+Game._isWaterSurfaceTile = (tx, ty) => {
+    if (tx < 0 || ty < 0 || tx >= Game.MAP_COLS || ty >= Game.MAP_ROWS) return false;
+    if (Game._isBridgeTile(tx, ty)) return true;
+    const row = Game.terrain[ty];
+    const t = row && row[tx];
+    return !!(t && t.type === 'water');
+};
 
 Game.getRoadAxis = (tx, ty) => {
     const isRoad = (x, y) => {
@@ -146,6 +153,7 @@ Game.generateMap = () => {
     Game.windmill = null;
     Game.river = { tiles: [], minZ: ROWS, maxZ: 0 };
     Game.bridgeTiles = [];
+    Game._waterRibbonCache = null;
 
     for (let y = 0; y < ROWS; y++) {
         Game.terrain[y] = [];
@@ -368,6 +376,307 @@ Game._smoothHeightmap = (passes = 4) => {
     }
 };
 
+// ── Water depth field ──────────────────────────────────────────────────────
+// Distance (in tiles) from each water tile to the nearest shore, via a two-pass
+// chamfer distance transform. Used to slope the riverbed (so the terrain sinks
+// and water fills it) and to fade the water surface by depth.
+Game.WATER_BANK_TILES = 4;   // tiles from shore until "full depth"
+
+Game._computeWaterDepthField = () => {
+    const C = Game.MAP_COLS, R = Game.MAP_ROWS, BIG = 1e6;
+    const D = [];
+    for (let y = 0; y < R; y++) {
+        D[y] = new Float32Array(C);
+        for (let x = 0; x < C; x++) {
+            D[y][x] = Game._isWaterSurfaceTile(x, y) ? BIG : 0;
+        }
+    }
+    const relax = (x, y, nx, ny, wgt) => {
+        if (nx < 0 || ny < 0 || nx >= C || ny >= R) return;
+        const v = D[ny][nx] + wgt;
+        if (v < D[y][x]) D[y][x] = v;
+    };
+    for (let y = 0; y < R; y++) for (let x = 0; x < C; x++) {
+        if (D[y][x] === 0) continue;
+        relax(x, y, x - 1, y, 1); relax(x, y, x, y - 1, 1);
+        relax(x, y, x - 1, y - 1, 1.414); relax(x, y, x + 1, y - 1, 1.414);
+    }
+    for (let y = R - 1; y >= 0; y--) for (let x = C - 1; x >= 0; x--) {
+        if (D[y][x] === 0) continue;
+        relax(x, y, x + 1, y, 1); relax(x, y, x, y + 1, 1);
+        relax(x, y, x + 1, y + 1, 1.414); relax(x, y, x - 1, y + 1, 1.414);
+    }
+    Game._waterD = D;
+    return D;
+};
+
+// Distance-to-shore (tiles) at a tile-grid CORNER. Corners touching land read 0
+// (shoreline → shallow); fully-interior corners read the nearest water depth.
+Game._waterCornerDist = (cx, cy) => {
+    const D = Game._waterD; if (!D) return 0;
+    const C = Game.MAP_COLS, R = Game.MAP_ROWS;
+    let m = Infinity, anyLand = false, anyWater = false;
+    for (const [dx, dy] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) {
+        const tx = cx + dx, ty = cy + dy;
+        if (tx < 0 || ty < 0 || tx >= C || ty >= R) { anyLand = true; continue; }
+        const t = Game.getTile(tx, ty);
+        if (Game._isWaterSurfaceTile(tx, ty)) { anyWater = true; m = Math.min(m, D[ty][tx]); }
+        else anyLand = true;
+    }
+    if (!anyWater) return 0;
+    return anyLand ? 0 : m;
+};
+Game._waterDepth01 = (dist) => Game.clamp(dist / (Game.WATER_BANK_TILES || 4), 0, 1);
+
+Game._waterRectDistance = (wx, wz, tx, ty) => {
+    const T = Game.TILE;
+    const x0 = tx * T, z0 = ty * T;
+    const x1 = x0 + T, z1 = z0 + T;
+    const dx = wx < x0 ? x0 - wx : (wx > x1 ? wx - x1 : 0);
+    const dz = wz < z0 ? z0 - wz : (wz > z1 ? wz - z1 : 0);
+    return Math.hypot(dx, dz);
+};
+
+Game._waterSignedDistance = (wx, wz) => {
+    const T = Game.TILE;
+    const tx0 = Game.clamp(Math.floor(wx / T), 0, Game.MAP_COLS - 1);
+    const ty0 = Game.clamp(Math.floor(wz / T), 0, Game.MAP_ROWS - 1);
+    const inside = Game._isWaterSurfaceTile(tx0, ty0);
+    const maxWorld = Math.max(T, (Game.WATER_BANK_TILES || 4) * T);
+    const minTx = Game.clamp(Math.floor((wx - maxWorld) / T), 0, Game.MAP_COLS - 1);
+    const maxTx = Game.clamp(Math.floor((wx + maxWorld) / T), 0, Game.MAP_COLS - 1);
+    const minTy = Game.clamp(Math.floor((wz - maxWorld) / T), 0, Game.MAP_ROWS - 1);
+    const maxTy = Game.clamp(Math.floor((wz + maxWorld) / T), 0, Game.MAP_ROWS - 1);
+
+    if (inside) {
+        let best = Math.min(wx, wz, Game.WORLD_W - wx, Game.WORLD_H - wz, maxWorld);
+        for (let ty = minTy; ty <= maxTy; ty++) {
+            for (let tx = minTx; tx <= maxTx; tx++) {
+                if (Game._isWaterSurfaceTile(tx, ty)) continue;
+                best = Math.min(best, Game._waterRectDistance(wx, wz, tx, ty));
+            }
+        }
+        return Math.min(best, maxWorld);
+    }
+
+    const overflow = Game.WATER_SURFACE_OVERFLOW || 0.55;
+    const searchWorld = Math.max(T, overflow + T);
+    const wx0 = Game.clamp(Math.floor((wx - searchWorld) / T), 0, Game.MAP_COLS - 1);
+    const wx1 = Game.clamp(Math.floor((wx + searchWorld) / T), 0, Game.MAP_COLS - 1);
+    const wz0 = Game.clamp(Math.floor((wz - searchWorld) / T), 0, Game.MAP_ROWS - 1);
+    const wz1 = Game.clamp(Math.floor((wz + searchWorld) / T), 0, Game.MAP_ROWS - 1);
+    let best = Infinity;
+    for (let ty = wz0; ty <= wz1; ty++) {
+        for (let tx = wx0; tx <= wx1; tx++) {
+            if (!Game._isWaterSurfaceTile(tx, ty)) continue;
+            best = Math.min(best, Game._waterRectDistance(wx, wz, tx, ty));
+        }
+    }
+    return Number.isFinite(best) ? -best : -Infinity;
+};
+
+Game._waterSmoothstep = (a, b, x) => {
+    const t = Game.clamp((x - a) / (b - a), 0, 1);
+    return t * t * (3 - 2 * t);
+};
+
+Game._waterShoreSoftness = () => {
+    return Game.WATER_SHORE_SOFTNESS ?? 0.2;
+};
+
+Game._waterCoverage = (wx, wz) => {
+    const T = Game.TILE;
+    const radius = Game.WATER_SHORE_KERNEL_TILES || 1.55;
+    const gx = wx / T - 0.5;
+    const gz = wz / T - 0.5;
+    const ix = Math.floor(gx);
+    const iz = Math.floor(gz);
+    const reach = Math.ceil(radius);
+    let clear = 1;
+
+    for (let ty = iz - reach; ty <= iz + reach; ty++) {
+        for (let tx = ix - reach; tx <= ix + reach; tx++) {
+            if (!Game._isWaterSurfaceTile(tx, ty)) continue;
+            const dx = gx - tx;
+            const dz = gz - ty;
+            const d = Math.hypot(dx, dz);
+            if (d >= radius) continue;
+            const t = 1 - d / radius;
+            const k = t * t * (3 - 2 * t);
+            clear *= (1 - k);
+        }
+    }
+    return 1 - clear;
+};
+
+Game._waterRibbonProfile = () => {
+    const tiles = (Game.river && Game.river.tiles) || [];
+    if (Game._waterRibbonCache && Game._waterRibbonCache.count === tiles.length) return Game._waterRibbonCache;
+    if (tiles.length < 8) return null;
+
+    const columns = [];
+    let minTx = Game.MAP_COLS, maxTx = -1;
+    tiles.forEach(({ tx, ty }) => {
+        if (tx < 0 || ty < 0 || tx >= Game.MAP_COLS || ty >= Game.MAP_ROWS) return;
+        const c = columns[tx] || (columns[tx] = { count: 0, sum: 0, min: ty, max: ty });
+        c.count++;
+        c.sum += ty;
+        c.min = Math.min(c.min, ty);
+        c.max = Math.max(c.max, ty);
+        minTx = Math.min(minTx, tx);
+        maxTx = Math.max(maxTx, tx);
+    });
+
+    if (maxTx < minTx) return null;
+    const T = Game.TILE;
+    columns.forEach(c => {
+        if (!c) return;
+        c.cz = (c.sum / c.count + 0.5) * T;
+        c.halfWidth = Math.max(T * 0.65, (c.max - c.min + 1) * T * 0.5);
+    });
+
+    Game._waterRibbonCache = { count: tiles.length, columns, minTx, maxTx };
+    return Game._waterRibbonCache;
+};
+
+Game._nearestWaterColumn = (columns, tx, minTx, maxTx) => {
+    tx = Game.clamp(tx, minTx, maxTx);
+    if (columns[tx]) return columns[tx];
+    for (let d = 1; d <= Game.MAP_COLS; d++) {
+        const l = tx - d, r = tx + d;
+        if (l >= minTx && columns[l]) return columns[l];
+        if (r <= maxTx && columns[r]) return columns[r];
+    }
+    return null;
+};
+
+Game._waterRibbonAt = (wx, wz) => {
+    const profile = Game._waterRibbonProfile();
+    if (!profile) return null;
+    const T = Game.TILE;
+    const txf = wx / T - 0.5;
+    if (txf < profile.minTx - 0.75 || txf > profile.maxTx + 0.75) return null;
+
+    const clamped = Game.clamp(txf, profile.minTx, profile.maxTx);
+    const tx0 = Math.floor(clamped);
+    const tx1 = Math.min(profile.maxTx, tx0 + 1);
+    const f = Game.clamp(clamped - tx0, 0, 1);
+    const a = Game._nearestWaterColumn(profile.columns, tx0, profile.minTx, profile.maxTx);
+    const b = Game._nearestWaterColumn(profile.columns, tx1, profile.minTx, profile.maxTx) || a;
+    if (!a || !b) return null;
+
+    const centerZ = Game.lerp(a.cz, b.cz, f);
+    const halfWidth = Game.lerp(a.halfWidth, b.halfWidth, f);
+    return {
+        centerZ,
+        halfWidth,
+        signed: halfWidth - Math.abs(wz - centerZ),
+    };
+};
+
+Game._waterDepth01At = (wx, wz) => {
+    const ribbon = Game._waterRibbonAt(wx, wz);
+    if (ribbon) return Game.clamp(ribbon.signed / Math.max(0.001, ribbon.halfWidth * 0.78), 0, 1);
+
+    const threshold = Game.WATER_SHORE_THRESHOLD ?? 0.24;
+    const coverage = Game._waterCoverage ? Game._waterCoverage(wx, wz) : 1;
+    return Game.clamp((coverage - threshold) / Math.max(0.001, 1 - threshold), 0, 1);
+};
+
+Game._waterEdgeAlphaAt = (wx, wz) => {
+    const overflow = Game.WATER_SURFACE_OVERFLOW || 0.7;
+    const ribbon = Game._waterRibbonAt(wx, wz);
+    if (ribbon) {
+        const jitterAmp = (Game.WATER_SHORE_JITTER || 0) * Game.TILE * 2;
+        const jitter = (Game._fbm2 ? Game._fbm2(wx * 0.055 + 19.3, wz * 0.055 - 7.1) - 0.5 : 0) * jitterAmp;
+        const signed = ribbon.signed + jitter;
+        if (signed < -overflow) return 0;
+        const shoreSoft = Math.max(0.05, Game._waterShoreSoftness() * Game.TILE);
+        return Game.clamp(Game._waterSmoothstep(-overflow, shoreSoft, signed), 0, 1);
+    }
+
+    const signed = Game._waterSignedDistance(wx, wz);
+    if (signed < -overflow) return 0;
+
+    const threshold = Game.WATER_SHORE_THRESHOLD ?? 0.24;
+    const softness = Game._waterShoreSoftness();
+    const jitterAmp = Game.WATER_SHORE_JITTER || 0;
+    const jitter = (Game._fbm2 ? Game._fbm2(wx * 0.075 + 19.3, wz * 0.075 - 7.1) - 0.5 : 0) * jitterAmp;
+    const coverage = Game._waterCoverage(wx, wz) + jitter;
+    const coverageFade = Game._waterSmoothstep(threshold - softness, threshold + softness, coverage);
+    const overflowFade = signed >= 0 ? 1 : Game._waterSmoothstep(-overflow, 0, signed);
+    return Game.clamp(coverageFade * overflowFade, 0, 1);
+};
+
+Game._captureWaterBedBaseHeightmap = () => {
+    if (!Game.heightData || !Game.heightW || !Game.heightH) return;
+    Game._waterBedBaseHeightData = new Float32Array(Game.heightData);
+    Game._waterBedBaseW = Game.heightW;
+    Game._waterBedBaseH = Game.heightH;
+    Game._waterBedApplied = false;
+};
+
+Game._waterBaseHeightAt = (x, z) => {
+    const data = Game._waterBedBaseHeightData;
+    const w = Game._waterBedBaseW || Game.heightW;
+    const h = Game._waterBedBaseH || Game.heightH;
+    if (!data || !w || !h || data.length !== w * h) return Game.getHeight(x, z);
+
+    const u = Game.clamp(x / Game.WORLD_W, 0, 1) * (w - 1);
+    const v = Game.clamp(z / Game.WORLD_H, 0, 1) * (h - 1);
+    const x0 = Math.floor(u), x1 = Math.min(x0 + 1, w - 1);
+    const y0 = Math.floor(v), y1 = Math.min(y0 + 1, h - 1);
+    const fx = u - x0, fy = v - y0;
+    const h00 = data[y0 * w + x0];
+    const h10 = data[y0 * w + x1];
+    const h01 = data[y1 * w + x0];
+    const h11 = data[y1 * w + x1];
+    const n = h00 * (1 - fx) * (1 - fy) + h10 * fx * (1 - fy)
+        + h01 * (1 - fx) * fy + h11 * fx * fy;
+    return n * Game.HEIGHT_SCALE;
+};
+
+Game._applyWaterBedDepth = () => {
+    if (!Game.heightData || !Game.terrain.length) return;
+    if (!Game._waterBedBaseHeightData
+        || Game._waterBedBaseW !== Game.heightW
+        || Game._waterBedBaseH !== Game.heightH
+        || Game._waterBedBaseHeightData.length !== Game.heightData.length) {
+        Game._captureWaterBedBaseHeightmap();
+    }
+    const base = Game._waterBedBaseHeightData;
+    if (!base || base.length !== Game.heightData.length) return;
+
+    Game.heightData.set(base);
+    Game._waterBedApplied = false;
+    if (!Game._waterD) Game._computeWaterDepthField();
+
+    const maxSink = Math.max(0, Game.WATER_BED_DEPTH ?? 0.9);
+    const edgeSink = Math.max(0, Game.WATER_BED_EDGE ?? 0.22);
+    const slope = Game.clamp(Game.WATER_BED_SLOPE ?? 1.15, 0.2, 4);
+    const variation = Game.clamp(Game.WATER_BED_VARIATION ?? 0.22, 0, 1);
+    if (maxSink <= 0 && edgeSink <= 0) return;
+
+    const W = Game.heightW, H = Game.heightH;
+    const HS = Game.HEIGHT_SCALE || 3.5;
+    for (let py = 0; py < H; py++) {
+        const wz = (py / Math.max(1, H - 1)) * Game.WORLD_H;
+        for (let px = 0; px < W; px++) {
+            const wx = (px / Math.max(1, W - 1)) * Game.WORLD_W;
+            const edge = Game._waterEdgeAlphaAt ? Game._waterEdgeAlphaAt(wx, wz) : 0;
+            if (edge <= 0.001) continue;
+
+            const depth = Game._waterDepth01At ? Game._waterDepth01At(wx, wz) : edge;
+            const depthCurve = Math.pow(Game.clamp(depth, 0, 1), slope);
+            const noise = Game._fbm2 ? Game._fbm2(wx * 0.045 + 41.7, wz * 0.045 - 13.2) : 0.5;
+            const varied = 1 + (noise - 0.5) * 2 * variation;
+            const sink = edge * (edgeSink + maxSink * depthCurve * varied);
+            Game.heightData[py * W + px] = base[py * W + px] - sink / HS;
+        }
+    }
+    Game._waterBedApplied = true;
+};
+
 /**
  * Shape the existing heightmap to the tile map: carve the river channel,
  * flatten roads / yards / buildings, and raise the bridge deck. Safe to call
@@ -382,13 +691,10 @@ Game.shapeHeightmap = () => {
         return Game.getTile(tx, ty);
     };
 
-    // 1. Carve the river channel down to the valley floor
-    for (let py = 0; py < h; py++) {
-        for (let px = 0; px < w; px++) {
-            const tile = tileOf(px, py);
-            if (tile && tile.type === 'water') Game.heightData[py * w + px] = 0.0;
-        }
-    }
+    // 1. Precompute the river distance field. The visible, tuneable bed carve is
+    // applied later from a cached base heightmap, so debug rebuilds and sliders
+    // do not keep digging the same riverbed deeper and deeper.
+    Game._computeWaterDepthField();
 
     // 2. Extra-smoothed baseline copy for flattening structures into
     const flat = new Float32Array(Game.heightData);
@@ -426,6 +732,7 @@ Game.shapeHeightmap = () => {
     }
 
     Game.WATER_LEVEL = 0.55;
+    if (Game._captureWaterBedBaseHeightmap) Game._captureWaterBedBaseHeightmap();
 };
 
 /**
@@ -728,6 +1035,7 @@ Game.buildTerrainTexture = () => {
     const paintType = (t) => {
         if (t === 'hedge') return 'pasture';
         if (t === 'wall' || t === 'house') return 'yard';
+        if (t === 'water') return 'mud';
         return t;
     };
 
@@ -816,9 +1124,6 @@ Game.buildTerrainTexture = () => {
                 for (let k = 0; k < 2; k++) {
                     fillCircle(x0 + Game.rand(2, px - 2), y0 + Game.rand(2, px - 2), Game.rand(1.6, 4.0), `rgba(42,38,31,${Game.rand(0.16, 0.28)})`);
                 }
-            } else if (type === 'water') {
-                ctx.fillStyle = 'rgba(255,255,255,0.05)';
-                ctx.fillRect(x0, y0 + Game.rand(2, px - 2), px, 1);
             } else if (type === 'yard') {
                 for (let k = 0; k < 6; k++) {
                     fillCircle(x0 + Game.rand(1, px - 1), y0 + Game.rand(1, px - 1), Game.rand(0.3, 1.1), `rgba(88,76,56,${Game.rand(0.12, 0.28)})`);
@@ -848,7 +1153,53 @@ Game.buildTerrainTexture = () => {
         ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
     }
 
-    // 5. Per-pixel grain
+    // 5. Soft waterbed tint. The terrain texture underneath the transparent
+    // surface uses the same rounded shoreline mask as the mesh, so tile corners
+    // do not show through as square blue blocks.
+    let minWaterTx = Game.MAP_COLS, minWaterTy = Game.MAP_ROWS;
+    let maxWaterTx = -1, maxWaterTy = -1;
+    for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
+        for (let tx = 0; tx < Game.MAP_COLS; tx++) {
+            if (!Game._isWaterSurfaceTile(tx, ty)) continue;
+            minWaterTx = Math.min(minWaterTx, tx);
+            minWaterTy = Math.min(minWaterTy, ty);
+            maxWaterTx = Math.max(maxWaterTx, tx);
+            maxWaterTy = Math.max(maxWaterTy, ty);
+        }
+    }
+    if (maxWaterTx >= minWaterTx && Game._waterEdgeAlphaAt) {
+        const pad = 2;
+        const ix0 = Math.max(0, (minWaterTx - pad) * px);
+        const iy0 = Math.max(0, (minWaterTy - pad) * px);
+        const ix1 = Math.min(W, (maxWaterTx + pad + 1) * px);
+        const iy1 = Math.min(H, (maxWaterTy + pad + 1) * px);
+        const waterImg = ctx.getImageData(ix0, iy0, ix1 - ix0, iy1 - iy0);
+        const data = waterImg.data;
+        const shallow = [80, 103, 101];
+        const deep = [36, 65, 78];
+
+        for (let py = 0; py < waterImg.height; py++) {
+            for (let pxl = 0; pxl < waterImg.width; pxl++) {
+                const wx = ((ix0 + pxl + 0.5) / px) * Game.TILE;
+                const wz = ((iy0 + py + 0.5) / px) * Game.TILE;
+                const edge = Game._waterEdgeAlphaAt(wx, wz);
+                if (edge <= 0.002) continue;
+                const depth = Game._waterDepth01At ? Game._waterDepth01At(wx, wz) : edge;
+                const fleck = Game._fbm2 ? (Game._fbm2(wx * 0.32 + 5.1, wz * 0.32 - 2.4) - 0.5) * 16 : 0;
+                const blend = edge * (0.58 + depth * 0.22);
+                const i = (py * waterImg.width + pxl) * 4;
+                const tr = shallow[0] + (deep[0] - shallow[0]) * depth + fleck;
+                const tg = shallow[1] + (deep[1] - shallow[1]) * depth + fleck * 0.6;
+                const tb = shallow[2] + (deep[2] - shallow[2]) * depth + fleck * 0.45;
+                data[i] = Game.clamp(Math.round(Game.lerp(data[i], tr, blend)), 0, 255);
+                data[i + 1] = Game.clamp(Math.round(Game.lerp(data[i + 1], tg, blend)), 0, 255);
+                data[i + 2] = Game.clamp(Math.round(Game.lerp(data[i + 2], tb, blend)), 0, 255);
+            }
+        }
+        ctx.putImageData(waterImg, ix0, iy0);
+    }
+
+    // 6. Per-pixel grain
     const img = ctx.getImageData(0, 0, W, H);
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) {
@@ -1259,6 +1610,9 @@ Game.buildTerrainMeshes = () => {
     while (Game.terrainGroup.children.length) {
         Game.terrainGroup.remove(Game.terrainGroup.children[0]);
     }
+    Game.terrainMesh = null;
+
+    if (Game._applyWaterBedDepth) Game._applyWaterBedDepth();
 
     // ── Main terrain mesh (subdivided plane displaced by heightmap) ──
     const segX = Math.min(Game.MAP_COLS * 3, 256);
@@ -1978,31 +2332,7 @@ Game.buildTerrainMeshes = () => {
         }
     }
 
-    // ── River water surface (one quad per water tile — exact, no bleed) ──
-    if (Game.river && Game.river.tiles.length) {
-        const wgeo = new THREE.BufferGeometry();
-        const verts = [];
-        const y = Game.WATER_LEVEL;
-        Game.river.tiles.forEach(({ tx, ty }) => {
-            const x0 = tx * T, z0 = ty * T, x1 = x0 + T, z1 = z0 + T;
-            verts.push(x0, y, z0, x1, y, z0, x1, y, z1);
-            verts.push(x0, y, z0, x1, y, z1, x0, y, z1);
-        });
-        wgeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-        wgeo.computeVertexNormals();
-        const ripple = texLoader.load('textures/oga/ground_detail_nrm.jpg');
-        ripple.wrapS = ripple.wrapT = THREE.RepeatWrapping;
-        ripple.repeat.set(40, 40);
-        const waterMat = new THREE.MeshStandardMaterial({
-            color: 0x5d8a90, roughness: 0.16, metalness: 0.2,
-            transparent: true, opacity: 0.82,
-            normalMap: ripple, normalScale: new THREE.Vector2(0.2, 0.2),
-        });
-        Game.waterMesh = new THREE.Mesh(wgeo, waterMat);
-        Game.waterMesh.receiveShadow = true;
-        Game.waterMesh.renderOrder = 1;
-        Game.terrainGroup.add(Game.waterMesh);
-    }
+    // Water surface FX removed; water remains terrain tile material only.
 
     // ── Stone arch bridge over the river (on the N-S road) ──
     if (Game.bridges && Game.bridges.length) {

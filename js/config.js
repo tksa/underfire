@@ -115,8 +115,15 @@ Game.heightW = 0;
 Game.heightH = 0;
 Game.HEIGHT_SCALE = 3.5;   // world-unit height of the tallest hills
 Game.WATER_LEVEL = -999;   // no water bodies on this map
-Game.waterGroup = null;
-Game.waterMesh = null;
+Game.WATER_SURFACE_OVERFLOW = 0.7;   // soft terrain-bed influence beyond painted water
+Game.WATER_SHORE_KERNEL_TILES = 1.55;
+Game.WATER_SHORE_THRESHOLD = 0.24;
+Game.WATER_SHORE_SOFTNESS = 0.2;
+Game.WATER_SHORE_JITTER = 0.25;   // organic shoreline wiggle (break the tile grid)
+Game.WATER_BED_DEPTH = 0.9;
+Game.WATER_BED_EDGE = 0.22;
+Game.WATER_BED_SLOPE = 1.15;
+Game.WATER_BED_VARIATION = 0.22;
 Game.terrainMesh = null;
 
 // Game starts paused behind the main menu

@@ -421,11 +421,11 @@ Game.addBlastFlash = (x, z, scale = 1) => {
                 r: (0.6 + Math.random() * 0.8) * scale * mod.radius,
                 life, total: life,
                 vx: Game.rand(-0.3, 0.3) * scale, vz: Game.rand(-0.3, 0.3) * scale,
-                rise: (1.3 + scale * 1.4) * mod.rise, maxOpacity: 0.7, mesh: null,
+                rise: (1.3 + scale * 1.4) * mod.rise, maxOpacity: 0.7, dust: true, mesh: null,
             });
         }
         // wide, brief low shock ring hugging the ground
-        Game.smoke.push({ x, z, r: 1.3 * scale * mod.radius, life: 0.55, total: 0.55, rise: 0.25, maxOpacity: 0.5, mesh: null });
+        Game.smoke.push({ x, z, r: 1.3 * scale * mod.radius, life: 0.55, total: 0.55, rise: 0.25, maxOpacity: 0.5, dust: true, mesh: null });
 
         // FX §18.1: large HE / bomb dust briefly obscures line of sight (reuses
         // the LOS-only smokeClouds; the visible dust is the puffs above). Scales
@@ -467,7 +467,7 @@ Game._apGroundImpact = (x, z, angle, scale = 1) => {
             r: (0.3 + Math.random() * 0.4) * scale * mod.radius,
             life, total: life,
             vx: cos * (1.5 + Math.random()) * scale, vz: sin * (1.5 + Math.random()) * scale,
-            rise: (0.7 + Math.random() * 0.7) * mod.rise, maxOpacity: 0.5, mesh: null,
+            rise: (0.7 + Math.random() * 0.7) * mod.rise, maxOpacity: 0.5, dust: true, mesh: null,
         });
     }
     // bright kinetic spark at the strike point
@@ -1501,22 +1501,6 @@ Game.updateHover = () => {
 };
 
 // ═══════════════════════════════════════════════════════
-//  WATER ANIMATION
-// ═══════════════════════════════════════════════════════
-
-Game.updateWater = (dt) => {
-    if (!Game.waterMesh) return;
-    const t = Game.gameClock;
-    const mat = Game.waterMesh.material;
-
-    // Slow dual-direction normal map scrolling for organic surface
-    if (mat.normalMap) {
-        mat.normalMap.offset.x = t * 0.003;
-        mat.normalMap.offset.y = t * 0.002;
-    }
-};
-
-// ═══════════════════════════════════════════════════════
 //  DYNAMIC LIGHTING & CLOUDS
 // ═══════════════════════════════════════════════════════
 
@@ -1558,18 +1542,6 @@ document.addEventListener('keydown', (e) => {
         if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
     }
 });
-
-// Water level slider — updates water mesh Y position in real-time
-const dbgWater = document.getElementById('dbgWater');
-const dbgWaterVal = document.getElementById('dbgWaterVal');
-if (dbgWater) {
-    dbgWater.addEventListener('input', () => {
-        const v = parseFloat(dbgWater.value);
-        Game.WATER_LEVEL = v;
-        dbgWaterVal.textContent = v.toFixed(2);
-        if (Game.waterMesh) Game.waterMesh.position.y = v;
-    });
-}
 
 // Height scale slider
 const dbgHeight = document.getElementById('dbgHeight');
@@ -1684,21 +1656,6 @@ _dbgSlider('dbgAmbient', 'dbgAmbientVal', v => {
 _dbgSlider('dbgCloud', 'dbgCloudVal', v => {
     Game._dbgCloudBase = v;
     if (Game.cloudShadow) Game.cloudShadow.material.opacity = v;
-});
-
-// ── Water controls ──
-_dbgSlider('dbgWaterOpacity', 'dbgWaterOpacityVal', v => {
-    if (Game.waterMesh) Game.waterMesh.material.opacity = v;
-});
-
-_dbgSlider('dbgWaterRough', 'dbgWaterRoughVal', v => {
-    if (Game.waterMesh) Game.waterMesh.material.roughness = v;
-});
-
-_dbgSlider('dbgWaterNorm', 'dbgWaterNormVal', v => {
-    if (Game.waterMesh) {
-        Game.waterMesh.material.normalScale.set(v, v);
-    }
 });
 
 // ── Camera controls ──
@@ -1973,7 +1930,6 @@ Game.debugRebuildTerrain = () => {
     // Re-run heightmap + terrain build (buildTerrainMeshes clears children internally)
     Game.loadHeightmap().then(() => {
         Game.buildTerrainMeshes();
-        if (Game.waterMesh) Game.waterMesh.position.y = Game.WATER_LEVEL;
         // Re-apply texture settings
         if (dbgTexFilter) dbgTexFilter.dispatchEvent(new Event('change'));
         if (dbgTexScale) dbgTexScale.dispatchEvent(new Event('input'));
@@ -2020,7 +1976,6 @@ Game.tick = (now) => {
         Game.updateMission(dt);
         Game.updateHover();
         Game.updateMessages(dt);
-        Game.updateWater(dt);
         Game.updateLighting(dt);
     } // end pause gate
 

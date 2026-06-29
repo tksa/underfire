@@ -590,6 +590,7 @@ Game.buildPostFXDebugUI = () => {
             blabel.style.gap = '4px';
             const cb = document.createElement('input');
             cb.type = 'checkbox'; cb.checked = !!v0;
+            cb.dataset.postfxKey = def.key;
             cb.addEventListener('change', () => {
                 Game.postfxState[def.key] = cb.checked;
                 try { def.apply(cb.checked); } catch (e) { /* ignore */ }
@@ -604,8 +605,10 @@ Game.buildPostFXDebugUI = () => {
         label.appendChild(document.createTextNode(def.label + ' '));
         const range = document.createElement('input');
         range.type = 'range'; range.min = def.min; range.max = def.max; range.step = def.step; range.value = v0;
+        range.dataset.postfxKey = def.key;
         const num = document.createElement('input');
         num.type = 'number'; num.step = def.step; num.value = (+v0);
+        num.dataset.postfxKey = def.key;
         num.className = 'dbg-val';
         num.style.cssText = 'width:52px;background:#2a3038;color:#dfe7ef;border:1px solid rgba(80,90,100,0.4);font-size:11px;padding:1px 3px';
         const setVal = (v, from) => {

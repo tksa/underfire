@@ -907,7 +907,11 @@ Game._loadUnitModel = (unit, mesh) => {
     // Per-model corrections: yaw (radians) when the source faces the wrong way,
     // and an extra scale multiplier on top of footprint normalization.
     const MODEL_YAW = {};
-    const MODEL_SCALE = {};
+    const MODEL_SCALE = { french_b1: 1.6 };        // Char B1 bis (2x then -20%)
+    // Fused-mesh tanks (turret modelled into the hull, no separate node): aim by
+    // rotating the whole hull. The B1 model now has a real "turret" node, so it's
+    // no longer listed here — the loader wires its turret for true traverse.
+    const MODEL_HULL_AIM = new Set();
 
     // Try each path sequentially until one works
     const tryLoad = (idx) => {
@@ -1031,7 +1035,14 @@ Game._loadUnitModel = (unit, mesh) => {
             });
 
             // ── 7. Wire turret rotation ──
-            if (turretNode && isVeh) {
+            if (isVeh && MODEL_HULL_AIM.has(teamKind)) {
+                // Fused mesh — no independent turret. Aim by rotating the hull
+                // (the fire module hull-rotates when the unit has no turret).
+                unit.hasTurret = false;
+                mesh.userData.turret = null;
+                mesh.userData.gunNode = null;
+                console.log(`Hull-aim wired for ${unit.label} (fused-mesh turret)`);
+            } else if (turretNode && isVeh) {
                 let turretGroup;
 
                 if (gunNode && gunNode.parent === turretNode.parent) {

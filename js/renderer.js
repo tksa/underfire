@@ -679,8 +679,11 @@ Game.updateSmoke3D = (dt) => {
         }
 
         if (!s.mesh) {
+            // Terrain tint only for ground-kicked DUST (opt-in via s.dust); gun
+            // muzzle/barrel smoke and other puffs stay neutral grey.
             const shade = (s.tint != null) ? s.tint
-                : (Game._dustColorAt ? Game._dustColorAt(s.x, s.z) : (s.r > 1.2 ? 0x55504a : 0x8a8782));
+                : (s.dust && Game._dustColorAt) ? Game._dustColorAt(s.x, s.z)
+                    : (s.r > 1.2 ? 0x55504a : 0x8a8782);
             const mat = new THREE.SpriteMaterial({
                 map: Game._getSmokeTex(),
                 color: shade,

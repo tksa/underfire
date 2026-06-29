@@ -27,7 +27,7 @@ Game.BUILDING_STATES = ['House_0', 'House_1', 'House_2', 'House_3'];
 Game.BUILDING_MAX_HP = 460;
 // Houses are placed at ONE fixed scale (no per-footprint resizing/stretching).
 // The GLB is exported ~1 world-unit wide, so this is the in-world house size.
-Game.BUILDING_SCALE = 5.5;
+Game.BUILDING_SCALE = 6.6;   // houses sized +20% (was 5.5)
 Game._buildingSmokeScale = 1;   // debug "Smoke ×" — scales hit/destruction smoke
 Game._buildingDmgMult = 1;      // debug "Damage ×" — scales damage dealt to buildings
 Game.buildingRecords = [];
@@ -137,9 +137,72 @@ Game._populateBuildingModel = (rec, srcModel) => {
         rec.houses.push({ root: model, states: collectStates(model) });
     }
 
+    // Clean the grime baked onto the UNDAMAGED roof texture (the "fake damage"
+    // that showed on whichever slope faced the camera). Processed once, cached,
+    // and shared across every house. Damage states keep their own textures.
+    if (Game.BUILDING_ROOF_DECLEAN && Game._cleanRoofGrime) {
+        rec.houses.forEach(h => {
+            const node = h.states && h.states[0];
+            if (!node) return;
+            node.traverse(o => {
+                if (!o.isMesh || !o.material) return;
+                const ms = Array.isArray(o.material) ? o.material : [o.material];
+                ms.forEach(m => {
+                    if (!m.map) return;
+                    if (!Game._roofTexClean) {
+                        const cleaned = Game._cleanRoofGrime(m.map);
+                        if (cleaned) Game._roofTexClean = cleaned;
+                    }
+                    if (Game._roofTexClean) { m.map = Game._roofTexClean; m.needsUpdate = true; }
+                });
+            });
+        });
+    }
+
     // Hide the procedural fallback now that the model row is in.
     rec.procMeshes.forEach(m => { m.visible = false; });
     Game.setBuildingDamage(rec, rec.level);
+};
+
+// The undamaged building texture has grime/AO baked onto the terracotta roof,
+// which reads as fake "damage" on whichever slope faces the camera. Clean it:
+// detect the reddish ROOF pixels (grey walls + dark windows are left alone) and
+// lift the dark grimy ones toward the roof's median tone. Returns a CanvasTexture.
+Game.BUILDING_ROOF_DECLEAN = 0.7;   // 0 = off (show baked grime), 1 = fully flatten
+Game._cleanRoofGrime = (tex) => {
+    const strength = Game.BUILDING_ROOF_DECLEAN;
+    if (!tex || !tex.image || !strength) return null;
+    const img = tex.image;
+    const w = img.width || img.videoWidth, h = img.height || img.videoHeight;
+    if (!w || !h) return null;
+    try {
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const cx = c.getContext('2d', { willReadFrequently: true });
+        cx.drawImage(img, 0, 0, w, h);
+        const id = cx.getImageData(0, 0, w, h), a = id.data;
+        const isRoof = (r, g, b) => (r > g + 12 && r > b + 22 && r > 70);
+        let sum = 0, n = 0;
+        for (let i = 0; i < a.length; i += 4) {
+            const r = a[i], g = a[i + 1], b = a[i + 2];
+            if (isRoof(r, g, b)) { sum += 0.299 * r + 0.587 * g + 0.114 * b; n++; }
+        }
+        if (!n) return null;
+        const target = sum / n;
+        for (let i = 0; i < a.length; i += 4) {
+            const r = a[i], g = a[i + 1], b = a[i + 2];
+            if (!isRoof(r, g, b)) continue;
+            const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            if (lum >= target) continue;
+            const k = 1 + ((target - lum) / Math.max(20, lum)) * strength;
+            a[i] = Math.min(255, r * k); a[i + 1] = Math.min(255, g * k); a[i + 2] = Math.min(255, b * k);
+        }
+        cx.putImageData(id, 0, 0);
+        const t = new Game.THREE.CanvasTexture(c);
+        t.wrapS = tex.wrapS; t.wrapT = tex.wrapT; t.flipY = tex.flipY;
+        if ('colorSpace' in tex) t.colorSpace = tex.colorSpace;
+        t.anisotropy = tex.anisotropy || 1; t.needsUpdate = true;
+        return t;
+    } catch (e) { console.warn('roof grime clean failed:', e); return null; }
 };
 
 // Show the right damage-state mesh for a level. With states missing, show the
@@ -532,10 +595,32 @@ Game.updateBuildingEntry = (dt) => {
 };
 
 // ── Debug-panel controls (merged into the post-processing debug section) ────
-Game.buildingDebugDefaults = { bldgDmgMult: 1, bldgSmokeScale: 1, bldgMaxHp: Game.BUILDING_MAX_HP };
+// Run fn(material) over every building model material (live tweaks/diagnostics).
+Game._eachBuildingMat = (fn) => {
+    (Game.buildingRecords || []).forEach(rec => (rec.houses || []).forEach(h => {
+        if (!h.root) return;
+        h.root.traverse(o => {
+            if (o.isMesh && o.material) {
+                const ms = Array.isArray(o.material) ? o.material : [o.material];
+                ms.forEach(fn);
+            }
+        });
+    }));
+};
+
+Game.buildingDebugDefaults = {
+    bldgDmgMult: 1, bldgSmokeScale: 1, bldgMaxHp: Game.BUILDING_MAX_HP,
+    bldgBright: 0, bldgNormal: 1, bldgRough: 0.55, bldgRecvShadow: 0, bldgForceState: -1,
+};
 Game._buildingControlDefs = () => [
     { group: 'Buildings', key: 'bldgDmgMult', label: 'Damage × (shots to wreck)', min: 0.2, max: 4, step: 0.1, apply: v => { Game._buildingDmgMult = v; } },
     { group: 'Buildings', key: 'bldgSmokeScale', label: 'Smoke ×', min: 0.3, max: 4, step: 0.1, apply: v => { Game._buildingSmokeScale = v; } },
+    // ── Roof/texture diagnostics (the baked grime on the model's texture) ──
+    { group: 'Buildings', key: 'bldgBright', label: 'Brightness (wash grime)', min: 0, max: 0.5, step: 0.02, apply: v => { Game._eachBuildingMat(m => { if (m.emissive) { m.emissive.setScalar(v); m.emissiveIntensity = 1; m.needsUpdate = true; } }); } },
+    { group: 'Buildings', key: 'bldgNormal', label: 'Normal Map Scale', min: 0, max: 2, step: 0.05, apply: v => { Game._eachBuildingMat(m => { if (m.normalScale) m.normalScale.set(v, v); }); } },
+    { group: 'Buildings', key: 'bldgRough', label: 'Roughness', min: 0, max: 1, step: 0.02, apply: v => { Game._eachBuildingMat(m => { if ('roughness' in m) m.roughness = v; }); } },
+    { group: 'Buildings', key: 'bldgRecvShadow', label: 'Receive Shadows (0/1)', min: 0, max: 1, step: 1, apply: v => { Game._eachBuildingMat(m => {}); (Game.buildingRecords || []).forEach(rec => (rec.houses || []).forEach(h => h.root && h.root.traverse(o => { if (o.isMesh) o.receiveShadow = v >= 1; }))); } },
+    { group: 'Buildings', key: 'bldgForceState', label: 'Force State (-1=auto,0-3)', min: -1, max: 3, step: 1, apply: v => { Game._forceBuildingState = v; if (v >= 0) (Game.buildingRecords || []).forEach(rec => { if (!rec.collapsed) Game.setBuildingDamage(rec, v); }); } },
     {
         group: 'Buildings', key: 'bldgMaxHp', label: 'Max HP', min: 100, max: 1200, step: 20,
         apply: v => {
