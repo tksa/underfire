@@ -1,8 +1,18 @@
 {
  "version": "v0.8.0-dev",
- "build": "dae1d1e",
- "generated": "2026-06-29",
+ "build": "3ae6cfb",
+ "generated": "2026-06-30",
  "commits": [
+  {
+   "hash": "3ae6cfb",
+   "date": "2026-06-30",
+   "subject": "garrison buildings, Char B1 bis model, bigger houses, cleaner roof, water depth"
+  },
+  {
+   "hash": "f7ac7bd",
+   "date": "2026-06-29",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "dae1d1e",
    "date": "2026-06-29",
@@ -62,16 +72,6 @@
    "hash": "fa4be06",
    "date": "2026-06-29",
    "subject": "refresh changelog for deploy"
-  },
-  {
-   "hash": "ff37f60",
-   "date": "2026-06-29",
-   "subject": "click the house to attack it"
-  },
-  {
-   "hash": "4786c7a",
-   "date": "2026-06-29",
-   "subject": "tanks can attack-ground a building (LOS to near edge)"
   }
  ]
 }
