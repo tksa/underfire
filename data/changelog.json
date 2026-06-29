@@ -1,8 +1,33 @@
 {
  "version": "v0.8.0-dev",
- "build": "7b7342f",
+ "build": "dae1d1e",
  "generated": "2026-06-29",
  "commits": [
+  {
+   "hash": "dae1d1e",
+   "date": "2026-06-29",
+   "subject": "visible garrison fire, shadow-acne roofs, green cursors, red attack reticle"
+  },
+  {
+   "hash": "d8ff285",
+   "date": "2026-06-29",
+   "subject": "units ordered into a building march straight in, ignore enemies"
+  },
+  {
+   "hash": "cd66594",
+   "date": "2026-06-29",
+   "subject": "door+chevron enter cursor"
+  },
+  {
+   "hash": "e8415b5",
+   "date": "2026-06-29",
+   "subject": "infantry occupy + fight from buildings"
+  },
+  {
+   "hash": "a099ce2",
+   "date": "2026-06-29",
+   "subject": "release v0.8.0-dev"
+  },
   {
    "hash": "7b7342f",
    "date": "2026-06-29",
@@ -47,31 +72,6 @@
    "hash": "4786c7a",
    "date": "2026-06-29",
    "subject": "tanks can attack-ground a building (LOS to near edge)"
-  },
-  {
-   "hash": "9f25c6d",
-   "date": "2026-06-29",
-   "subject": "4-state damage model + shoot-to-damage + hit effects"
-  },
-  {
-   "hash": "842045f",
-   "date": "2026-06-29",
-   "subject": "place at footprint + fixed size"
-  },
-  {
-   "hash": "f0d485f",
-   "date": "2026-06-29",
-   "subject": "house rows + rotation variety"
-  },
-  {
-   "hash": "300e1cb",
-   "date": "2026-06-29",
-   "subject": "enemy tank tracks no longer visible through fog of war"
-  },
-  {
-   "hash": "8416539",
-   "date": "2026-06-29",
-   "subject": "model-driven houses with damage states (Draco GLB)"
   }
  ]
 }
