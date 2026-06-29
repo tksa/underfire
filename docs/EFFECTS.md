@@ -123,12 +123,22 @@ Staged realism pass over weapon impacts. Implemented stages:
 - **Damaged-but-alive** tanks (`engineDamaged`) trail thin smoke too (doc §21).
 - Degradable: no wreck roll → mesh just stays as the charred remnant.
 
-**Debug — Effects group** (backtick panel): Dust Opacity, Dust Lifetime x,
-Impact Dust x, Camera Shake x, Wreck Smoke x (live globals
-`Game.fxDustOpacity/fxDustLife/fxImpactDust/fxShake/fxWreckSmoke`).
+**Stage 4 — terrain/weather dust modifiers + dust LOS block (`js/main.js` `_dustModAt`)**
+- `Game._dustModAt(x,z)` returns amount/life/rise/radius multipliers by surface
+  (doc §8): **wet** (mud/swamp/water) halves dust + lowers it; **road/masonry**
+  throws less volume; **sand** a wide pale sheet; **forest** organic; **snow**
+  lingers. **Rain** weather knocks dust down further (doc §13). Applied to both
+  the HE column and the AP lance (count, lifetime, radius, rise).
+- **Dust blocks sight** (doc §18.1): large HE/bomb impacts (scale ≥ 1) push a
+  short-lived LOS cloud (reuses the LOS-only `smokeClouds`; visible dust is the
+  particles), duration scaled by caliber and clamped 1.5–18s. Off at `fxDustLOS = 0`.
 
-Remaining staged work (planned): terrain/weather dust modifiers + dust LOS block;
-ground fire (grass/wood/fuel grow + spread) + building collapse delay.
+**Debug — Effects group** (backtick panel): Dust Opacity, Dust Lifetime x,
+Impact Dust x, Camera Shake x, Wreck Smoke x, Dust Blocks Sight x (live globals
+`Game.fxDustOpacity/fxDustLife/fxImpactDust/fxShake/fxWreckSmoke/fxDustLOS`).
+
+Remaining staged work (planned): ground fire (grass/wood/fuel grow + spread) +
+building collapse delay.
 
 ---
 

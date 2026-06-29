@@ -376,6 +376,26 @@ Game.updateAirStrikes = (dt) => {
 Game.indirectShells = [];
 
 /** Bright additive blast flash at an explosion point (textured billboard). */
+// FX §8/§13: how much dust a surface throws and how long it lingers. Colour is
+// handled separately (updateSmoke3D / _dustColorAt); this scales count, life,
+// rise and radius. Wet ground halves dust; masonry/road throws less volume;
+// sand throws a wide pale sheet; rain knocks dust down.
+Game._dustModAt = (x, z) => {
+    const t = Game.getTileAtWorld ? Game.getTileAtWorld(x, z) : null;
+    let m = { amount: 1, life: 1, rise: 1, radius: 1 };
+    if (t) switch (t.type) {
+        case 'mud': case 'swamp': case 'water': m = { amount: 0.5, life: 0.6, rise: 0.7, radius: 0.9 }; break;
+        case 'sand': m = { amount: 1.1, life: 1.2, rise: 0.9, radius: 1.2 }; break;
+        case 'road': case 'yard': case 'wall': case 'house': m = { amount: 0.7, life: 1.0, rise: 1.1, radius: 0.9 }; break;
+        case 'forest': case 'dense_forest': m = { amount: 1.1, life: 0.9, rise: 0.9, radius: 1.0 }; break;
+        case 'snow': m = { amount: 1.0, life: 1.1, rise: 1.0, radius: 1.1 }; break;
+        default: break;
+    }
+    if (Game.weatherEffect === 'rain') { m.amount *= 0.6; m.life *= 0.6; }
+    else if (Game.weatherEffect === 'snow') { m.life *= 1.1; }
+    return m;
+};
+
 Game.addBlastFlash = (x, z, scale = 1) => {
     Game.muzzleFlashes = Game.muzzleFlashes || [];
     Game.muzzleFlashes.push({ x, z, r: 0.9 * scale, life: 0.2, total: 0.2, big: true, mesh: null });
@@ -391,20 +411,29 @@ Game.addBlastFlash = (x, z, scale = 1) => {
     // it was kicked up from (updateSmoke3D). Skip the tiny muzzle/MG flashes.
     if (scale >= 0.6 && Game.smoke) {
         const dustMul = (Game.fxImpactDust != null) ? Game.fxImpactDust : 1;
-        const n = Math.round((3 + scale * 3) * dustMul);
+        const mod = Game._dustModAt ? Game._dustModAt(x, z) : { amount: 1, life: 1, rise: 1, radius: 1 };
+        const n = Math.max(1, Math.round((3 + scale * 3) * dustMul * mod.amount));
         for (let i = 0; i < n; i++) {
             const rr = scale * (0.4 + Math.random() * 0.7);
-            const life = 1.6 + scale * 1.6;
+            const life = (1.6 + scale * 1.6) * mod.life;
             Game.smoke.push({
                 x: x + Game.rand(-rr, rr), z: z + Game.rand(-rr, rr),
-                r: (0.6 + Math.random() * 0.8) * scale,
+                r: (0.6 + Math.random() * 0.8) * scale * mod.radius,
                 life, total: life,
                 vx: Game.rand(-0.3, 0.3) * scale, vz: Game.rand(-0.3, 0.3) * scale,
-                rise: 1.3 + scale * 1.4, maxOpacity: 0.7, mesh: null,
+                rise: (1.3 + scale * 1.4) * mod.rise, maxOpacity: 0.7, mesh: null,
             });
         }
         // wide, brief low shock ring hugging the ground
-        Game.smoke.push({ x, z, r: 1.3 * scale, life: 0.55, total: 0.55, rise: 0.25, maxOpacity: 0.5, mesh: null });
+        Game.smoke.push({ x, z, r: 1.3 * scale * mod.radius, life: 0.55, total: 0.55, rise: 0.25, maxOpacity: 0.5, mesh: null });
+
+        // FX §18.1: large HE / bomb dust briefly obscures line of sight (reuses
+        // the LOS-only smokeClouds; the visible dust is the puffs above). Scales
+        // with caliber; off when fxDustLOS = 0.
+        const losMul = (Game.fxDustLOS != null) ? Game.fxDustLOS : 1;
+        if (scale >= 1.0 && losMul > 0 && Game.smokeClouds) {
+            Game.smokeClouds.push({ x, z, radius: scale * 1.6, life: Game.clamp(scale * 2.5, 1.5, 18) * losMul * mod.life });
+        }
     }
 
     // FX §17: camera shake scaled by blast size AND distance to the view centre,
@@ -423,18 +452,19 @@ Game.addBlastFlash = (x, z, scale = 1) => {
 // a narrow gouge scar — NOT a round HE crater, and the dust thins fast.
 Game._apGroundImpact = (x, z, angle, scale = 1) => {
     const dustMul = (Game.fxImpactDust != null) ? Game.fxImpactDust : 1;
+    const mod = Game._dustModAt ? Game._dustModAt(x, z) : { amount: 1, life: 1, rise: 1, radius: 1 };
     const cos = Math.cos(angle), sin = Math.sin(angle);
-    const n = Math.round((2 + scale * 2) * dustMul);
+    const n = Math.max(1, Math.round((2 + scale * 2) * dustMul * mod.amount));
     for (let i = 0; i < n; i++) {
         const fwd = (0.2 + Math.random() * 1.2) * scale;   // strung out forward
-        const life = 0.5 + scale * 0.7;
+        const life = (0.5 + scale * 0.7) * mod.life;
         Game.smoke.push({
             x: x + cos * fwd + Game.rand(-0.2, 0.2) * scale,
             z: z + sin * fwd + Game.rand(-0.2, 0.2) * scale,
-            r: (0.3 + Math.random() * 0.4) * scale,
+            r: (0.3 + Math.random() * 0.4) * scale * mod.radius,
             life, total: life,
             vx: cos * (1.5 + Math.random()) * scale, vz: sin * (1.5 + Math.random()) * scale,
-            rise: 0.7 + Math.random() * 0.7, maxOpacity: 0.5, mesh: null,
+            rise: (0.7 + Math.random() * 0.7) * mod.rise, maxOpacity: 0.5, mesh: null,
         });
     }
     // bright kinetic spark at the strike point
