@@ -1,8 +1,43 @@
 {
- "version": "v0.7.0-dev",
- "build": "ff37f60",
+ "version": "v0.8.0-dev",
+ "build": "7b7342f",
  "generated": "2026-06-29",
  "commits": [
+  {
+   "hash": "7b7342f",
+   "date": "2026-06-29",
+   "subject": "ground fire + building collapse delay"
+  },
+  {
+   "hash": "bbc07c9",
+   "date": "2026-06-29",
+   "subject": "terrain/weather dust modifiers + dust LOS block"
+  },
+  {
+   "hash": "1e0762d",
+   "date": "2026-06-29",
+   "subject": "vehicle destruction states + persistent wreck smoke"
+  },
+  {
+   "hash": "1cf16fe",
+   "date": "2026-06-29",
+   "subject": "realistic impact pass stages 1-2 (dust curve, terrain tint, HE/AP impacts)"
+  },
+  {
+   "hash": "75f63f2",
+   "date": "2026-06-29",
+   "subject": "add EFFECTS.md"
+  },
+  {
+   "hash": "82d8da5",
+   "date": "2026-06-29",
+   "subject": "tougher buildings + bigger smoke + debug knobs"
+  },
+  {
+   "hash": "fa4be06",
+   "date": "2026-06-29",
+   "subject": "refresh changelog for deploy"
+  },
   {
    "hash": "ff37f60",
    "date": "2026-06-29",
@@ -37,41 +72,6 @@
    "hash": "8416539",
    "date": "2026-06-29",
    "subject": "model-driven houses with damage states (Draco GLB)"
-  },
-  {
-   "hash": "aa0bdcb",
-   "date": "2026-06-28",
-   "subject": "revert: drop texture_grid_brown ground detail (not wanted)"
-  },
-  {
-   "hash": "c28f903",
-   "date": "2026-06-28",
-   "subject": "add texture_grid_brown ground-detail asset"
-  },
-  {
-   "hash": "1d8235c",
-   "date": "2026-06-28",
-   "subject": "no ring on any unselected friendly"
-  },
-  {
-   "hash": "9372f74",
-   "date": "2026-06-28",
-   "subject": "graphics: use texture_grid_brown ground detail"
-  },
-  {
-   "hash": "648eb70",
-   "date": "2026-06-28",
-   "subject": "tanks knock down small trees + bushes (pivot/fall about base)"
-  },
-  {
-   "hash": "1e21ef9",
-   "date": "2026-06-28",
-   "subject": "graphics: hedges get own soft-blend (Hedge Blend)"
-  },
-  {
-   "hash": "399df76",
-   "date": "2026-06-28",
-   "subject": "graphics: crisp leaves for hedge bushes"
   }
  ]
 }
