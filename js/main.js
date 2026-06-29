@@ -528,9 +528,14 @@ Game.fireAtGround = (unit, tx, tz, weapon) => {
 
     if (isTank && weapon.heBlast) {
         Game.craters.push({ x: ix, z: iz, r: Game.rand(0.4, 0.8) });
-        if (Game.addBlastFlash) Game.addBlastFlash(ix, iz, 1.0);
+        if (Game.addBlastFlash) Game.addBlastFlash(ix, iz, 1.0);   // HE impact also damages buildings
+    } else if (Game.damageBuildingAt) {
+        // Direct (non-HE) rounds still chip a building they strike.
+        Game.damageBuildingAt(ix, iz, (weapon.damage || 12) * 0.6, isTank ? 1.4 : 0.9);
     }
-    if (Game.addBlastFlash) Game.addBlastFlash(mx, mz, isTank ? 1.2 : 0.4);
+    // Muzzle flash is purely visual — keep it below the blast thresholds so a
+    // unit firing next to a building doesn't damage it from its own muzzle.
+    if (Game.addBlastFlash) Game.addBlastFlash(mx, mz, isTank ? 0.45 : 0.3);
     Game.cameraShake = Math.max(Game.cameraShake || 0, 0.3);
 };
 

@@ -142,7 +142,24 @@ Game.setBuildingDamage = (rec, level) => {
         h.states.forEach((m, i) => { if (m) m.visible = (i === shown); });
     });
     const noHeavyState = (rec.houses || []).every(h => !h.states[3]);
-    if (level >= 3 && noHeavyState) Game._collapseBuilding(rec);
+    if (level >= 3 && noHeavyState) {
+        Game._collapseBuilding(rec);
+    } else if (level >= 3 && !rec._destroyedFx) {
+        // Heavy-damage state mesh exists — show it, plus a one-time smoke/dust burst.
+        rec._destroyedFx = true;
+        for (let i = 0; i < 6; i++) {
+            Game.smoke.push({
+                x: rec.cx + Game.rand(-rec.w * 0.4, rec.w * 0.4),
+                z: rec.cz + Game.rand(-rec.d * 0.4, rec.d * 0.4),
+                r: 1.8, life: 3.0, total: 3.0,
+                vx: Game.rand(-0.3, 0.3), vz: Game.rand(-0.4, -0.1), mesh: null,
+            });
+        }
+        if (Game.addScorch) Game.addScorch(rec.cx, rec.cz, Math.max(rec.w, rec.d) * 0.4);
+        Game.cameraShake = Math.max(Game.cameraShake || 0, 7);
+        if (Game.Audio) Game.Audio.explosion(rec.cx, rec.cz);
+        Game.pushMessage('Building wrecked!', 1.6);
+    }
 };
 
 // Destroyed building with no dedicated rubble state: hide it, drop a low rubble
@@ -238,6 +255,7 @@ Game.damageBuildingAt = (x, z, amount, radius = 1.5) => {
         if (dSq > r2) continue;
         const falloff = 1 - Math.sqrt(dSq) / (radius + 0.001);
         rec.hp -= amount * Math.max(0.35, falloff);
+        Game._buildingHitFx(rec, x, z);
         // Map HP → level (4 bands: 100-75-50-25-0%).
         const pct = rec.hp / rec.maxHp;
         const level = pct > 0.75 ? 0 : pct > 0.5 ? 1 : pct > 0.25 ? 2 : 3;
@@ -245,6 +263,25 @@ Game.damageBuildingAt = (x, z, amount, radius = 1.5) => {
         hit = true;
     }
     return hit;
+};
+
+// Dust + smoke + a little broken masonry when a standing building is struck
+// (throttled so rapid fire doesn't spam). This is the "being hit" feedback; the
+// damage-state mesh swap is handled separately in setBuildingDamage.
+Game._buildingHitFx = (rec, x, z) => {
+    const now = Game.gameClock || 0;
+    if (rec._fxT && now - rec._fxT < 0.12) return;
+    rec._fxT = now;
+    for (let i = 0; i < 2; i++) {
+        Game.smoke.push({
+            x: x + Game.rand(-0.7, 0.7), z: z + Game.rand(-0.7, 0.7),
+            r: 0.9, life: 1.2, total: 1.2,
+            vx: Game.rand(-0.3, 0.3), vz: Game.rand(-0.5, -0.1), mesh: null,
+        });
+    }
+    if (Game.craters) Game.craters.push({ x, z, r: Game.rand(0.15, 0.35) });
+    if (Game.addScorch && Math.random() < 0.4) Game.addScorch(x, z, 0.7);
+    Game.cameraShake = Math.max(Game.cameraShake || 0, 1.5);
 };
 
 // Debug / testing: force a damage level on every building.

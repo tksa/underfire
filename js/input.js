@@ -584,8 +584,16 @@ Game.handleInputEvents = () => {
                         const enemyUnit = (picked && picked.team !== Game.TEAM.FRENCH)
                             ? picked
                             : Game.enemyAtWorld(ground.x, ground.z);
+                        const onBuilding = Game.buildingAt && Game.buildingAt(ground.x, ground.z);
+                        const haveArmed = Game.selectedPlayerUnits().some(u => {
+                            const w = Game.WEAPONS[u.weaponKey];
+                            return w && w.fireType !== 'none' && (w.gameRange || 0) > 0;
+                        });
                         if (enemyUnit) {
                             Game.orderAttackTarget(enemyUnit);
+                        } else if (onBuilding && haveArmed) {
+                            // Right-click a building with armed units -> shell it.
+                            Game.orderAttackGround(ground.x, ground.z);
                         } else if (Game.orderStance === 'attack') {
                             Game.orderAttackMove(ground.x, ground.z);
                         } else {
