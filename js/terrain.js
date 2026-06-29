@@ -1590,7 +1590,10 @@ Game.buildTerrainMeshes = () => {
     //    plaster/stone house once it loads; the procedural wall+roof+chimney
     //    below is built first as the immediate (and fallback) visual. ──
     Game.buildingRecords = [];
-    Game.buildings.forEach(b => {
+    // The church footprint is treated as a building too — the only building model
+    // right now is the shop house, so the church becomes house(s) like the rest.
+    const allBuildings = Game.church ? Game.buildings.concat([Game.church]) : Game.buildings;
+    allBuildings.forEach(b => {
         const w = b.tw * T;
         const d = b.th * T;
         const cx = b.tx * T + w / 2;
@@ -1643,51 +1646,8 @@ Game.buildTerrainMeshes = () => {
     // Swap procedural houses for the GLB model (async; keeps procedural on fail).
     if (Game._loadBuildingModels) Game._loadBuildingModels();
 
-    // ── Church: stone nave + bell tower + steep slate spire ──
-    if (Game.church) {
-        const ch = Game.church;
-        const w = ch.tw * T, d = ch.th * T;
-        const cx = ch.tx * T + w / 2;
-        const cz = ch.ty * T + d / 2;
-        const baseY = Game.getHeight(cx, cz);
-        const stoneMat = new THREE.MeshStandardMaterial({
-            color: 0xc4baa4, roughness: 0.94,
-            map: tiled(wallColorBase, w / 3, 2),
-            normalMap: tiled(wallNormalBase, w / 3, 2),
-            normalScale: new THREE.Vector2(0.6, 0.6),
-        });
-
-        // Nave
-        const naveH = 3.4;
-        const nave = new THREE.Mesh(new THREE.BoxGeometry(w - 0.3, naveH, d - 0.3), stoneMat);
-        nave.position.set(cx, baseY + naveH / 2 - 0.15, cz);
-        nave.castShadow = true; nave.receiveShadow = true;
-        Game.terrainGroup.add(nave);
-
-        // Nave roof
-        const naveRoof = new THREE.Mesh(Game._makeGableGeo(w + 0.3, 1.5, d + 0.4), roofMatFor());
-        naveRoof.position.set(cx, baseY + naveH - 0.15, cz);
-        naveRoof.castShadow = true;
-        Game.terrainGroup.add(naveRoof);
-
-        // Bell tower at the north (front) end
-        const towerH = 6.5, tw = Math.min(w, d) * 0.7;
-        const tower = new THREE.Mesh(new THREE.BoxGeometry(tw, towerH, tw), stoneMat);
-        const towerZ = cz - d / 2 + tw / 2;
-        tower.position.set(cx, baseY + towerH / 2 - 0.15, towerZ);
-        tower.castShadow = true; tower.receiveShadow = true;
-        Game.terrainGroup.add(tower);
-
-        // Steep pyramidal spire (4-sided)
-        const spire = new THREE.Mesh(
-            new THREE.ConeGeometry(tw * 0.78, 4.2, 4),
-            new THREE.MeshStandardMaterial({ color: 0x3a3f48, roughness: 0.7, metalness: 0.1 })
-        );
-        spire.rotation.y = Math.PI / 4;
-        spire.position.set(cx, baseY + towerH + 2.0, towerZ);
-        spire.castShadow = true;
-        Game.terrainGroup.add(spire);
-    }
+    // Church is no longer built procedurally — its footprint is placed as
+    // house(s) by the building loop above (shop house is the only model for now).
 
     // ── Windmill: tapered stone tower + cap + sails ──
     if (Game.windmill) {

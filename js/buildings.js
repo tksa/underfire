@@ -32,8 +32,7 @@ Game.registerBuilding = (b, bGroup, dims, procMeshes) => {
         b, group: bGroup,
         w: dims.w, d: dims.d, cx: dims.cx, cz: dims.cz, baseY: dims.baseY,
         hp: Game.BUILDING_MAX_HP, maxHp: Game.BUILDING_MAX_HP, level: 0,
-        procMeshes: procMeshes || [], states: [null, null, null, null],
-        modelRoot: null, collapsed: false,
+        procMeshes: procMeshes || [], houses: [], collapsed: false,
     };
     b._rec = rec;
     Game.buildingRecords.push(rec);
@@ -54,51 +53,70 @@ Game._loadBuildingModels = () => {
     });
 };
 
-// Instance the model into a building: fit to footprint, align long axis, ground
-// it, collect damage-state meshes, hide the procedural fallback, show undamaged.
+// Instance the model into a building. Elongated footprints get a ROW of houses
+// (a little street) instead of one stretched house; each house gets rotation
+// variety (front/back flips + slight yaw + size jitter) so you see different
+// faces. Every house in the row collects its own damage-state meshes and they
+// damage/collapse together (one HP pool per footprint).
 Game._populateBuildingModel = (rec, srcModel) => {
     const THREE = Game.THREE;
-    const model = Game._cloneModel ? Game._cloneModel(srcModel) : srcModel.clone();
-
-    // Measure native footprint to fit it to the building's tile footprint.
-    model.scale.set(1, 1, 1);
-    model.rotation.set(0, 0, 0);
-    model.position.set(0, 0, 0);
-    model.updateMatrixWorld(true);
-    let box = new THREE.Box3().setFromObject(model);
-    const mw = Math.max(1e-3, box.max.x - box.min.x);
-    const md = Math.max(1e-3, box.max.z - box.min.z);
-
-    // Align the model's longer horizontal axis with the building's longer side.
-    const rotY = ((rec.w >= rec.d) !== (mw >= md)) ? Math.PI / 2 : 0;
-    const fitW = rotY ? md : mw;
-    const fitD = rotY ? mw : md;
-    const s = Math.min((rec.w * 0.94) / fitW, (rec.d * 0.94) / fitD);
-    model.scale.setScalar(s);
-    model.rotation.y = rotY;
-
-    // Recentre horizontally + ground-snap (group already sits at baseY).
-    model.updateMatrixWorld(true);
-    box = new THREE.Box3().setFromObject(model);
-    model.position.x -= (box.min.x + box.max.x) / 2;
-    model.position.z -= (box.min.z + box.max.z) / 2;
-    model.position.y -= box.min.y;
-
-    model.traverse(o => {
-        if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
-        o.raycast = () => { };   // don't intercept unit/ground picking
-    });
-    rec.group.add(model);
-    rec.modelRoot = model;
-
-    // Collect damage-state meshes by name prefix (missing states stay null).
-    rec.states = Game.BUILDING_STATES.map(prefix => {
+    const collectStates = (model) => Game.BUILDING_STATES.map(prefix => {
         let found = null;
         model.traverse(o => { if (!found && o.name && o.name.indexOf(prefix) === 0) found = o; });
         return found;
     });
 
-    // Hide the procedural fallback now that the model is in.
+    // Measure the model's native footprint (frontage X, depth Z) once.
+    const first = Game._cloneModel ? Game._cloneModel(srcModel) : srcModel.clone();
+    first.scale.set(1, 1, 1); first.rotation.set(0, 0, 0); first.position.set(0, 0, 0);
+    first.updateMatrixWorld(true);
+    const nb = new THREE.Box3().setFromObject(first);
+    const mw = Math.max(1e-3, nb.max.x - nb.min.x);
+    const md = Math.max(1e-3, nb.max.z - nb.min.z);
+
+    const longAxisIsX = rec.w >= rec.d;
+    const longLen = Math.max(rec.w, rec.d);
+    const shortLen = Math.min(rec.w, rec.d);
+    // Houses in a row ~ how many ~square cells fit along the long side.
+    const count = Math.max(1, Math.round(longLen / Math.max(shortLen, 1e-3)));
+    const cell = longLen / count;
+
+    rec.houses = [];
+    for (let k = 0; k < count; k++) {
+        const model = (k === 0) ? first : (Game._cloneModel ? Game._cloneModel(srcModel) : srcModel.clone());
+        model.scale.set(1, 1, 1); model.rotation.set(0, 0, 0); model.position.set(0, 0, 0);
+
+        // Frontage (model X) runs along the row; flip 180° at random for variety,
+        // plus a little yaw jitter so the row isn't mechanical.
+        let rotY = longAxisIsX ? 0 : Math.PI / 2;
+        if (Math.random() < 0.5) rotY += Math.PI;
+        rotY += Game.rand(-0.09, 0.09);
+        model.rotation.y = rotY;
+
+        // Fit each house into its cell (frontage along the row, depth across).
+        const s = Math.min((cell * 0.88) / mw, (shortLen * 0.86) / md) * Game.rand(0.9, 1.05);
+        model.scale.setScalar(s);
+
+        // Recentre + ground-snap, then slot into the cell along the long axis.
+        model.updateMatrixWorld(true);
+        const bb = new THREE.Box3().setFromObject(model);
+        model.position.x -= (bb.min.x + bb.max.x) / 2;
+        model.position.z -= (bb.min.z + bb.max.z) / 2;
+        model.position.y -= bb.min.y;
+        const off = (k - (count - 1) / 2) * cell;
+        const jit = Game.rand(-0.18, 0.18);
+        if (longAxisIsX) { model.position.x += off; model.position.z += jit; }
+        else { model.position.z += off; model.position.x += jit; }
+
+        model.traverse(o => {
+            if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+            o.raycast = () => { };   // don't intercept unit/ground picking
+        });
+        rec.group.add(model);
+        rec.houses.push({ root: model, states: collectStates(model) });
+    }
+
+    // Hide the procedural fallback now that the model row is in.
     rec.procMeshes.forEach(m => { m.visible = false; });
     Game.setBuildingDamage(rec, rec.level);
 };
@@ -109,10 +127,13 @@ Game._populateBuildingModel = (rec, srcModel) => {
 Game.setBuildingDamage = (rec, level) => {
     level = Game.clamp ? Game.clamp(Math.round(level), 0, 3) : Math.max(0, Math.min(3, Math.round(level)));
     rec.level = level;
-    let shown = -1;
-    for (let i = 0; i <= level; i++) if (rec.states[i]) shown = i;
-    rec.states.forEach((m, i) => { if (m) m.visible = (i === shown); });
-    if (level >= 3 && !rec.states[3]) Game._collapseBuilding(rec);
+    (rec.houses || []).forEach(h => {
+        let shown = -1;
+        for (let i = 0; i <= level; i++) if (h.states[i]) shown = i;
+        h.states.forEach((m, i) => { if (m) m.visible = (i === shown); });
+    });
+    const noHeavyState = (rec.houses || []).every(h => !h.states[3]);
+    if (level >= 3 && noHeavyState) Game._collapseBuilding(rec);
 };
 
 // Destroyed building with no dedicated rubble state: hide it, drop a low rubble
@@ -121,7 +142,7 @@ Game._collapseBuilding = (rec) => {
     if (rec.collapsed) return;
     rec.collapsed = true;
     const THREE = Game.THREE;
-    if (rec.modelRoot) rec.modelRoot.visible = false;
+    (rec.houses || []).forEach(h => { if (h.root) h.root.visible = false; });
     rec.procMeshes.forEach(m => { m.visible = false; });
 
     // Low rubble blocks of broken masonry within the footprint.
