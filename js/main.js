@@ -439,8 +439,12 @@ Game.updateBombard = (unit, dt, weapon) => {
  */
 Game.updateGroundFire = (unit, dt, weapon) => {
     const tx = unit.bombardX, tz = unit.bombardZ;
-    const d = Game.dist(unit.x, unit.z, tx, tz);
-    const losClear = Game.lineOfSight(unit, { x: tx, z: tz }) !== false;
+    // If the spot is a building, the building's own walls block LOS to its centre,
+    // so validate LOS + range to its near edge — otherwise units never fire on it.
+    const bRec = Game.buildingAt ? Game.buildingAt(tx, tz) : null;
+    const losTgt = (bRec && Game.buildingNearPoint) ? Game.buildingNearPoint(bRec, unit.x, unit.z) : { x: tx, z: tz };
+    const d = Game.dist(unit.x, unit.z, losTgt.x, losTgt.z);
+    const losClear = Game.lineOfSight(unit, losTgt) !== false;
     const canHit = d <= unit.range && losClear;
 
     if (!canHit) {

@@ -234,6 +234,15 @@ Game._footprintDistSq = (rec, x, z) => {
     return dx * dx + dz * dz;
 };
 
+// Nearest point on a building's footprint to (x,z) — its facing edge, used so
+// units validate line-of-sight to the wall they're shelling, not the blocked
+// centre.
+Game.buildingNearPoint = (rec, x, z) => {
+    const T = Game.TILE, b = rec.b;
+    const x0 = b.tx * T, x1 = (b.tx + b.tw) * T, z0 = b.ty * T, z1 = (b.ty + b.th) * T;
+    return { x: Math.max(x0, Math.min(x, x1)), z: Math.max(z0, Math.min(z, z1)) };
+};
+
 // Building whose footprint contains (x,z), or null.
 Game.buildingAt = (x, z) => {
     for (const rec of Game.buildingRecords) {
