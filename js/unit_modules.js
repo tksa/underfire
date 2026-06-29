@@ -674,6 +674,22 @@ Game.updateUnit = (unit, dt) => {
         return;
     }
 
+    // Ordered into a building: follow the order — march to it and do NOT peel off
+    // to engage enemies on the way (no acquisition, no firing). They fight once
+    // inside. updateBuildingEntry garrisons them on arrival.
+    if (unit._enterRec) {
+        unit.fireTargetId = null; unit._engageId = null; unit.forcedTargetId = null;
+        if ((!unit.path || !unit.path.length) && Game._footprintDistSq
+            && Game._footprintDistSq(unit._enterRec, unit.x, unit.z) > 6.25) {
+            const rec = unit._enterRec;
+            const np = Game.buildingNearPoint ? Game.buildingNearPoint(rec, unit.x, unit.z) : { x: rec.cx, z: rec.cz };
+            unit.path = Game.findPath(unit, unit.x, unit.z, np.x, np.z);
+            unit.moving = true;
+        }
+        M.move(unit, ctx);
+        return;
+    }
+
     M.supply(unit, ctx);
     M.deploy(unit, ctx);
     M.scan(unit, ctx);
