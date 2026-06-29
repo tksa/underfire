@@ -42,6 +42,7 @@ Game.registerBuilding = (b, bGroup, dims, procMeshes) => {
         capacity: cap, occupants: [],   // garrison: unit ids currently inside
     };
     b._rec = rec;
+    if (bGroup) bGroup.userData.buildingRec = rec;   // for click-to-target
     Game.buildingRecords.push(rec);
     return rec;
 };
@@ -119,8 +120,10 @@ Game._populateBuildingModel = (rec, srcModel) => {
 
         model.traverse(o => {
             if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
-            o.raycast = () => { };   // don't intercept unit/ground picking
         });
+        // (screenToGround only raycasts terrain, and units live in a separate
+        // group, so leaving these pickable lets click-to-target the house work
+        // without interfering with move/unit picking.)
         rec.group.add(model);
         rec.houses.push({ root: model, states: collectStates(model) });
     }
@@ -221,6 +224,13 @@ Game._collapseBuilding = (rec) => {
         }
     });
     rec.occupants = [];
+
+    // Stop anyone still shelling this spot — the building is gone.
+    (Game.units || []).forEach(u => {
+        if (u.bombardX != null && Game._footprintDistSq(rec, u.bombardX, u.bombardZ) <= 0.0001) {
+            u.bombardX = null; u.bombardZ = null; u._bombarding = false;
+        }
+    });
     Game.pushMessage('Building collapsed!', 1.8);
 };
 
@@ -247,6 +257,22 @@ Game.buildingNearPoint = (rec, x, z) => {
 Game.buildingAt = (x, z) => {
     for (const rec of Game.buildingRecords) {
         if (!rec.collapsed && Game._footprintDistSq(rec, x, z) <= 0.0001) return rec;
+    }
+    return null;
+};
+
+// Standing building whose 3D mesh is under the cursor — so clicking the tall
+// house targets it (the ground point lands on terrain behind it via parallax).
+Game.buildingAtScreen = (screenX, screenY) => {
+    if (!Game.raycaster || !Game.camera || !Game.buildingRecords.length) return null;
+    const THREE = Game.THREE;
+    const ndc = new THREE.Vector2((screenX / Game.viewW) * 2 - 1, -(screenY / Game.viewH) * 2 + 1);
+    Game.raycaster.setFromCamera(ndc, Game.camera);
+    const groups = Game.buildingRecords.filter(r => !r.collapsed).map(r => r.group);
+    const hits = Game.raycaster.intersectObjects(groups, true);
+    for (const h of hits) {
+        let o = h.object;
+        while (o) { if (o.userData && o.userData.buildingRec) return o.userData.buildingRec; o = o.parent; }
     }
     return null;
 };
