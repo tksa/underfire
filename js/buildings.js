@@ -23,16 +23,23 @@ Game.BUILDING_MODEL = 'models/fr_shop_house_1_states.glb';
 // House_3_heavy) and the "_undam" tag all resolve.
 Game.BUILDING_STATES = ['House_0', 'House_1', 'House_2', 'House_3'];
 Game.BUILDING_MAX_HP = 220;
+// Houses are placed at ONE fixed scale (no per-footprint resizing/stretching).
+// The GLB is exported ~1 world-unit wide, so this is the in-world house size.
+Game.BUILDING_SCALE = 5.5;
 Game.buildingRecords = [];
 
 // Register one building (called from the terrain build loop). procMeshes are the
 // procedural fallback meshes already added to bGroup.
 Game.registerBuilding = (b, bGroup, dims, procMeshes) => {
+    // Garrison capacity scales with footprint: bigger building holds more troops.
+    const area = (b.tw || 1) * (b.th || 1);
+    const cap = Game.clamp ? Game.clamp(Math.round(area * 1.5), 2, 12) : Math.max(2, Math.min(12, Math.round(area * 1.5)));
     const rec = {
         b, group: bGroup,
         w: dims.w, d: dims.d, cx: dims.cx, cz: dims.cz, baseY: dims.baseY,
         hp: Game.BUILDING_MAX_HP, maxHp: Game.BUILDING_MAX_HP, level: 0,
         procMeshes: procMeshes || [], houses: [], collapsed: false,
+        capacity: cap, occupants: [],   // garrison: unit ids currently inside
     };
     b._rec = rec;
     Game.buildingRecords.push(rec);
@@ -76,9 +83,11 @@ Game._populateBuildingModel = (rec, srcModel) => {
 
     const longAxisIsX = rec.w >= rec.d;
     const longLen = Math.max(rec.w, rec.d);
-    const shortLen = Math.min(rec.w, rec.d);
-    // Houses in a row ~ how many ~square cells fit along the long side.
-    const count = Math.max(1, Math.round(longLen / Math.max(shortLen, 1e-3)));
+    // Fixed house size (NO per-footprint resizing). Tile as many fixed-size
+    // houses as the footprint's long side fits — a row/street for big footprints.
+    const S = Game.BUILDING_SCALE;
+    const houseW = Math.max(0.5, S * mw);           // frontage in world units
+    const count = Math.max(1, Math.round(longLen / houseW));
     const cell = longLen / count;
 
     rec.houses = [];
@@ -87,22 +96,22 @@ Game._populateBuildingModel = (rec, srcModel) => {
         model.scale.set(1, 1, 1); model.rotation.set(0, 0, 0); model.position.set(0, 0, 0);
 
         // Frontage (model X) runs along the row; flip 180° at random for variety,
-        // plus a little yaw jitter so the row isn't mechanical.
+        // plus a little yaw jitter so the row isn't mechanical (rotation only).
         let rotY = longAxisIsX ? 0 : Math.PI / 2;
         if (Math.random() < 0.5) rotY += Math.PI;
-        rotY += Game.rand(-0.09, 0.09);
+        rotY += Game.rand(-0.08, 0.08);
         model.rotation.y = rotY;
 
-        // Fit each house into its cell (frontage along the row, depth across).
-        const s = Math.min((cell * 0.88) / mw, (shortLen * 0.86) / md) * Game.rand(0.9, 1.05);
-        model.scale.setScalar(s);
+        model.scale.setScalar(S);                   // one fixed size for every house
 
-        // Recentre + ground-snap, then slot into the cell along the long axis.
+        // Recentre + ground-snap, then place at the building's WORLD centre and
+        // slot into the cell along the long axis. (bGroup sits at the origin, so
+        // model-local == world — we add the footprint centre + ground height.)
         model.updateMatrixWorld(true);
         const bb = new THREE.Box3().setFromObject(model);
-        model.position.x -= (bb.min.x + bb.max.x) / 2;
-        model.position.z -= (bb.min.z + bb.max.z) / 2;
-        model.position.y -= bb.min.y;
+        model.position.x += rec.cx - (bb.min.x + bb.max.x) / 2;
+        model.position.z += rec.cz - (bb.min.z + bb.max.z) / 2;
+        model.position.y += rec.baseY - bb.min.y;
         const off = (k - (count - 1) / 2) * cell;
         const jit = Game.rand(-0.18, 0.18);
         if (longAxisIsX) { model.position.x += off; model.position.z += jit; }
@@ -179,6 +188,22 @@ Game._collapseBuilding = (rec) => {
             if (t) { t.sightBlock = false; t.cover = Math.min(t.cover ?? 0.4, 0.4); }
         }
     }
+
+    // Anyone garrisoned inside is buried — eject survivors, heavily hurt/kill.
+    (rec.occupants || []).slice().forEach(id => {
+        const u = Game.getUnitById ? Game.getUnitById(id) : null;
+        if (!u) return;
+        Game.ungarrisonUnit(u);
+        if (u.alive) {
+            u.hp -= 70; u.suppressionValue = 100; u.shaken = 1.2;
+            if (u.hp <= 0) {
+                u.alive = false; u.hp = 0;
+                if (u.mesh) u.mesh.visible = false;
+                if (Game.selection.has(u.id)) Game.selection.delete(u.id);
+            }
+        }
+    });
+    rec.occupants = [];
     Game.pushMessage('Building collapsed!', 1.8);
 };
 
@@ -229,4 +254,46 @@ Game.setAllBuildingDamage = (level) => {
         Game.setBuildingDamage(rec, level);
     });
     Game.pushMessage(`All buildings → damage ${level}.`, 1.5);
+};
+
+// ── Garrison capacity ──────────────────────────────────────────────────────
+// Each building holds up to rec.capacity infantry (scaled with footprint in
+// registerBuilding). Foundation for the future occupy-a-building gameplay.
+
+// Building record whose footprint contains (x,z) — collapsed or not.
+Game.buildingRecAt = (x, z) => {
+    for (const rec of Game.buildingRecords) {
+        if (Game._footprintDistSq(rec, x, z) <= 0.0001) return rec;
+    }
+    return null;
+};
+
+Game.buildingHasRoom = (rec) => !!rec && !rec.collapsed && rec.occupants.length < rec.capacity;
+
+// Put a unit inside a building (respecting capacity). Returns success.
+Game.garrisonUnit = (unit, rec) => {
+    if (!unit || !unit.alive || !rec || rec.collapsed) return false;
+    if (rec.occupants.indexOf(unit.id) >= 0) return true;          // already inside
+    if (rec.occupants.length >= rec.capacity) return false;        // full
+    rec.occupants.push(unit.id);
+    unit._garrisoned = true;
+    unit._garrisonRec = rec;
+    unit._garrisonPos = { x: rec.cx, z: rec.cz };
+    unit.x = rec.cx + Game.rand(-rec.w * 0.3, rec.w * 0.3);
+    unit.z = rec.cz + Game.rand(-rec.d * 0.3, rec.d * 0.3);
+    unit.coverBonus = 0.9;
+    unit.path = []; unit.moving = false;
+    if (unit.mesh) unit.mesh.visible = false;
+    return true;
+};
+
+// Remove a unit from whatever building it occupies.
+Game.ungarrisonUnit = (unit) => {
+    if (!unit) return;
+    const rec = unit._garrisonRec;
+    if (rec) { const i = rec.occupants.indexOf(unit.id); if (i >= 0) rec.occupants.splice(i, 1); }
+    unit._garrisoned = false;
+    unit._garrisonRec = null;
+    unit.coverBonus = 0;
+    if (unit.mesh) unit.mesh.visible = true;
 };

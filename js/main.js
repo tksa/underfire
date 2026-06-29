@@ -1072,29 +1072,26 @@ Game.isReconRevealed = (x, z) => {
 
 Game.enterBuilding = (unit, bx, bz) => {
     if (!unit.alive || Game.isTank(unit.kind)) return;
-    const tile = Game.getTileAtWorld(bx, bz);
-    if (!tile || tile.type !== 'house') {
-        Game.pushMessage('Must target a building!', 1.5);
+    const rec = Game.buildingRecAt ? Game.buildingRecAt(bx, bz) : null;
+    if (!rec || rec.collapsed) {
+        Game.pushMessage('Must target a standing building!', 1.5);
         return;
     }
-    unit._garrisoned = true;
-    unit._garrisonPos = { x: bx, z: bz };
-    unit.x = bx;
-    unit.z = bz;
-    unit.coverBonus = 0.9;
-    unit.path = [];
-    unit.moving = false;
-    if (unit.mesh) unit.mesh.visible = false; // Hidden inside building
-    Game.pushMessage(`${unit.label} garrisoned in building!`, 2.0);
+    if (!Game.buildingHasRoom(rec)) {
+        Game.pushMessage(`Building full (${rec.occupants.length}/${rec.capacity}).`, 1.8);
+        return;
+    }
+    if (Game.garrisonUnit(unit, rec)) {
+        Game.pushMessage(`${unit.label} garrisoned (${rec.occupants.length}/${rec.capacity}).`, 1.8);
+    }
 };
 
 Game.exitBuilding = (unit) => {
     if (!unit._garrisoned) return;
-    unit._garrisoned = false;
-    unit.coverBonus = 0;
+    if (Game.ungarrisonUnit) Game.ungarrisonUnit(unit);
+    else { unit._garrisoned = false; unit.coverBonus = 0; if (unit.mesh) unit.mesh.visible = true; }
     unit.x += Game.rand(-1.5, 1.5);
     unit.z += Game.rand(-1.5, 1.5);
-    if (unit.mesh) unit.mesh.visible = true;
     Game.pushMessage(`${unit.label} exited building.`, 1.5);
 };
 

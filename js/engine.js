@@ -124,7 +124,9 @@ Game.initEngine = () => {
         Game.gltfLoader = new Game.GLTFLoader();
         if (Game.DRACOLoader) {
             const draco = new Game.DRACOLoader();
-            draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+            // Decoder from jsDelivr (same CDN as our other libs — more reliable
+            // here than gstatic), pinned to our three version.
+            draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/draco/');
             Game.gltfLoader.setDRACOLoader(draco);
             Game.dracoLoader = draco;
         }
