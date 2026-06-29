@@ -1586,13 +1586,19 @@ Game.buildTerrainMeshes = () => {
         map: tiled(roofTexBase, 2, 2),
     });
 
-    // ── Buildings: textured plaster/stone walls + tiled gable roofs + chimneys ──
+    // ── Buildings: a shared damage-state GLB model replaces the procedural
+    //    plaster/stone house once it loads; the procedural wall+roof+chimney
+    //    below is built first as the immediate (and fallback) visual. ──
+    Game.buildingRecords = [];
     Game.buildings.forEach(b => {
         const w = b.tw * T;
         const d = b.th * T;
         const cx = b.tx * T + w / 2;
         const cz = b.ty * T + d / 2;
         const baseY = Game.getHeight(cx, cz);
+
+        const bGroup = new THREE.Group();
+        Game.terrainGroup.add(bGroup);
 
         const height = 2.2 + Game.rand(0, 0.8);
         const wallGeo = new THREE.BoxGeometry(w - 0.4, height, d - 0.4);
@@ -1608,7 +1614,7 @@ Game.buildTerrainMeshes = () => {
         wallMesh.position.set(cx, baseY + height / 2 - 0.15, cz);
         wallMesh.castShadow = true;
         wallMesh.receiveShadow = true;
-        Game.terrainGroup.add(wallMesh);
+        bGroup.add(wallMesh);
 
         // Roof — ridge along the building's longer axis
         const roofH = Math.min(w, d) * 0.45;
@@ -1620,7 +1626,7 @@ Game.buildTerrainMeshes = () => {
         roofMesh.position.set(cx, baseY + height - 0.18, cz);
         if (along === 'x') roofMesh.rotation.y = Math.PI / 2;
         roofMesh.castShadow = true;
-        Game.terrainGroup.add(roofMesh);
+        bGroup.add(roofMesh);
 
         // Chimney
         const chimGeo = new THREE.BoxGeometry(0.35, 0.9, 0.35);
@@ -1628,8 +1634,14 @@ Game.buildTerrainMeshes = () => {
         const chim = new THREE.Mesh(chimGeo, chimMat);
         chim.position.set(cx + w * 0.25, baseY + height + roofH * 0.5, cz - d * 0.2);
         chim.castShadow = true;
-        Game.terrainGroup.add(chim);
+        bGroup.add(chim);
+
+        if (Game.registerBuilding) {
+            Game.registerBuilding(b, bGroup, { w, d, cx, cz, baseY }, [wallMesh, roofMesh, chim]);
+        }
     });
+    // Swap procedural houses for the GLB model (async; keeps procedural on fail).
+    if (Game._loadBuildingModels) Game._loadBuildingModels();
 
     // ── Church: stone nave + bell tower + steep slate spire ──
     if (Game.church) {

@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import { Tree } from '@dgreenheck/ez-tree';
 import {
@@ -20,6 +21,7 @@ window.Game.THREE = THREE;
 window.Game.FBXLoader = FBXLoader;
 window.Game.PLYLoader = PLYLoader;
 window.Game.GLTFLoader = GLTFLoader;
+window.Game.DRACOLoader = DRACOLoader;
 window.Game.SkeletonUtils = { clone: skeletonClone };  // proper clone for rigged/skinned models
 window.Game.EZTree = { Tree };   // procedural tree generator (MIT); we swap in CC0 materials
 window.Game.PostFX = {           // pmndrs/postprocessing (MIT), loaded from CDN
@@ -380,6 +382,9 @@ Game.addBlastFlash = (x, z, scale = 1) => {
     // VALOR Stage 5: leave a persistent scorch scar for real explosions (skip the
     // small muzzle/MG-hit flashes). Radius scales with the blast.
     if (scale >= 0.6 && Game.addScorch) Game.addScorch(x, z, 1.1 * scale);
+    // Buildings take blast damage (tank HE, grenades, AT, mortars, air strikes
+    // all funnel through here) — steps their damage state and finally collapses.
+    if (scale >= 0.5 && Game.damageBuildingAt) Game.damageBuildingAt(x, z, 42 * scale, 2.2 * scale);
 };
 
 /**

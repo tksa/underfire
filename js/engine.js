@@ -119,9 +119,15 @@ Game.initEngine = () => {
     // Raycaster
     Game.raycaster = new THREE.Raycaster();
 
-    // GLTF loader
+    // GLTF loader (+ Draco decoder for compressed meshes like the building model)
     if (Game.GLTFLoader) {
         Game.gltfLoader = new Game.GLTFLoader();
+        if (Game.DRACOLoader) {
+            const draco = new Game.DRACOLoader();
+            draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+            Game.gltfLoader.setDRACOLoader(draco);
+            Game.dracoLoader = draco;
+        }
     } else {
         Game.gltfLoader = null;
     }
