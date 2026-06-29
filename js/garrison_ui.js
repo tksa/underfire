@@ -48,12 +48,19 @@ Game.updateGarrisonUI = () => {
     }
     Game.hoverBuilding = hover;
 
+    // Cursor affordance: a door+chevron over an enterable building (with room)
+    // while infantry are selected — but not while an attack/command mode owns the
+    // cursor. This is what signals "click to enter"; empty buildings get no label.
+    const inCmd = !!Game._commandMode || Game.orderStance === 'attack';
+    const wantEnter = !!hover && canEnter && !inCmd && Game.buildingHasRoom(hover);
+    const vp = document.getElementById('viewport');
+    if (vp) vp.classList.toggle('cmd-enter', wantEnter);
+
     const seen = new Set();
     for (const rec of Game.buildingRecords) {
         if (rec.collapsed) continue;
-        const isHover = rec === hover;
         const occ = rec.occupants ? rec.occupants.length : 0;
-        if (occ === 0 && !isHover) continue;   // nothing to show for this one
+        if (occ === 0) continue;               // only label buildings with troops inside
         seen.add(rec);
 
         let el = Game._garrisonUI.labels.get(rec);
@@ -68,33 +75,16 @@ Game.updateGarrisonUI = () => {
         }
 
         const st = Game.buildingOccupantStats(rec);
-        let html;
-        if (st.count > 0) {
-            const hpc = st.avgHealthPct > 66 ? '#7ec97e' : st.avgHealthPct > 33 ? '#e0c46a' : '#e07a6a';
-            html = `<span>\u{1F465} ${st.count}/${st.capacity}</span>`
-                + ` <span style="color:${hpc}">♥ ${st.avgHealthPct}%</span>`;
-        } else {
-            html = `<span style="opacity:.85">${st.capacity} space</span>`;
-        }
-        if (isHover && canEnter) {
-            const full = !Game.buildingHasRoom(rec);
-            html += full
-                ? ' <span style="color:#e07a6a">FULL</span>'
-                : ' <span style="color:#9fd6ff">❯ enter</span>';
-            el.style.borderColor = full ? 'rgba(224,122,106,.65)' : 'rgba(159,214,255,.8)';
-            el.style.background = 'rgba(18,28,40,0.85)';
-        } else {
-            el.style.borderColor = 'rgba(255,255,255,0.15)';
-            el.style.background = 'rgba(20,22,18,0.72)';
-        }
-        el.innerHTML = html;
+        const hpc = st.avgHealthPct > 66 ? '#7ec97e' : st.avgHealthPct > 33 ? '#e0c46a' : '#e07a6a';
+        el.innerHTML = `<span>\u{1F465} ${st.count}/${st.capacity}</span>`
+            + ` <span style="color:${hpc}">♥ ${st.avgHealthPct}%</span>`;
 
         const p = Game._projWorld(rec.cx, (rec.baseY || 0) + 7, rec.cz);
         if (p.vis) { el.style.display = 'block'; el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; }
         else el.style.display = 'none';
     }
 
-    // Drop labels for buildings no longer occupied/hovered.
+    // Drop labels for buildings that no longer have occupants.
     for (const [rec, el] of Game._garrisonUI.labels) {
         if (!seen.has(rec)) { el.remove(); Game._garrisonUI.labels.delete(rec); }
     }
