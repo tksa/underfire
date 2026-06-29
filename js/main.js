@@ -434,6 +434,9 @@ Game.addBlastFlash = (x, z, scale = 1) => {
         if (scale >= 1.0 && losMul > 0 && Game.smokeClouds) {
             Game.smokeClouds.push({ x, z, radius: scale * 1.6, life: Game.clamp(scale * 2.5, 1.5, 18) * losMul * mod.life });
         }
+
+        // FX §12.1: a real blast on dry vegetation can start a ground fire.
+        if (scale >= 0.8 && Game.igniteFire) Game.igniteFire(x, z, scale);
     }
 
     // FX §17: camera shake scaled by blast size AND distance to the view centre,
@@ -1994,6 +1997,8 @@ Game.tick = (now) => {
         if (Game.updateSmokeClouds) Game.updateSmokeClouds(dt);
         if (Game.updateTracers3D) Game.updateTracers3D(dt);
         if (Game.updateWreckFx) Game.updateWreckFx(dt);
+        if (Game.updateFires) Game.updateFires(dt);
+        if (Game.updateBuildings) Game.updateBuildings(dt);
         if (Game.updateSmoke3D) Game.updateSmoke3D(dt);
         if (Game.updateScorch3D) Game.updateScorch3D(dt);
         if (Game.updateFoliageKnockdown) Game.updateFoliageKnockdown(dt);

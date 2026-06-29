@@ -818,6 +818,75 @@ Game.updateWreckFx = (dt) => {
     }
 };
 
+// FX §12.1: explosions on dry vegetation can start a ground fire. A fire is a
+// flickering flame (warm additive sprites reused from the muzzle-flash pool) +
+// a rising wood-smoke column; it grows, persists, can spread to an adjacent
+// flammable tile, then burns out. Visual only — no gameplay LOS/damage.
+Game.fires = Game.fires || [];
+
+Game.igniteFire = (x, z, scale = 1) => {
+    if (((Game.fxFire != null) ? Game.fxFire : 1) <= 0) return;
+    if (Game.weatherEffect === 'rain' || Game.weatherEffect === 'snow') return; // wet
+    const t = Game.getTileAtWorld ? Game.getTileAtWorld(x, z) : null;
+    if (!t) return;
+    const flam = { grass: 0.16, wheat: 0.5, field: 0.2, orchard: 0.24, forest: 0.3, dense_forest: 0.4 }[t.type];
+    if (!flam) return;
+    Game.fires = Game.fires || [];
+    if (Game.fires.length > 70) return;
+    const chanceMul = (Game.fxFireChance != null) ? Game.fxFireChance : 1;
+    if (Math.random() > flam * chanceMul * Math.min(1.4, scale)) return;
+    for (const f of Game.fires) if (Game.dist(f.x, f.z, x, z) < f.r) return; // don't stack
+    const total = 12 + Math.random() * 30;
+    Game.fires.push({ x, z, r: 1.0 + scale * 0.6, life: total, total, _flT: 0, _spreadT: 3 + Math.random() * 4 });
+};
+
+Game.updateFires = (dt) => {
+    if (!Game.fires || !Game.fires.length) return;
+    const mul = (Game.fxFire != null) ? Game.fxFire : 1;
+    if (mul <= 0) { Game.fires.length = 0; return; }
+    Game.muzzleFlashes = Game.muzzleFlashes || [];
+
+    for (let i = Game.fires.length - 1; i >= 0; i--) {
+        const f = Game.fires[i];
+        f.life -= dt;
+        if (f.life <= 0) { Game.fires.splice(i, 1); continue; }
+        const age = f.total - f.life;
+        const intensity = Math.min(1, age / 3) * Math.min(1, f.life / 5); // grow then taper
+
+        f._flT -= dt;
+        if (f._flT <= 0) {
+            f._flT = 0.2 / mul;
+            // flame flicker (low, warm, additive)
+            const flames = 1 + Math.round(Math.random());
+            for (let k = 0; k < flames; k++) {
+                Game.muzzleFlashes.push({
+                    x: f.x + Game.rand(-f.r, f.r) * 0.6, z: f.z + Game.rand(-f.r, f.r) * 0.6,
+                    r: (0.22 + Math.random() * 0.28) * (0.6 + intensity * 0.6),
+                    life: 0.16 + Math.random() * 0.12, total: 0.3, big: false, mesh: null,
+                });
+            }
+            // grey-brown wood-fire smoke column
+            const slife = 2 + Math.random() * 1.5;
+            Game.smoke.push({
+                x: f.x + Game.rand(-0.4, 0.4), z: f.z + Game.rand(-0.4, 0.4),
+                r: 0.6 + Math.random() * 0.5, life: slife, total: slife,
+                vx: Game.rand(-0.2, 0.2), vz: Game.rand(-0.2, 0.2),
+                rise: 3.2, maxOpacity: 0.34 * (0.5 + intensity * 0.6), tint: 0x5a5048, mesh: null,
+            });
+        }
+
+        // spread to a nearby flammable tile once well established
+        f._spreadT -= dt;
+        if (f._spreadT <= 0) {
+            f._spreadT = 4 + Math.random() * 6;
+            if (intensity > 0.5 && Game.igniteFire && Game.fires.length < 70) {
+                const ang = Math.random() * Math.PI * 2;
+                Game.igniteFire(f.x + Math.cos(ang) * (f.r + 1.5), f.z + Math.sin(ang) * (f.r + 1.5), 0.9);
+            }
+        }
+    }
+};
+
 /**
  * Procedurally pose an infantry rig from its stance + movement, with smooth
  * transitions and a walk/crawl leg cycle (stand-in for skeletal animation).

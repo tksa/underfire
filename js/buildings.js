@@ -150,12 +150,47 @@ Game.setBuildingDamage = (rec, level) => {
     });
     const noHeavyState = (rec.houses || []).every(h => !h.states[3]);
     if (level >= 3 && noHeavyState) {
-        Game._collapseBuilding(rec);
+        Game._scheduleCollapse(rec);
     } else if (level >= 3 && !rec._destroyedFx) {
         // Heavy-damage state mesh exists — show it, plus a one-time big burst.
         rec._destroyedFx = true;
         Game._buildingDestroyedSmoke(rec);
         Game.pushMessage('Building wrecked!', 1.6);
+    }
+};
+
+// FX §11.3: a wrecked structure doesn't drop instantly. Stage the collapse —
+// a structural groan + initial debris now, then the full collapse 0.5-2.5s
+// later (driven by Game.updateBuildings). The building keeps blocking sight
+// until it actually comes down.
+Game._scheduleCollapse = (rec) => {
+    if (rec.collapsed || rec._collapsePending != null) return;
+    rec._collapsePending = 0.5 + Math.random() * 2.0;
+    const sc = Game._buildingSmokeScale || 1;
+    for (let i = 0; i < Math.max(2, Math.round(3 * sc)); i++) {
+        Game.smoke.push({
+            x: rec.cx + Game.rand(-rec.w * 0.4, rec.w * 0.4),
+            z: rec.cz + Game.rand(-rec.d * 0.4, rec.d * 0.4),
+            r: 1.2 * sc, life: 1.4, total: 1.4,
+            vx: Game.rand(-0.2, 0.2), vz: Game.rand(-0.3, -0.1),
+            rise: 1.6, maxOpacity: 0.5, mesh: null,
+        });
+    }
+    if (Game.pushMessage) Game.pushMessage('Building collapsing!', 1.4);
+};
+
+// Tick pending collapses (called from the game loop).
+Game.updateBuildings = (dt) => {
+    const recs = Game.buildingRecords;
+    if (!recs || !recs.length) return;
+    for (const rec of recs) {
+        if (rec._collapsePending != null && !rec.collapsed) {
+            rec._collapsePending -= dt;
+            if (rec._collapsePending <= 0) {
+                rec._collapsePending = null;
+                Game._collapseBuilding(rec);
+            }
+        }
     }
 };
 

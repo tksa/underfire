@@ -133,12 +133,22 @@ Staged realism pass over weapon impacts. Implemented stages:
   short-lived LOS cloud (reuses the LOS-only `smokeClouds`; visible dust is the
   particles), duration scaled by caliber and clamped 1.5–18s. Off at `fxDustLOS = 0`.
 
-**Debug — Effects group** (backtick panel): Dust Opacity, Dust Lifetime x,
-Impact Dust x, Camera Shake x, Wreck Smoke x, Dust Blocks Sight x (live globals
-`Game.fxDustOpacity/fxDustLife/fxImpactDust/fxShake/fxWreckSmoke/fxDustLOS`).
+**Stage 5 — ground fire + building collapse delay (`js/renderer.js` fires, `js/buildings.js` collapse)**
+- **Ground fire** (doc §12.1): a real blast (scale ≥ 0.8) on dry vegetation can
+  ignite (`Game.igniteFire`) — chance by flammability (`grass/wheat/field/orchard/
+  forest/dense_forest`), blocked by rain/snow. A fire flickers (warm additive
+  sprites) + emits a wood-smoke column (`Game.updateFires`), grows then tapers,
+  can **spread** to an adjacent flammable tile, and burns out (12–42s). Capped at
+  70 fires; **visual only** (no LOS/damage), tunable/off via `fxFire`.
+- **Building collapse delay** (doc §11.3): a wrecked structure no longer drops
+  instantly — `Game._scheduleCollapse` plays a groan + initial debris, then
+  `Game.updateBuildings` triggers the full collapse 0.5–2.5s later. It keeps
+  blocking sight until it actually comes down.
 
-Remaining staged work (planned): ground fire (grass/wood/fuel grow + spread) +
-building collapse delay.
+**Debug — Effects group** (backtick panel): Dust Opacity, Dust Lifetime x,
+Impact Dust x, Camera Shake x, Wreck Smoke x, Dust Blocks Sight x, Ground Fire x,
+Fire Start Chance x (live globals `Game.fxDustOpacity/fxDustLife/fxImpactDust/
+fxShake/fxWreckSmoke/fxDustLOS/fxFire/fxFireChance`).
 
 ---
 
