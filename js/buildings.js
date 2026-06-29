@@ -126,7 +126,9 @@ Game._populateBuildingModel = (rec, srcModel) => {
         else { model.position.z += off; model.position.x += jit; }
 
         model.traverse(o => {
-            if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+            // Cast onto the ground, but DON'T receive — self-shadowing the roof
+            // produced acne that read as phantom damage on some orientations.
+            if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; }
         });
         // (screenToGround only raycasts terrain, and units live in a separate
         // group, so leaving these pickable lets click-to-target the house work

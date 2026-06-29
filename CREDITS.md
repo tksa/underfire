@@ -13,6 +13,12 @@ used under CC-BY 3.0. Icons made by:
 
 (White-on-transparent variants, recoloured via CSS.)
 
+## UI Icons (IconaMoon — CC BY 4.0)
+The building-entry cursor uses the **Enter** icon (Thin) from
+[IconaMoon](https://github.com/dariushhpg1/IconaMoon) by **Dariush Habibpour**,
+used under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (recoloured
++ embedded as an inline SVG cursor in `index.html`).
+
 ## Textures (OpenGameArt.org, CC0)
 - **Dirty Grass Seamless** (ground detail normal + AO) — used as terrain detail maps.
   Source: "4K Seamless Grass Dirt Ground Texture with all Shader Maps", CC0.

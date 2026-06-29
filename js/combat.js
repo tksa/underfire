@@ -109,6 +109,20 @@ Game.applyShot = (shooter, target) => {
         muzzleZ = shooter.z + Math.sin(fireAngle) * barrelLen;
     }
 
+    // Garrisoned shooter fires from a window: push the muzzle out to the building
+    // edge toward the target so the tracer/flash isn't hidden inside the house.
+    if (shooter._garrisoned && shooter._garrisonRec) {
+        const rec = shooter._garrisonRec;
+        const c = Math.cos(fireAngle), s = Math.sin(fireAngle);
+        const halfW = (rec.w || 4) / 2, halfD = (rec.d || 4) / 2;
+        const tEdge = Math.min(
+            Math.abs(c) > 1e-3 ? halfW / Math.abs(c) : 1e9,
+            Math.abs(s) > 1e-3 ? halfD / Math.abs(s) : 1e9
+        ) + 1.0;
+        muzzleX = rec.cx + c * tEdge;
+        muzzleZ = rec.cz + s * tEdge;
+    }
+
     // Determine terrain damage: tanks cause craters, mortars/AT cause smaller ones, infantry/MG = 0
     let terrainDmg = 0;
     if (isTankShooter) {

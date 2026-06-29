@@ -52,7 +52,11 @@ Game.initEngine = () => {
     sun.shadow.camera.bottom = -100;
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 200;
-    sun.shadow.bias = -0.001;
+    sun.shadow.bias = -0.0005;
+    // normalBias offsets the shadow sample along the surface normal — kills the
+    // self-shadow "acne" (dark moiré patches) that was showing up as fake damage
+    // on angled building roofs depending on their orientation to the sun.
+    sun.shadow.normalBias = 0.8;
     sun.shadow.radius = 4;   // soft shadow edges (esp. trees); tunable in debug
     Game.scene.add(sun);
     Game.scene.add(sun.target);

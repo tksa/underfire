@@ -306,6 +306,11 @@ Game._showFormationPreview = (wx, wz) => {
     cx /= chosen.length; cz /= chosen.length;
     const angle = Math.atan2(wz - cz, wx - cx);
 
+    // Red preview when attack-move is armed (advance + engage), green for a plain
+    // move — matches the destination order-marker colours.
+    const attackMode = Game.orderStance === 'attack';
+    const ringColor = attackMode ? 0xff5544 : 0x88cc66;
+
     const offsets = Game.formationOffsets(chosen.length, 2.5);
     offsets.forEach(off => {
         const rx = off.x * Math.cos(angle) - off.z * Math.sin(angle);
@@ -316,7 +321,7 @@ Game._showFormationPreview = (wx, wz) => {
 
         const geo = new THREE.RingGeometry(0.25, 0.4, 12);
         const mat = new THREE.MeshBasicMaterial({
-            color: 0x88cc66,
+            color: ringColor,
             transparent: true,
             opacity: 0.45,
             depthWrite: false,
