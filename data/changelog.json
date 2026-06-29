@@ -1,8 +1,48 @@
 {
  "version": "v0.7.0-dev",
- "build": "c28f903",
- "generated": "2026-06-28",
+ "build": "ff37f60",
+ "generated": "2026-06-29",
  "commits": [
+  {
+   "hash": "ff37f60",
+   "date": "2026-06-29",
+   "subject": "click the house to attack it"
+  },
+  {
+   "hash": "4786c7a",
+   "date": "2026-06-29",
+   "subject": "tanks can attack-ground a building (LOS to near edge)"
+  },
+  {
+   "hash": "9f25c6d",
+   "date": "2026-06-29",
+   "subject": "4-state damage model + shoot-to-damage + hit effects"
+  },
+  {
+   "hash": "842045f",
+   "date": "2026-06-29",
+   "subject": "place at footprint + fixed size"
+  },
+  {
+   "hash": "f0d485f",
+   "date": "2026-06-29",
+   "subject": "house rows + rotation variety"
+  },
+  {
+   "hash": "300e1cb",
+   "date": "2026-06-29",
+   "subject": "enemy tank tracks no longer visible through fog of war"
+  },
+  {
+   "hash": "8416539",
+   "date": "2026-06-29",
+   "subject": "model-driven houses with damage states (Draco GLB)"
+  },
+  {
+   "hash": "aa0bdcb",
+   "date": "2026-06-28",
+   "subject": "revert: drop texture_grid_brown ground detail (not wanted)"
+  },
   {
    "hash": "c28f903",
    "date": "2026-06-28",
@@ -32,46 +72,6 @@
    "hash": "399df76",
    "date": "2026-06-28",
    "subject": "graphics: crisp leaves for hedge bushes"
-  },
-  {
-   "hash": "761d3e0",
-   "date": "2026-06-28",
-   "subject": "tree blur is now a soft-blend (feathered alpha), not texture smear"
-  },
-  {
-   "hash": "b136689",
-   "date": "2026-06-28",
-   "subject": "smooth grime (kill tile grid)"
-  },
-  {
-   "hash": "12acb86",
-   "date": "2026-06-28",
-   "subject": "bake tuned VALOR values as defaults"
-  },
-  {
-   "hash": "5368d56",
-   "date": "2026-06-28",
-   "subject": "VALOR stage 5"
-  },
-  {
-   "hash": "363e528",
-   "date": "2026-06-28",
-   "subject": "VALOR material weathering on terrain + stage 4 (semantic-ish grade)"
-  },
-  {
-   "hash": "9e827f7",
-   "date": "2026-06-28",
-   "subject": "VALOR stage 3 (material weathering) + upscaler off by default"
-  },
-  {
-   "hash": "2bec434",
-   "date": "2026-06-28",
-   "subject": "VALOR stage 2 (sfumato + chiaroscuro)"
-  },
-  {
-   "hash": "ae1aff5",
-   "date": "2026-06-28",
-   "subject": "VALOR stage 1"
   }
  ]
 }
