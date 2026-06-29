@@ -1963,6 +1963,7 @@ Game.tick = (now) => {
         if (Game.updateThrownGrenades) Game.updateThrownGrenades(dt);
         if (Game.updateSmokeClouds) Game.updateSmokeClouds(dt);
         if (Game.updateTracers3D) Game.updateTracers3D(dt);
+        if (Game.updateWreckFx) Game.updateWreckFx(dt);
         if (Game.updateSmoke3D) Game.updateSmoke3D(dt);
         if (Game.updateScorch3D) Game.updateScorch3D(dt);
         if (Game.updateFoliageKnockdown) Game.updateFoliageKnockdown(dt);

@@ -112,11 +112,23 @@ Staged realism pass over weapon impacts. Implemented stages:
   lance flung forward along the shell path + a spark + a narrow gouge scar, and
   **no round crater**. Only penetrators (tanks, AT ≥ pen 2) throw the lance.
 
-**Debug — Effects group** (backtick panel): Dust Opacity, Dust Lifetime x,
-Impact Dust x, Camera Shake x (live globals `Game.fxDustOpacity/fxDustLife/fxImpactDust/fxShake`).
+**Stage 3 — vehicle destruction states + wreck smoke (`js/renderer.js` `updateWreckFx`, wreck roll in `syncUnitMeshes`; `js/combat.js`)**
+- A penetration knock-out is **no longer a guaranteed fireball** (doc §9.1): the
+  instant kill flash is modest; the aftermath is carried by the wreck system.
+- At death each tank rolls an outcome (doc §9.4): **smoulder** (most common, thin
+  grey, ~26s), **fire** (black column, grows over ~6s, ~120s), **cook-off** (fire
+  + random secondary blast pops for ~88s, doc §12.3/§15.11), or **catastrophic**
+  (~8%, one big turret-toss blast + shake, then long aftermath).
+- Wrecks emit a rising dark, tinted smoke column that grows then tapers.
+- **Damaged-but-alive** tanks (`engineDamaged`) trail thin smoke too (doc §21).
+- Degradable: no wreck roll → mesh just stays as the charred remnant.
 
-Remaining staged work (planned): vehicle destroyed states + wreck smoke;
-terrain/weather dust modifiers + dust LOS block; fire + secondary explosions.
+**Debug — Effects group** (backtick panel): Dust Opacity, Dust Lifetime x,
+Impact Dust x, Camera Shake x, Wreck Smoke x (live globals
+`Game.fxDustOpacity/fxDustLife/fxImpactDust/fxShake/fxWreckSmoke`).
+
+Remaining staged work (planned): terrain/weather dust modifiers + dust LOS block;
+ground fire (grass/wood/fuel grow + spread) + building collapse delay.
 
 ---
 

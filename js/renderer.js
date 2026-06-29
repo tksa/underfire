@@ -35,6 +35,19 @@ Game.syncUnitMeshes = (dt) => {
                             });
                         }
                     });
+                    // FX §9.4: pick a destruction outcome. Most kills just smoke
+                    // (crew bailed / immobilised); some catch fire and burn long;
+                    // a few cook off ammo with random pops; rare catastrophic blast.
+                    const r = Math.random();
+                    unit._wreckType = r < 0.08 ? 'catastrophic' : r < 0.23 ? 'cookoff' : r < 0.55 ? 'fire' : 'smoulder';
+                    unit._wreckAge = 0; unit._wreckSmokeT = 0;
+                    unit._wreckCookT = 2 + Math.random() * 8;
+                    if (unit._wreckType === 'catastrophic' && Game.addBlastFlash) {
+                        // Turret-toss moment: a real explosion, the rare exception.
+                        Game.addBlastFlash(unit.x, unit.z, 2.2);
+                        Game.cameraShake = Math.max(Game.cameraShake || 0, 12);
+                        if (Game.Audio && Game.Audio.explosion) Game.Audio.explosion(unit.x, unit.z);
+                    }
                 } else {
                     unit.isDeadBody = true;
                     unit.mesh.rotation.z = Math.PI / 2;        // fall over
@@ -728,6 +741,78 @@ Game.updateSmoke3D = (dt) => {
                 // pop big then snap down
                 f.mesh.scale.setScalar(f.r * (2.2 - t * 0.8) * (f.big ? 2.2 : 1));
                 f.mesh.material.opacity = t * 0.95;
+            }
+        }
+    }
+};
+
+// FX §9.4 / §12 / §21: destroyed vehicles smoke over time instead of vanishing,
+// and damaged-but-alive engines smoke too. Drives the dark wreck column whose
+// look depends on the destruction outcome rolled at death (see syncUnitMeshes),
+// plus random ammo cook-off pops for 'cookoff' wrecks.
+Game.updateWreckFx = (dt) => {
+    if (!Game.smoke || !Game.units) return;
+    const mul = (Game.fxWreckSmoke != null) ? Game.fxWreckSmoke : 1;
+    if (mul <= 0) return;
+
+    for (const u of Game.units) {
+        // Living, engine-damaged tanks trail a thin smoke (doc §21).
+        if (u.alive) {
+            if (u.engineDamaged && Game.isTank(u.kind)) {
+                u._dmgSmokeT = (u._dmgSmokeT || 0) - dt;
+                if (u._dmgSmokeT <= 0) {
+                    u._dmgSmokeT = 0.6 / mul;
+                    Game.smoke.push({
+                        x: u.x + Game.rand(-0.3, 0.3), z: u.z + Game.rand(-0.3, 0.3),
+                        r: 0.45, life: 1.6, total: 1.6,
+                        vx: Game.rand(-0.2, 0.2), vz: Game.rand(-0.2, 0.2),
+                        rise: 2.6, maxOpacity: 0.3, tint: 0x33312e, mesh: null,
+                    });
+                }
+            }
+            continue;
+        }
+        if (!u._isWreck || !u._wreckType) continue;
+
+        u._wreckAge = (u._wreckAge || 0) + dt;
+        const age = u._wreckAge;
+        const type = u._wreckType;
+
+        // Emission window + cadence + colour per outcome.
+        let dur, period, tint;
+        if (type === 'smoulder') { dur = 26; period = 0.5; tint = 0x4a4640; }
+        else if (type === 'fire') { dur = 120; period = 0.28; tint = 0x1a1714; }
+        else if (type === 'cookoff') { dur = 95; period = 0.30; tint = 0x1a1714; }
+        else { dur = 70; period = 0.35; tint = 0x201c18; } // catastrophic aftermath
+        if (age > dur) continue;
+
+        // Fire grows over the first ~6s, then tapers across the final 12s.
+        const grow = Math.min(1, age / 6);
+        const taper = Math.min(1, Math.max(0, (dur - age) / 12));
+        const intensity = grow * taper;
+
+        u._wreckSmokeT -= dt;
+        if (u._wreckSmokeT <= 0) {
+            u._wreckSmokeT = period / mul;
+            const colH = (type === 'smoulder') ? 2.8 : 3.8;
+            const life = 2.2 + Math.random() * 1.6;
+            Game.smoke.push({
+                x: u.x + Game.rand(-0.4, 0.4), z: u.z + Game.rand(-0.4, 0.4),
+                r: (0.7 + Math.random() * 0.6) * (0.6 + intensity * 0.8),
+                life, total: life,
+                vx: Game.rand(-0.25, 0.25), vz: Game.rand(-0.25, 0.25),
+                rise: colH, maxOpacity: (type === 'smoulder' ? 0.32 : 0.52) * (0.45 + intensity * 0.7),
+                tint, mesh: null,
+            });
+        }
+
+        // Ammo cook-off: random secondary pops (doc §12.3 / §15.11).
+        if (type === 'cookoff' && age < 88) {
+            u._wreckCookT -= dt;
+            if (u._wreckCookT <= 0) {
+                u._wreckCookT = 4 + Math.random() * 14;
+                if (Game.addBlastFlash) Game.addBlastFlash(u.x + Game.rand(-0.5, 0.5), u.z + Game.rand(-0.5, 0.5), 0.7);
+                if (Game.Audio && Game.Audio.explosion && Math.random() < 0.4) Game.Audio.explosion(u.x, u.z);
             }
         }
     }

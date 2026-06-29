@@ -368,12 +368,14 @@ Game.setupPostFX = () => {
             fxDustLife: (Game.fxDustLife != null) ? Game.fxDustLife : 1,
             fxImpactDust: (Game.fxImpactDust != null) ? Game.fxImpactDust : 1,
             fxShake: (Game.fxShake != null) ? Game.fxShake : 1,
+            fxWreckSmoke: (Game.fxWreckSmoke != null) ? Game.fxWreckSmoke : 1,
         };
         // Apply the FX defaults so the live globals exist before the panel opens.
         Game.fxDustOpacity = Game.postfxState.fxDustOpacity;
         Game.fxDustLife = Game.postfxState.fxDustLife;
         Game.fxImpactDust = Game.postfxState.fxImpactDust;
         Game.fxShake = Game.postfxState.fxShake;
+        Game.fxWreckSmoke = Game.postfxState.fxWreckSmoke;
         // VALOR realism passes (aerial perspective, grain, exposure) layered on
         // top. Self-contained and degradable: a failure leaves the base intact.
         if (Game.setupValor) { Game.setupValor(); Game._applyComposerSize(); }
@@ -513,6 +515,7 @@ Game._postfxControlDefs = () => {
         { group: 'Effects', key: 'fxDustLife', label: 'Dust Lifetime x', min: 0.3, max: 3, step: 0.1, apply: v => { Game.fxDustLife = v; } },
         { group: 'Effects', key: 'fxImpactDust', label: 'Impact Dust x', min: 0, max: 3, step: 0.1, apply: v => { Game.fxImpactDust = v; } },
         { group: 'Effects', key: 'fxShake', label: 'Camera Shake x', min: 0, max: 2, step: 0.05, apply: v => { Game.fxShake = v; } },
+        { group: 'Effects', key: 'fxWreckSmoke', label: 'Wreck Smoke x', min: 0, max: 3, step: 0.1, apply: v => { Game.fxWreckSmoke = v; } },
         ...(Game._valorControlDefs ? Game._valorControlDefs() : []),
         ...(Game._valorMatControlDefs ? Game._valorMatControlDefs() : []),
         ...(Game._valorDecalControlDefs ? Game._valorDecalControlDefs() : []),

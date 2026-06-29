@@ -361,7 +361,10 @@ Game.applyShot = (shooter, target) => {
             if (Game.selection.has(target.id)) Game.selection.delete(target.id);
             Game.cameraShake = Math.max(Game.cameraShake, Game.isTank(target.kind) ? 6 : 2);
             if (Game.Audio && Game.isTank(target.kind)) Game.Audio.explosion(target.x, target.z);
-            if (Game.isTank(target.kind) && Game.addBlastFlash) Game.addBlastFlash(target.x, target.z, 1.6);
+            // Doc §9.1: a penetration knock-out is NOT a guaranteed fireball —
+            // a modest hit flash here; the aftermath (smoke column, delayed fire,
+            // rare cook-off / catastrophic blast) is carried by Game.updateWreckFx.
+            if (Game.isTank(target.kind) && Game.addBlastFlash) Game.addBlastFlash(target.x, target.z, 0.9);
 
             const teamName = target.team === Game.TEAM.GERMAN ? 'Enemy' : 'French';
             Game.pushMessage(`${teamName} ${target.label} knocked out.`, 1.4);
