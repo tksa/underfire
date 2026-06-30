@@ -330,27 +330,11 @@ Game.AI._chooseSit = (unit) => {
 Game.AI._pickIdleActivity = (unit) => {
     const now = Game.gameClock || 0;
     if (unit._idleBias == null) unit._idleBias = Game.rand(0.2, 0.85);   // sitter <-> stander
-    const r = Game.rand(0, 1);
-
-    // Now and then (player troops), get up and wander over to a comrade, then settle.
-    if (r < 0.16 && unit.aiState === 'player') {
-        const mate = Game.AI._nearestComrade(unit, 16);
-        if (mate) {
-            const a = Game.angleTo(mate.x, mate.z, unit.x, unit.z);
-            const off = Game.rand(1.6, 2.6);
-            const gx = Game.clamp(mate.x + Math.cos(a) * off, 1, Game.WORLD_W - 1);
-            const gz = Game.clamp(mate.z + Math.sin(a) * off, 1, Game.WORLD_H - 1);
-            const path = Game.findPath(unit, unit.x, unit.z, gx, gz);
-            if (path && path.length) {
-                unit.path = path; unit.moving = true; unit._idleMoving = true;
-                unit.orderMode = 'hold';
-                if (unit.stance === 'rest') unit.stance = 'stand';      // get up to walk
-                unit._idleNextAct = (Game.rand(0, 1) < unit._idleBias) ? 'sit' : 'stand';
-                return;
-            }
-        }
-    }
-    // Otherwise sit or stay standing, biased by temperament, for a spell.
+    // Idle troops sit or stand IN PLACE (and turn to chat) — they no longer get up
+    // and wander to a comrade on their own. That self-initiated stroll read as a man
+    // "swinging across to a new place out of the blue", so it's disabled; idle units
+    // hold their ground until ordered.
+    unit._idleMoving = false;
     if (Game.rand(0, 1) < unit._idleBias) { unit._idleAct = 'sit'; Game.AI._chooseSit(unit); }
     else unit._idleAct = 'stand';
     unit._idleActT = now + Game.rand(10, 24);

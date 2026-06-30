@@ -421,47 +421,33 @@ Game._vehicleAvoid = (unit) => {
         if (ahead < blockD) { blockD = ahead; block = o; }
     }
 
-    if (!block) {                                        // path clear — retire the detour
+    const nowT = Game.gameClock || 0;
+    const blockMoving = block ? ((block.currentSpeed || 0) > 0.3 || (block.path && block.path.length > 0)) : false;
+
+    // FOOT TROOPS never weave a detour. They only stop briefly for a MOVING FRIENDLY
+    // tank CROSSING the lane (not one they're escorting); the collide-and-slide routes
+    // them around a hull, so the side-step waypoint was pure jitter for them.
+    if (!vehSized) {
+        if (block && blockMoving && (block.currentSpeed || 0) > 0.3 && block.team === unit.team) {
+            const tfx = Math.cos(block.angle), tfz = Math.sin(block.angle);
+            const following = (hx * tfx + hz * tfz) > 0.45;
+            if (!following) unit.stopTimer = Math.max(unit.stopTimer || 0, 0.4);
+        }
         if (unit._detour && unit.path[0] === unit._detour) unit.path.shift();
         unit._detour = null; return;
     }
 
-    const blockMoving = (block.currentSpeed || 0) > 0.3 || (block.path && block.path.length > 0);
+    // VEHICLES — HOLD an active detour through brief block-loss FLICKER. A tank steers
+    // at the side-step point, which shifts the blocking hull out of its corridor for a
+    // frame; the old code then retired the detour and reacquired it next frame — det
+    // toggling 1/0/1/0, heading shimmying ±0.04 every frame, the hull juddering in
+    // place. Keeping the detour for ~0.4s before re-evaluating gives a steady heading.
+    const activeDetour = unit._detour && unit.path[0] === unit._detour;
+    if (activeDetour && (nowT - (unit._detour.t || 0)) < 0.4) return;
 
-    // FOOT TROOPS yield to a MOVING FRIENDLY tank CROSSING their path: stop and let
-    // it pass rather than weaving around a moving hull (that weave was the approach-
-    // stop-creep jitter). Held briefly so it stays put until the tank clears.
-    // IMPORTANT: only for a tank crossing our lane — NOT one we're moving along WITH
-    // (following/escorting). Stopping for a tank we're advancing behind made the
-    // infantry bunch up and "hide" behind it instead of joining the attack.
-    if (!vehSized && blockMoving && (block.currentSpeed || 0) > 0.3 && block.team === unit.team) {
-        const tfx = Math.cos(block.angle), tfz = Math.sin(block.angle);
-        const following = (hx * tfx + hz * tfz) > 0.45;   // tank heading ~ ours = escorting
-        if (!following) {
-            if (unit._detour && unit.path[0] === unit._detour) unit.path.shift();
-            unit._detour = null;
-            unit.stopTimer = Math.max(unit.stopTimer || 0, 0.4);   // wait for the crossing tank
-            return;
-        }
-    }
-
-    // INFANTRY DON'T WEAVE DETOURS. The recorder showed foot troops carrying an active
-    // detour 30-55% of the time, re-picking the side/target every frame as tanks
-    // shuffled — that constant re-aim was the bulk of the infantry jitter (hundreds of
-    // heading reversals, wiggle up to 5x). The collide-and-slide de-penetration already
-    // routes a man smoothly around a hull, so foot troops need no side-step waypoint;
-    // they just walk their line and graze past. Only vehicles get a detour.
-    if (!vehSized) { if (unit._detour && unit.path[0] === unit._detour) unit.path.shift(); unit._detour = null; return; }
-
-    // HOLD the detour steady: while still avoiding the SAME tank, keep the existing
-    // side-step waypoint and only re-aim it a few times a second. Recomputing the
-    // target every frame (it depends on the unit's own heading) created a feedback
-    // loop — steer at waypoint -> heading shifts -> waypoint moves -> steer again —
-    // i.e. the tank weave/jitter. A steady waypoint gives a steady heading.
-    const nowT = Game.gameClock || 0;
-    if (unit._detour && unit._detour.forId === block.id && unit.path[0] === unit._detour
-        && (nowT - (unit._detour.t || 0)) < 0.35) {
-        return;   // keep steering to the current (stable) detour point
+    if (!block) {                                        // hold expired, lane clear — retire
+        if (activeDetour) unit.path.shift();
+        unit._detour = null; return;
     }
 
     // Reuse the chosen side while still avoiding the same tank; pick afresh otherwise.
