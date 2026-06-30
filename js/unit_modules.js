@@ -441,6 +441,10 @@ Game.uMod.move = (unit, ctx) => {
         // arrived. Progress-based so it ignores speed bouncing against neighbours; a
         // lone unit keeps closing the gap and arrives precisely as normal. Vehicles
         // get a wider settle radius (bigger footprint, never pack as tight).
+        // SETTLE WHEN CROWDED: near its slot and no longer closing the gap (elbowed out
+        // by friendlies), a unit calls it arrived instead of shuffling forever. Only
+        // near the slot, so a unit still en route keeps trying for its exact circle
+        // rather than giving up far away. Progress-based; a lone unit arrives precisely.
         const settleNear = (isVeh || isTruck) ? 4.0 : 3.2;
         if (unit.path.length === 1 && d < settleNear) {
             if (unit._lastGoalD != null && d > unit._lastGoalD - 0.05) {

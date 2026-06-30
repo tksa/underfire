@@ -7,6 +7,80 @@
 Game.selectedPlayerUnits = () =>
     Game.units.filter(u => u.alive && u.team === Game.TEAM.FRENCH && Game.selection.has(u.id));
 
+// Compute exactly ONE destination slot per selected unit for a group move to (wx,wz).
+// Returns [{ unit, x, z }] — one entry per unit, each a distinct formation slot. The
+// SAME function drives the on-ground preview circles and the actual move orders, so
+// the circles are precisely where the units go. Vehicles are spread EVENLY across the
+// formation (not clumped at the front), and every unit is matched to its nearest slot
+// of the right kind to keep paths from crossing.
+Game.computeFormationTargets = (chosen, wx, wz) => {
+    const n = chosen.length;
+    if (!n) return [];
+    let cx = 0, cz = 0;
+    chosen.forEach(u => { cx += u.x; cz += u.z; });
+    cx /= n; cz /= n;
+    const angle = Math.atan2(wz - cz, wx - cx);
+    const cosA = Math.cos(angle), sinA = Math.sin(angle);
+
+    // Spacing must clear the biggest footprint so slots never overlap.
+    let spacing = 2.5;
+    for (const u of chosen) {
+        if (Game.isTank(u.kind)) spacing = Math.max(spacing, (u.size || 1) * (Game.TANK_BOX_LEN || 1.5) * 2 * 0.85 + 0.8);
+        else if (u.kind === 'fuel' || u.kind === 'supply') spacing = Math.max(spacing, (u.size || 1) * 2.4);
+    }
+    spacing = Math.min(spacing, 5.0);
+
+    const offsets = Game.formationOffsets(n, spacing);
+    const slots = offsets.map(o => ({
+        x: Game.clamp(wx + o.x * cosA - o.z * sinA, 1, Game.WORLD_W - 1),
+        z: Game.clamp(wz + o.x * sinA + o.z * cosA, 1, Game.WORLD_H - 1),
+    }));
+
+    const isVeh = u => Game.isTank(u.kind) || u.kind === 'fuel' || u.kind === 'supply';
+    const vehicles = chosen.filter(isVeh);
+    const others = chosen.filter(u => !isVeh(u));
+    const taken = new Array(n).fill(false);
+    const out = [];
+
+    // Pick a set of slot indices spread EVENLY across the formation for the vehicles
+    // (so armor fans out across the area instead of bunching in the lead row).
+    const vehSlots = [];
+    if (vehicles.length) {
+        for (let k = 0; k < vehicles.length; k++) {
+            let idx = vehicles.length > 1 ? Math.round(k * (n - 1) / (vehicles.length - 1)) : Math.floor(n / 2);
+            idx = Math.max(0, Math.min(n - 1, idx));
+            while (taken[idx]) idx = (idx + 1) % n;
+            taken[idx] = true; vehSlots.push(idx);
+        }
+    }
+    // OFFSET-PRESERVING assignment: match a unit's position RELATIVE TO THE GROUP to a
+    // slot's position RELATIVE TO THE DESTINATION, so the man on the left of the group
+    // takes a left slot and nobody crosses the formation to reach a far slot (crossing
+    // = collisions = units settling off their circle). Units with the most extreme
+    // offset pick first so the corners claim the corner slots.
+    const matchByOffset = (units, slotIdxs) => {
+        const pool = slotIdxs.slice();
+        units.slice()
+            .sort((a, b) => ((b.x - cx) ** 2 + (b.z - cz) ** 2) - ((a.x - cx) ** 2 + (a.z - cz) ** 2))
+            .forEach(u => {
+                const ox = u.x - cx, oz = u.z - cz;
+                let best = -1, bestD = Infinity;
+                for (let i = 0; i < pool.length; i++) {
+                    const sx = slots[pool[i]].x - wx, sz = slots[pool[i]].z - wz;
+                    const d = (sx - ox) ** 2 + (sz - oz) ** 2;
+                    if (d < bestD) { bestD = d; best = i; }
+                }
+                const si = pool.splice(best, 1)[0];
+                out.push({ unit: u, x: slots[si].x, z: slots[si].z });
+            });
+    };
+    matchByOffset(vehicles, vehSlots);
+    const restSlots = [];
+    for (let i = 0; i < n; i++) if (!taken[i]) restSlots.push(i);
+    matchByOffset(others, restSlots);
+    return out;
+};
+
 Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false) => {
     const chosen = unitList || Game.selectedPlayerUnits();
     if (!chosen.length) return;
@@ -15,51 +89,11 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false) => {
     // already routed somewhere; otherwise it behaves like a normal move.
     queue = queue && mode === 'move';
 
-    // Calculate formation center → target angle for rotation
-    let cx = 0, cz = 0;
-    chosen.forEach(u => { cx += u.x; cz += u.z; });
-    cx /= chosen.length; cz /= chosen.length;
-    const angle = Math.atan2(wz - cz, wx - cx);
-
-    // Spacing must clear the biggest footprint in the group, or vehicle slots end up
-    // closer than the hulls are long — the tanks then overlap and shove each other
-    // forever (the grouped-tank jitter). Scale it up when armor/trucks are present.
-    let spacing = 2.5;
-    for (const u of chosen) {
-        if (Game.isTank(u.kind)) {
-            const len = (u.size || 1) * (Game.TANK_BOX_LEN || 1.5) * 2;   // full hull length
-            spacing = Math.max(spacing, len * 0.85 + 0.8);
-        } else if (u.kind === 'fuel' || u.kind === 'supply') {
-            spacing = Math.max(spacing, (u.size || 1) * 2.4);
-        }
-    }
-    spacing = Math.min(spacing, 5.0);
-    const offsets = Game.formationOffsets(chosen.length, spacing);
-
-    // ── Combined-movement controller: role-aware slot assignment + group speed ──
-    // Rank each formation slot by how far FORWARD it sits along the line of march,
-    // then match slots to units by role so a mixed group moves as a coherent body:
-    // armor leads, riflemen screen, the officer rides central, and medics / trucks /
-    // mortars sit to the rear (out of the lead). (Plain index order put whoever was
-    // selected first at the front, so a medic could end up on point.)
-    const cosA = Math.cos(angle), sinA = Math.sin(angle);
-    const slotFwd = offsets.map(o => {
-        const rx = o.x * cosA - o.z * sinA, rz = o.x * sinA + o.z * cosA;
-        return rx * cosA + rz * sinA;          // signed distance along the march
-    });
-    const slotOrder = offsets.map((_, i) => i).sort((a, b) => slotFwd[b] - slotFwd[a]); // front first
-    const roleRank = (u) => {
-        if (Game.isTank(u.kind)) return 0;                                    // armor leads
-        if (u.class === 'infantry' && !u.supportType) return 1;               // riflemen screen
-        if (u.supportType === 'officer' || u._actingOfficer) return 2;        // central
-        if (u.supportType === 'medic' || u.supportType === 'supply'
-            || u.supportType === 'fuel' || u.supportType === 'mechanic') return 5; // support to the rear
-        if (u.kind && String(u.kind).indexOf('mortar') === 0) return 5;       // mortars rear
-        return 3;                                                             // MG / AT / other, mid
-    };
-    const unitOrder = chosen.map((_, i) => i).sort((a, b) => roleRank(chosen[a]) - roleRank(chosen[b]));
-    const slotFor = new Array(chosen.length);
-    for (let k = 0; k < chosen.length; k++) slotFor[unitOrder[k]] = slotOrder[k];
+    // One distinct destination slot PER unit — the very same slots drawn as preview
+    // circles — with vehicles spread evenly across the formation. This is what makes
+    // each selected unit go to its own circle and keeps tanks from clumping.
+    const targets = Game.computeFormationTargets(chosen, wx, wz);
+    const targetFor = new Map(targets.map(t => [t.unit.id, t]));
 
     // Group pace = the slowest member's EFFECTIVE speed, so armor/trucks wait for the
     // infantry. Foot troops carry a hidden 0.6 base factor (+ stance) that vehicles
@@ -91,12 +125,10 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false) => {
         if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(unit); // ends guard/at-ease
         // Group pace cap: armor/trucks wait for the slowest member (cleared on arrival).
         if (groupMove && !isQueued) { unit._groupSpeed = groupSpeed; unit._groupMoveActive = true; }
-        // Rotate the unit's ROLE-ASSIGNED slot to face the movement direction.
-        const off = offsets[isQueued ? i : (slotFor[i] != null ? slotFor[i] : i)];
-        const rx = off.x * Math.cos(angle) - off.z * Math.sin(angle);
-        const rz = off.x * Math.sin(angle) + off.z * Math.cos(angle);
-        const tx = Game.clamp(wx + rx, 1, Game.WORLD_W - 1);
-        const tz = Game.clamp(wz + rz, 1, Game.WORLD_H - 1);
+        // This unit's assigned formation slot (matches its preview circle exactly).
+        const t = targetFor.get(unit.id);
+        const tx = t ? t.x : Game.clamp(wx, 1, Game.WORLD_W - 1);
+        const tz = t ? t.z : Game.clamp(wz, 1, Game.WORLD_H - 1);
         unit.targetX = tx;
         unit.targetZ = tz;
         if (isQueued) {
@@ -431,29 +463,25 @@ Game._showFormationPreview = (wx, wz) => {
     if (!chosen.length) return;
 
     const THREE = Game.THREE;
-    let cx = 0, cz = 0;
-    chosen.forEach(u => { cx += u.x; cz += u.z; });
-    cx /= chosen.length; cz /= chosen.length;
-    const angle = Math.atan2(wz - cz, wx - cx);
-
     // Red preview when attack-move is armed (advance + engage), green for a plain
     // move — matches the destination order-marker colours.
     const attackMode = Game.orderStance === 'attack';
     const ringColor = attackMode ? 0xff5544 : 0x88cc66;
 
-    const offsets = Game.formationOffsets(chosen.length, 2.5);
-    offsets.forEach(off => {
-        const rx = off.x * Math.cos(angle) - off.z * Math.sin(angle);
-        const rz = off.x * Math.sin(angle) + off.z * Math.cos(angle);
-        const px = Game.clamp(wx + rx, 1, Game.WORLD_W - 1);
-        const pz = Game.clamp(wz + rz, 1, Game.WORLD_H - 1);
+    // Draw one circle at EACH unit's actual assigned slot (same computation the move
+    // uses), so what you see is exactly where each unit will go. Vehicle slots get a
+    // bigger ring to read as armor positions.
+    const targets = Game.computeFormationTargets(chosen, wx, wz);
+    targets.forEach(t => {
+        const px = t.x, pz = t.z;
         const py = Game.getHeight ? Game.getHeight(px, pz) : 0;
-
-        const geo = new THREE.RingGeometry(0.25, 0.4, 12);
+        const veh = Game.isTank(t.unit.kind) || t.unit.kind === 'fuel' || t.unit.kind === 'supply';
+        const r = veh ? (t.unit.size || 1) * 0.7 : 0.4;
+        const geo = new THREE.RingGeometry(r - 0.15, r, 16);
         const mat = new THREE.MeshBasicMaterial({
             color: ringColor,
             transparent: true,
-            opacity: 0.45,
+            opacity: 0.5,
             depthWrite: false,
             side: THREE.DoubleSide,
         });
