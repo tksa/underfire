@@ -325,6 +325,26 @@ Game.applySeparation = (unit, dt) => {
                     if (dx * pX + dz * pZ < 0) { pX = -pX; pZ = -pZ; }
                     const m = Math.max(push.px, push.pz) + 0.6;
                     sepX += pX * m * 7.0; sepZ += pZ * m * 7.0;
+                } else if (unit.path && unit.path.length) {
+                    // TANGENTIAL SLIDE around a STOPPED hull. De-penetration alone is
+                    // radial — a man heading for a goal BEYOND a parked tank just gets
+                    // shoved straight back off the rear and grinds there. If his
+                    // destination is past this hull, add a sideways push so he slides
+                    // AROUND it. The side is committed per-tank so he doesn't dither.
+                    const wp = unit.path[unit.path.length - 1];
+                    const gx = wp.x - unit.x, gz = wp.z - unit.z;
+                    const glen = Math.hypot(gx, gz) || 1;
+                    const tox = -dx, toz = -dz;                  // unit -> tank
+                    const tlen = Math.hypot(tox, toz) || 1;
+                    if ((gx * tox + gz * toz) / (glen * tlen) > 0.45) {   // goal lies past the tank
+                        let pX = -toz / tlen, pZ = tox / tlen;   // perpendicular to tank dir
+                        if (unit._slideFor !== other.id) {
+                            unit._slideFor = other.id;
+                            unit._slideSign = (gx * pX + gz * pZ >= 0) ? 1 : -1;  // toward the goal
+                        }
+                        const sgn = unit._slideSign || 1;
+                        sepX += pX * sgn * 5.0; sepZ += pZ * sgn * 5.0;
+                    }
                 }
             }
             continue;
