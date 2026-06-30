@@ -61,7 +61,9 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false) => {
     };
     let groupSpeed = Infinity;
     if (chosen.length > 1 && !queue) for (const u of chosen) groupSpeed = Math.min(groupSpeed, effSpeed(u));
-    const groupMove = chosen.length > 1 && !queue && groupSpeed < Infinity && groupSpeed > 0;
+    // Opt-in only: by default every unit travels at its own speed. The pace cap is
+    // applied solely when the player has toggled "march together" on.
+    const groupMove = Game.groupSpeedMatch && chosen.length > 1 && !queue && groupSpeed < Infinity && groupSpeed > 0;
 
     chosen.forEach((unit, i) => {
         const isQueued = queue && unit.path && unit.path.length > 0;
@@ -161,6 +163,18 @@ Game.setOrderStance = (stance) => {
     Game.pushMessage(Game.orderStance === 'attack'
         ? 'Attack-move: units advance ready and engage.'
         : 'Move: units relocate without seeking combat.', 1.6);
+};
+
+// Toggle "march together" pace matching. OFF (default) = every unit moves at its
+// own speed; ON = a mixed group holds the slowest member's pace.
+Game.toggleGroupPace = () => {
+    Game.groupSpeedMatch = !Game.groupSpeedMatch;
+    const btn = document.getElementById('paceBtn');
+    if (btn) btn.classList.toggle('active', Game.groupSpeedMatch);
+    if (!Game.groupSpeedMatch) Game.units.forEach(u => { u._groupMoveActive = false; }); // release any active cap
+    Game.pushMessage(Game.groupSpeedMatch
+        ? 'March together: the group holds the slowest unit’s pace.'
+        : 'March: each unit moves at its own speed.', 1.8);
 };
 
 /**

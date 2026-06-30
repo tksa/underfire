@@ -1501,6 +1501,10 @@ Game.getTeamUnits = (team) => Game.units.filter(u => u.alive && u.team === team)
 // Formation types
 Game.FORMATIONS = ['line', 'column', 'wedge', 'block', 'spread'];
 Game.currentFormation = 'block';
+// March-together pace: OFF by default so every unit moves at its OWN speed. When
+// toggled on, a mixed group holds the slowest member's pace (armor waits for the
+// infantry). Toggled from the HUD "Pace" button / Game.toggleGroupPace().
+Game.groupSpeedMatch = false;
 
 Game.formationOffsets = (count, spacing = 2.0, type) => {
     type = type || Game.currentFormation;

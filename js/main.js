@@ -123,8 +123,10 @@ Game._tankYield = (unit) => {
         const ahead = rx * hx + rz * hz;
         if (ahead < 0.2 || ahead > lookLen) continue;
         if (Math.abs(rx * -hz + rz * hx) > halfW) continue;          // not in our lane
-        const oMoving = (o.currentSpeed || 0) > 0.15 || (o.path && o.path.length);
-        if (!oMoving) continue;                                       // standing: make-way handles him
+        // Yield only to a man ACTUALLY moving across — not one who has merely stopped
+        // to wait for us (else tank and man both wait forever). Tanks have right of
+        // way over halted/standing troops.
+        if ((o.currentSpeed || 0) < 0.5) continue;
         // Crossing? compare his heading to ours — skip escorts moving the same way.
         if (o.path && o.path.length) {
             let odx = o.path[0].x - o.x, odz = o.path[0].z - o.z;
@@ -362,6 +364,19 @@ Game._vehicleAvoid = (unit) => {
     }
 
     const blockMoving = (block.currentSpeed || 0) > 0.3 || (block.path && block.path.length > 0);
+
+    // FOOT TROOPS yield to a MOVING FRIENDLY tank: stop and let it pass rather than
+    // weaving around a hull that's itself moving — that weave was the approach-stop-
+    // creep jitter. The stop is held briefly (refreshed every frame the tank is in
+    // our corridor) so it stays put smoothly until the tank clears, then resumes.
+    // (Enemy moving tanks are handled by the scatter/crush path, not a polite wait.)
+    if (!vehSized && blockMoving && (block.currentSpeed || 0) > 0.3 && block.team === unit.team) {
+        if (unit._detour && unit.path[0] === unit._detour) unit.path.shift();
+        unit._detour = null;
+        unit.stopTimer = Math.max(unit.stopTimer || 0, 0.4);   // wait for the tank
+        return;
+    }
+
     // Reuse the chosen side while still avoiding the same tank; pick afresh otherwise.
     let side;
     if (unit._detour && unit._detour.forId === block.id) {

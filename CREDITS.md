@@ -40,6 +40,15 @@ Source: https://sketchfab.com/3d-models/char-b1-bis-e8a1fbe0981940b1b4ddcc1a4271
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). (Its placeholder
 textures were replaced in-engine with a weathered French-green repaint.)
 
+"French Panhard 178" (`models/french_panhard.glb`) is by **42manako**
+(https://skfb.ly/pw9AX), used under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+(Textures recompressed for web; geometry unchanged.)
+
+The **Renault AHN3 supply truck** (`models/french_supply.glb`) and the
+**Laffly fuel truck** (`models/french_fuel.glb`) are original models created for
+Under Fire by the project, released as **CC0 / public domain**.
+
 ## Textures (OpenGameArt.org, CC0)
 - **Dirty Grass Seamless** (ground detail normal + AO) — used as terrain detail maps.
   Source: "4K Seamless Grass Dirt Ground Texture with all Shader Maps", CC0.
