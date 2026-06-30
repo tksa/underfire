@@ -331,9 +331,9 @@ Game.setupPostFX = () => {
         const tiltShift = new PF.TiltShiftEffect({
             offset: 0.0,
             rotation: 0.0,
-            focusArea: 0.9,    // wide sharp band over the playfield (tuned)
-            feather: 0.22,
-            kernelSize: PF.KernelSize.SMALL,
+            focusArea: 0.6,    // sharp band over the playfield; blur top/bottom edges
+            feather: 0.3,
+            kernelSize: PF.KernelSize.LARGE,   // SMALL was imperceptible — needs a real blur radius
         });
         const hueSat = new PF.HueSaturationEffect({ hue: -0.06, saturation: 0.05 });
         const brightContrast = new PF.BrightnessContrastEffect({ brightness: 0.01, contrast: 0.12 });
@@ -358,7 +358,7 @@ Game.setupPostFX = () => {
         Game.postfxState = {
             upscaleFactor: Game.upscaleFactor,
             bloomIntensity: 0.4, bloomThreshold: 0.65,
-            tiltFocusArea: 0.9, tiltFeather: 0.22,
+            tiltFocusArea: 0.6, tiltFeather: 0.3,
             saturation: 0.05, hue: -0.06,
             brightness: 0.01, contrast: 0.12,
             vignetteOffset: 0.62, vignetteDarkness: 0.67,
@@ -392,6 +392,11 @@ Game.setupPostFX = () => {
         if (Game.buildingDebugDefaults) {
             for (const k in Game.buildingDebugDefaults) {
                 if (Game.postfxState[k] === undefined) Game.postfxState[k] = Game.buildingDebugDefaults[k];
+            }
+        }
+        if (Game.tankDebugDefaults) {
+            for (const k in Game.tankDebugDefaults) {
+                if (Game.postfxState[k] === undefined) Game.postfxState[k] = Game.tankDebugDefaults[k];
             }
         }
         Game.buildPostFXDebugUI();
@@ -534,6 +539,8 @@ Game._postfxControlDefs = () => {
         ...(Game._valorDecalControlDefs ? Game._valorDecalControlDefs() : []),
         ...(Game._valorFoliageControlDefs ? Game._valorFoliageControlDefs() : []),
         ...(Game._buildingControlDefs ? Game._buildingControlDefs() : []),
+        ...(Game._tankControlDefs ? Game._tankControlDefs() : []),
+        ...(Game._modelControlDefs ? Game._modelControlDefs() : []),
     ];
 };
 
@@ -557,7 +564,32 @@ Game.postfxValuesText = () => {
         `  valorDecals:    { scorch: ${s.valorScorchEnable ? 'true' : 'false'}, opacity: ${f(s.valorScorchOpacity)}, max: ${f(s.valorScorchMax)} },`,
         `  valorFoliage:   { treeBlur: ${f(s.valorTreeBlur)}, hedgeBlur: ${f(s.valorHedgeBlur)} },`,
         '}',
+        '',
+        Game._modelValuesText ? Game._modelValuesText() : '',
     ].join('\n');
+};
+
+// Serialise the live per-model placement configs + tank/truck tuning, so what the
+// debug sliders change is exactly what you paste back into js/units.js / js/main.js.
+Game._modelValuesText = () => {
+    const f = (n) => { const t = (+n).toFixed(3).replace(/\.?0+$/, ''); return t === '' || t === '-' ? '0' : t; };
+    const obj = (o) => {
+        const ks = Object.keys(o || {});
+        return ks.length ? '{ ' + ks.map(k => `${k}: ${f(o[k])}`).join(', ') + ' }' : '{}';
+    };
+    const lines = [
+        '// js/units.js — Game.MODEL_* (paste over the matching lines)',
+        `MODEL_SCALE = ${obj(Game.MODEL_SCALE)}`,
+        `MODEL_WRAPPER_Y = ${obj(Game.MODEL_WRAPPER_Y)}   // absolute wrapper height (Scan Nodes → Wrapper Y); wins over Y_TRIM`,
+        `MODEL_Y_TRIM = ${obj(Game.MODEL_Y_TRIM)}`,
+        `MODEL_YAW = ${obj(Game.MODEL_YAW)}`,
+        `MODEL_STEER_PIVOT = ${obj(Game.MODEL_STEER_PIVOT)}`,
+        '',
+        '// js/main.js — tank/truck tuning',
+        `TANK_SEP_RADIUS = ${f(Game.TANK_SEP_RADIUS)}; TANK_SEP_STRENGTH = ${f(Game.TANK_SEP_STRENGTH)};`,
+        `TRUCK_MAX_STEER = ${f(Game.TRUCK_MAX_STEER)}; TRUCK_WHEELBASE = ${f(Game.TRUCK_WHEELBASE)}; TRUCK_ACCEL = ${f(Game.TRUCK_ACCEL)};`,
+    ];
+    return lines.join('\n');
 };
 
 // Inject the post-processing section into the debug panel (idempotent).
@@ -583,7 +615,14 @@ Game.buildPostFXDebugUI = () => {
             gh.style.cssText = 'color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 2px;letter-spacing:1px';
             wrap.appendChild(gh);
         }
-        const v0 = Game.postfxState[def.key];
+        // Seed from postfxState, falling back to the def's own default (model
+        // controls aren't in the static postfxState seed) so the slider/number
+        // always start at a real value rather than NaN/empty.
+        let v0 = Game.postfxState[def.key];
+        if (v0 === undefined) {
+            v0 = (def.default !== undefined) ? def.default : (def.type === 'bool' ? false : 0);
+            Game.postfxState[def.key] = v0;
+        }
         // Boolean controls render as a checkbox.
         if (def.type === 'bool') {
             const blabel = document.createElement('label');
@@ -633,6 +672,10 @@ Game.buildPostFXDebugUI = () => {
     valuesBox.readOnly = true;
     valuesBox.style.cssText = 'width:100%;height:150px;background:#10141a;color:#bfeecc;border:1px solid rgba(80,90,100,0.4);font-size:10px;font-family:monospace;margin-top:2px;box-sizing:border-box';
     valuesBox.value = Game.postfxValuesText();
+    // Expose the copy box so other panels (e.g. Scan Nodes → Wrapper Y) can refresh
+    // it live when they change a value the config dumps.
+    Game._postfxValuesBox = valuesBox;
+    Game._refreshPostFXCopyBox = () => { if (Game._postfxValuesBox) Game._postfxValuesBox.value = Game.postfxValuesText(); };
     btn.addEventListener('click', () => {
         valuesBox.value = Game.postfxValuesText();
         valuesBox.select();

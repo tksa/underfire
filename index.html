@@ -897,13 +897,15 @@
       margin-bottom: 6px;
     }
 
-    .fm-strip {
+    .fm-strip,
+    .pos-strip {
       display: flex;
       flex-direction: column;
       gap: 2px;
     }
 
-    .fm-btn {
+    .fm-btn,
+    .pos-btn {
       width: 36px;
       height: 22px;
       display: flex;
@@ -918,12 +920,14 @@
       transition: all 0.15s;
     }
 
-    .fm-btn:hover {
+    .fm-btn:hover,
+    .pos-btn:hover {
       color: #c4cad4;
       border-color: #8e96a2;
     }
 
-    .fm-btn.active {
+    .fm-btn.active,
+    .pos-btn.active {
       color: #c9a45d;
       border-color: #c9a45d;
       background: rgba(80, 70, 30, 0.3);
@@ -1214,7 +1218,7 @@
           Space: Pause &nbsp; X: Exit vehicle &nbsp; L: Last attack<br>
           RC enemy: Attack target &nbsp; RC ground (mortar): Bombard<br>
           Arrows / screen edge: Pan &nbsp; + / -: Zoom<br>
-          Shift+RC: Queue &nbsp; Esc: Menu &nbsp; Z: Formation &nbsp; /: Behavior
+          Ctrl/Cmd/Shift+RC: Queue waypoint &nbsp; Esc: Menu &nbsp; Z: Formation &nbsp; /: Behavior
         </div>
       </div>
       <div class="hud-section minimap-section">
@@ -1273,6 +1277,19 @@
           <div class="fm-btn" data-formation="spread" title="Spread"
             onclick="Game.currentFormation='spread';document.querySelectorAll('.fm-btn').forEach(b=>b.classList.toggle('active',b.dataset.formation==='spread'))">
             ⁘</div>
+        </div>
+      </div>
+      <div class="hud-section pos-section">
+        <div class="hud-title">Posture (X)</div>
+        <div class="pos-strip">
+          <div class="pos-btn active" data-posture="auto" title="Auto — settle, rest and re-ready on their own"
+            onclick="Game.AI.applyPosture(null)">⟳</div>
+          <div class="pos-btn" data-posture="attention" title="Attention — stand formed up and ready"
+            onclick="Game.AI.applyPosture('attention')">⇡</div>
+          <div class="pos-btn" data-posture="ease" title="At ease — relax in place"
+            onclick="Game.AI.applyPosture('ease')">≈</div>
+          <div class="pos-btn" data-posture="guard" title="Guard — right-click an area to patrol (C)"
+            onclick="Game.AI.beginGuard()">◎</div>
         </div>
       </div>
       <div class="hud-section info-section" id="selectedPanel"></div>
@@ -1482,15 +1499,19 @@
   <div id="filmGrain"></div>
   <div id="filmTint"></div>
 
-  <!-- Three.js importmap (ES module from cdnjs) -->
+  <!-- Importmap: all ESM deps vendored locally under /vendor (THREE r180 MIT,
+       three/addons MIT, fflate MIT, ez-tree MIT, postprocessing Zlib). Previously
+       these loaded from CDNs (cdnjs/jsdelivr); intermittent CDN 404s broke the
+       fatal top-level imports in main.js and the game wouldn't boot. Serving them
+       from the same origin removes that failure mode (and lets it run offline). -->
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.180.0/three.module.min.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
-      "fflate": "https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js",
-      "@dgreenheck/ez-tree": "https://cdn.jsdelivr.net/npm/@dgreenheck/ez-tree@1.1.0/build/ez-tree.es.js",
-      "postprocessing": "https://cdn.jsdelivr.net/npm/postprocessing@6.39.1/build/index.js"
+      "three": "./vendor/three-0.180.0.module.min.js",
+      "three/addons/": "./vendor/jsm/",
+      "fflate": "./vendor/fflate-0.8.2.js",
+      "@dgreenheck/ez-tree": "./vendor/ez-tree-1.1.0.js",
+      "postprocessing": "./vendor/postprocessing-6.39.1.js"
     }
   }
   </script>
@@ -1506,7 +1527,7 @@
       var classic = [
         'config', 'i18n', 'utils', 'engine', 'weapons', 'terrain', 'units',
         'pathfinding', 'combat', 'ai', 'camera', 'input', 'renderer', 'audio',
-        'mission', 'neural_export', 'unit_modules', 'valor', 'buildings', 'garrison_ui'
+        'mission', 'neural_export', 'unit_modules', 'ai_tactics', 'valor', 'buildings', 'garrison_ui'
       ];
       classic.forEach(function (f) {
         document.write('<script src="js/' + f + '.js?v=' + v + '"><\/script>');

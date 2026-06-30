@@ -7,9 +7,13 @@
 Game.selectedPlayerUnits = () =>
     Game.units.filter(u => u.alive && u.team === Game.TEAM.FRENCH && Game.selection.has(u.id));
 
-Game.issueCommand = (wx, wz, mode = 'move', unitList = null) => {
+Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false) => {
     const chosen = unitList || Game.selectedPlayerUnits();
     if (!chosen.length) return;
+    // Waypoint queuing (Ctrl/Cmd + move): append a leg to the existing route
+    // instead of replacing it. Only sensible for plain moves on units that are
+    // already routed somewhere; otherwise it behaves like a normal move.
+    queue = queue && mode === 'move';
 
     // Calculate formation center → target angle for rotation
     let cx = 0, cz = 0;
@@ -18,37 +22,124 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null) => {
     const angle = Math.atan2(wz - cz, wx - cx);
 
     const offsets = Game.formationOffsets(chosen.length, 2.5);
+
+    // ── Combined-movement controller: role-aware slot assignment + group speed ──
+    // Rank each formation slot by how far FORWARD it sits along the line of march,
+    // then match slots to units by role so a mixed group moves as a coherent body:
+    // armor leads, riflemen screen, the officer rides central, and medics / trucks /
+    // mortars sit to the rear (out of the lead). (Plain index order put whoever was
+    // selected first at the front, so a medic could end up on point.)
+    const cosA = Math.cos(angle), sinA = Math.sin(angle);
+    const slotFwd = offsets.map(o => {
+        const rx = o.x * cosA - o.z * sinA, rz = o.x * sinA + o.z * cosA;
+        return rx * cosA + rz * sinA;          // signed distance along the march
+    });
+    const slotOrder = offsets.map((_, i) => i).sort((a, b) => slotFwd[b] - slotFwd[a]); // front first
+    const roleRank = (u) => {
+        if (Game.isTank(u.kind)) return 0;                                    // armor leads
+        if (u.class === 'infantry' && !u.supportType) return 1;               // riflemen screen
+        if (u.supportType === 'officer' || u._actingOfficer) return 2;        // central
+        if (u.supportType === 'medic' || u.supportType === 'supply'
+            || u.supportType === 'fuel' || u.supportType === 'mechanic') return 5; // support to the rear
+        if (u.kind && String(u.kind).indexOf('mortar') === 0) return 5;       // mortars rear
+        return 3;                                                             // MG / AT / other, mid
+    };
+    const unitOrder = chosen.map((_, i) => i).sort((a, b) => roleRank(chosen[a]) - roleRank(chosen[b]));
+    const slotFor = new Array(chosen.length);
+    for (let k = 0; k < chosen.length; k++) slotFor[unitOrder[k]] = slotOrder[k];
+
+    // Group pace = the slowest member's EFFECTIVE speed, so armor/trucks wait for the
+    // infantry. Foot troops carry a hidden 0.6 base factor (+ stance) that vehicles
+    // don't, so compare like-for-like here and let the move module cap to this.
+    const effSpeed = (u) => {
+        let s = u.speed || 0;
+        if (!Game.isTank(u.kind) && u.kind !== 'fuel' && u.kind !== 'supply') {
+            const stanceF = ({ prone: 0.28, crouch: 0.55, stand: 1.0, run: 1.5 })[u.stance] ?? 1.0;
+            s *= 0.6 * stanceF;
+        }
+        return s;
+    };
+    let groupSpeed = Infinity;
+    if (chosen.length > 1 && !queue) for (const u of chosen) groupSpeed = Math.min(groupSpeed, effSpeed(u));
+    const groupMove = chosen.length > 1 && !queue && groupSpeed < Infinity && groupSpeed > 0;
+
     chosen.forEach((unit, i) => {
-        // A move order cancels any standing attack/bombard/facing/enter commitment
+        const isQueued = queue && unit.path && unit.path.length > 0;
+        // A move order cancels any standing attack/bombard/facing/enter commitment.
+        // (A queued leg keeps the unit rolling, so don't yank these mid-route — but
+        // it's still a relocate, so clearing them is harmless and consistent.)
         unit.forcedTargetId = null;
         unit.bombardX = null; unit.bombardZ = null;
         unit._bombarding = false;
         unit._faceAngle = null; unit._faceUntil = 0;
         unit._enterRec = null;
-        // Rotate offset to face movement direction
-        const rx = offsets[i].x * Math.cos(angle) - offsets[i].z * Math.sin(angle);
-        const rz = offsets[i].x * Math.sin(angle) + offsets[i].z * Math.cos(angle);
+        if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(unit); // ends guard/at-ease
+        // Group pace cap: armor/trucks wait for the slowest member (cleared on arrival).
+        if (groupMove && !isQueued) { unit._groupSpeed = groupSpeed; unit._groupMoveActive = true; }
+        // Rotate the unit's ROLE-ASSIGNED slot to face the movement direction.
+        const off = offsets[isQueued ? i : (slotFor[i] != null ? slotFor[i] : i)];
+        const rx = off.x * Math.cos(angle) - off.z * Math.sin(angle);
+        const rz = off.x * Math.sin(angle) + off.z * Math.cos(angle);
         const tx = Game.clamp(wx + rx, 1, Game.WORLD_W - 1);
         const tz = Game.clamp(wz + rz, 1, Game.WORLD_H - 1);
         unit.targetX = tx;
         unit.targetZ = tz;
-        unit.path = Game.findPath(unit, unit.x, unit.z, tx, tz);
+        if (isQueued) {
+            // Append a leg from the current end of the route (skip the live detour
+            // waypoint if one is in front) so the unit visits waypoints in order.
+            const route = unit.path.filter(p => !p._detour);
+            const from = route.length ? route[route.length - 1] : { x: unit.x, z: unit.z };
+            const leg = Game.findPath(unit, from.x, from.z, tx, tz);
+            unit.path = route.concat(leg);
+        } else {
+            unit.path = Game.findPath(unit, unit.x, unit.z, tx, tz);
+        }
         // Attack-move: advance to the area but stop to engage any enemy that comes
-        // into range, then push on. A plain move keeps the unit's current stance;
-        // hold stays put-and-defend.
+        // into range, then push on. A plain move is a RELOCATE order: obey it and
+        // get to the destination, do NOT stop to fight or chase (it can still
+        // return fire on the move, but never halts/diverts). Hold = put-and-defend.
         if (mode === 'attack') { unit.orderMode = 'assault'; unit.holdFire = false; }
         else if (mode === 'hold') unit.orderMode = 'hold';
+        else {
+            // Plain move. Reset any standing 'assault'/forced-target lock so the
+            // engage module can't halt the unit when an enemy is in range — this
+            // is what made a tank under fire "not listen" and refuse to pull back.
+            unit.orderMode = 'move';
+            unit._engageId = null;
+            unit._inFiringPos = false;
+            unit._pursueAnchor = null;
+            unit._pursueTimer = 0;
+        }
+        // Reverse-into-spot: a plain Move to a SHORT distance BEHIND a vehicle backs
+        // it in rather than swinging the whole hull around. Tanks + trucks only.
+        unit._reverseMove = false;
+        if (mode === 'move' && !isQueued
+            && (Game.isTank(unit.kind) || unit.kind === 'fuel' || unit.kind === 'supply')) {
+            const gAng = Math.atan2(tz - unit.z, tx - unit.x);
+            const gd = Math.hypot(tx - unit.x, tz - unit.z);
+            if (gd < (Game.REVERSE_MAX_DIST ?? 11) && Math.abs(Game.angleDiff(unit.angle, gAng)) > 1.9) {
+                unit._reverseMove = true;
+                // Back STRAIGHT into the spot: replace A*'s tile-snapped, slightly
+                // curved short path with a single direct segment to the exact point.
+                // The curve was making the lorry steer through extra lanes and never
+                // cleanly settle on the goal. A short reverse is a clear, direct back-up.
+                unit.path = [{ x: tx, z: tz }];
+            }
+        }
         // Combat readiness: a plain Move travels "weapons stowed" — the unit needs
-        // a moment to react to contact. Attack-move advances already ready.
-        if (mode === 'move') { unit._combatReady = false; unit._readyTimer = 0; }
-        else unit._combatReady = true;
+        // a moment to react to contact. Attack-move advances already ready. A
+        // queued leg keeps whatever readiness it already had (no re-stow stall).
+        if (mode === 'move' && !isQueued) { unit._combatReady = false; unit._readyTimer = 0; }
+        else if (mode !== 'move') unit._combatReady = true;
         unit.moving = true;
         unit.stopTimer = 0;
-        unit.orderDelay = Game.commandDelay(unit);
-        // Pulsing destination marker: red for an attack-move, green for a plain move.
-        Game.spawnOrderMarker(tx, tz, mode === 'attack' ? 0xff5544 : 0x88cc66);
+        // Don't re-impose the command reaction delay on a queued leg — the unit is
+        // already rolling and just gets another waypoint tacked on.
+        if (!isQueued) unit.orderDelay = Game.commandDelay(unit);
+        // Pulsing destination marker: red attack-move, green move, cyan queued waypoint.
+        Game.spawnOrderMarker(tx, tz, mode === 'attack' ? 0xff5544 : (isQueued ? 0x55ccff : 0x88cc66));
     });
-    Game.pushMessage(mode === 'attack' ? 'Attack-move ordered.' : 'Move ordered.', 1.8);
+    Game.pushMessage(queue ? 'Waypoint added.' : (mode === 'attack' ? 'Attack-move ordered.' : 'Move ordered.'), 1.8);
     if (Game.Audio) {
         const anyTank = chosen.some(u => Game.isTank(u.kind));
         Game.Audio.voice(anyTank ? 'f_tank_move' : 'f_sold_move');
@@ -97,6 +188,7 @@ Game.orderRetreat = (x, z) => {
         u.forcedTargetId = null;
         u.bombardX = null; u.bombardZ = null; u._bombarding = false;
         u._enterRec = null;
+        if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
         u.orderMode = 'retreat';
         u.retreating = true;
         const threat = (u._engageId != null ? Game.getUnitById(u._engageId) : null) || Game.nearestEnemy(u);
@@ -128,6 +220,7 @@ Game.orderAttackGround = (x, z) => {
         if (!w || w.fireType === 'none' || (w.gameRange || 0) <= 0) return; // unarmed
         any = true;
         u._enterRec = null;
+        if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
         u.bombardX = x; u.bombardZ = z;
         u.forcedTargetId = null;
         u.orderMode = 'aggressive';
@@ -191,6 +284,7 @@ Game.orderAttackTarget = (target) => {
         if (!w || w.fireType === 'none' || (w.gameRange || 0) <= 0) return; // unarmed
         any = true;
         u._enterRec = null;
+        if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
         if (w.fireType === 'indirect') {
             u.bombardX = target.x; u.bombardZ = target.z;
             u.forcedTargetId = null;
@@ -588,16 +682,15 @@ Game.handleInputEvents = () => {
                 } else if (Game._commandMode === 'attackground') {
                     Game.orderAttackGround(ground.x, ground.z);
                     Game._commandMode = null;
+                } else if (Game._commandMode === 'guard') {
+                    Game.AI.setGuard(ground.x, ground.z);
+                    Game._commandMode = null;
                 } else {
-                    // Shift+right-click = queue waypoint
-                    if (e.shiftKey) {
-                        Game.selectedPlayerUnits().forEach(u => {
-                            if (!u.path) u.path = [];
-                            u.path.push({ x: ground.x, z: ground.z });
-                        });
-                        if (Game.selectedPlayerUnits().length) {
-                            Game.spawnOrderMarker(ground.x, ground.z);
-                        }
+                    // Ctrl/Cmd (or Shift) + right-click = queue a movement waypoint.
+                    // Units visit each queued point in order; legs are pathfound so
+                    // they route around obstacles (not the old straight-line push).
+                    if (e.ctrlKey || e.metaKey || e.shiftKey) {
+                        Game.issueCommand(ground.x, ground.z, 'move', null, true);
                     } else {
                         // Plain right-click. Clicking an enemy ALWAYS attacks it. On open
                         // ground, obey the current order stance: 'attack' = attack-move
@@ -829,6 +922,16 @@ Game.handleInputEvents = () => {
             Game.pushMessage('Smoke — right-click target.', 2.0);
         }
 
+        // Posture cycle (X key): Attention -> At Ease -> Stand down (auto)
+        if (e.code === 'KeyX') {
+            Game.cyclePosture();
+        }
+
+        // Guard an area (C key) — enter placement mode, right-click sets the centre
+        if (e.code === 'KeyC') {
+            Game.AI.beginGuard();
+        }
+
         // Stop / cancel orders (V key)
         if (e.code === 'KeyV') {
             Game.selectedPlayerUnits().forEach(u => {
@@ -838,6 +941,7 @@ Game.handleInputEvents = () => {
                 u.forcedTargetId = null;
                 u.bombardX = null; u.bombardZ = null;
                 u._bombarding = false;
+                if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
             });
             Game.pushMessage('Units stopped.', 1.0);
         }

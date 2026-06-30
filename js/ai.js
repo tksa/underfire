@@ -236,13 +236,17 @@ Game.updateAI = (unit, dt, enemy) => {
     if (enemy) {
         const d = Game.dist(unit.x, unit.z, enemy.x, enemy.z);
         if (role === 'maneuver' && posture === 'attack' && d > unit.range * 0.6) {
-            // Bound forward toward the enemy (the fire team overwatches us)
+            // Bound forward toward the enemy (the fire team overwatches us). Plan a
+            // fresh bound only once the last one is spent — re-planning every
+            // think-tick made the man twitch and never commit to a rush.
             unit._ai = 'advance';
-            const ang = Game.angleTo(unit.x, unit.z, enemy.x, enemy.z) + Game.rand(-0.3, 0.3);
-            const step = Math.min(d - unit.range * 0.5, 7 * Game.TILE);
-            const gx = Game.clamp(unit.x + Math.cos(ang) * step, 1, Game.WORLD_W - 1);
-            const gz = Game.clamp(unit.z + Math.sin(ang) * step, 1, Game.WORLD_H - 1);
-            unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
+            if (!unit.path || !unit.path.length) {
+                const ang = Game.angleTo(unit.x, unit.z, enemy.x, enemy.z) + Game.rand(-0.3, 0.3);
+                const step = Math.min(d - unit.range * 0.5, 7 * Game.TILE);
+                const gx = Game.clamp(unit.x + Math.cos(ang) * step, 1, Game.WORLD_W - 1);
+                const gz = Game.clamp(unit.z + Math.sin(ang) * step, 1, Game.WORLD_H - 1);
+                unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
+            }
             setStance(supp > 20 ? 'crouch' : 'stand');
         } else {
             // Base of fire / in range: hold position and shoot (combat fires)
@@ -336,11 +340,24 @@ Game.updateSquadAI = (dt) => {
 
         // Posture: break and fall back if mauled or pinned; press the attack if it's
         // an assault squad or most of the squad is in contact; otherwise hold.
-        let posture;
+        let candidate;
         const steadied = mem.some(u => u._steadied); // an officer is with the squad
-        if (losses >= (steadied ? 0.6 : 0.5) || avgSupp > (steadied ? 82 : 72)) posture = 'fallback';
-        else if (nKnown > 0 && (mem[0].aiState === 'attack' || nKnown >= Math.ceil(strength * 0.5))) posture = 'attack';
-        else posture = 'hold';
+        if (losses >= (steadied ? 0.6 : 0.5) || avgSupp > (steadied ? 82 : 72)) candidate = 'fallback';
+        else if (nKnown > 0 && (mem[0].aiState === 'attack' || nKnown >= Math.ceil(strength * 0.5))) candidate = 'attack';
+        else candidate = 'hold';
+
+        // Intent hysteresis (the tactical arbiter): hold the current posture for a
+        // minimum dwell so the squad doesn't thrash attack<->hold every time one
+        // man's line of sight to the enemy blinks in and out. Falling back is a
+        // survival decision and overrides the dwell instantly.
+        const MIN_DWELL = 4.0;
+        if (sq.posture == null) { sq.posture = candidate; sq.postureSince = Game.gameClock; }
+        if (candidate !== sq.posture
+            && (candidate === 'fallback' || (Game.gameClock - (sq.postureSince || 0)) >= MIN_DWELL)) {
+            sq.posture = candidate;
+            sq.postureSince = Game.gameClock;
+        }
+        const posture = sq.posture;
 
         // Roles: attacking squads split into a base of fire and a maneuver element
         // (bounding overwatch); everyone else forms a base of fire from cover.

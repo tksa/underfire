@@ -7,6 +7,22 @@ Game.rand = (min = 0, max = 1) => min + Math.random() * (max - min);
 Game.randi = (min, max) => Math.floor(Game.rand(min, max + 1));
 Game.clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 Game.lerp = (a, b, t) => a + (b - a) * t;
+// Critically-damped spring smoothing (Unity-style SmoothDamp). Eases IN and OUT,
+// reaches the goal without overshoot/oscillation, and — unlike a fixed-duration
+// easing curve — re-targets gracefully when the goal changes mid-flight, so an
+// interrupted sit-down naturally reverses to standing. `velObj[velKey]` holds the
+// per-channel velocity between frames. smoothTime ~= time to settle / ~2.
+Game.smoothDamp = (current, target, velObj, velKey, smoothTime, dt) => {
+    smoothTime = Math.max(0.0001, smoothTime);
+    const omega = 2 / smoothTime;
+    const x = omega * dt;
+    const exp = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+    const change = current - target;
+    const v0 = velObj[velKey] || 0;
+    const temp = (v0 + omega * change) * dt;
+    velObj[velKey] = (v0 - omega * temp) * exp;
+    return target + (change + temp) * exp;
+};
 Game.dist = (ax, az, bx, bz) => Math.hypot(bx - ax, bz - az);
 Game.distSq = (ax, az, bx, bz) => { const dx = bx - ax, dz = bz - az; return dx * dx + dz * dz; };
 Game.angleTo = (ax, az, bx, bz) => Math.atan2(bz - az, bx - ax);

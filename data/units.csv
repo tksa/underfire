@@ -29,14 +29,14 @@ german_panzer4,german,panzer4,vehicle,,Panzer IV,kwk37_75mm,,260,5,1,22,1.2,4,#6
 german_sdkfz,german,sdkfz,vehicle,,Sd.Kfz. 222,kwk30_sdkfz,,110,7.5,0.85,24,3,2,#7b7f73,wheeled,12,8,8,6,3.5,2.5,,1940,,,,,,,,,,
 french_medic,french,medic,support,medic,Medic,pistol_fr,,60,4.5,0.45,14,8,1,#eeeeee,,0,0,0,,,,,1940,,,,,,,,,,
 french_mechanic,french,mechanic,support,mechanic,Mechanic,pistol_fr,,65,4.2,0.45,14,8,1,#88aacc,,0,0,0,,,,,1940,,,,,,,,,,
-french_supply_truck,french,supply,support,supply,Supply Truck,none,,80,5,0.85,16,5,2,#8b8d6b,,2,1,1,,,,,1940,,,,,,,,,,
-french_fuel_truck,french,fuel,support,fuel,Fuel Truck,none,,80,5,0.85,16,5,2,#6b8b6b,,2,1,1,,,,,1940,,,,,,,,,,
+french_supply_truck,french,supply,support,supply,Renault AHN Supply Truck,none,,80,5,0.85,16,2,2,#8b8d6b,,2,1,1,,,,,1940,,,,,,,,,,
+french_fuel_truck,french,fuel,support,fuel,Laffly S20 Fuel Truck,none,,80,5,0.85,16,2,2,#6b8b6b,,2,1,1,,,,,1940,,,,,,,,,,
 french_officer,french,officer,support,officer,Officer,pistol_fr,,70,4.6,0.45,20,8,2,#dbb866,,0,0,0,,,,,1940,,,,,,,,,,
 french_sapper,french,sapper,support,sapper,Sapper,mas36,,90,4,0.5,15,7,1,#cc9966,,0,0,0,,,,,1940,,,,,,,,,,
 german_medic,german,medic,support,medic,Sanitäter,pistol_de,,60,4.5,0.45,14,8,1,#eeeeee,,0,0,0,,,,,1940,,,,,,,,,,
 german_mechanic,german,mechanic,support,mechanic,Mechaniker,pistol_de,,65,4.2,0.45,14,8,1,#88aacc,,0,0,0,,,,,1940,,,,,,,,,,
-german_supply_truck,german,supply,support,supply,Munitionswagen,none,,80,5,0.85,16,5,2,#8b8d6b,,2,1,1,,,,,1940,,,,,,,,,,
-german_fuel_truck,german,fuel,support,fuel,Tanklaster,none,,80,5,0.85,16,5,2,#6b8b6b,,2,1,1,,,,,1940,,,,,,,,,,
+german_supply_truck,german,supply,support,supply,Opel Blitz Supply Truck,none,,80,5,0.85,16,2,2,#8b8d6b,,2,1,1,,,,,1940,,,,,,,,,,
+german_fuel_truck,german,fuel,support,fuel,Opel Blitz Fuel Truck,none,,80,5,0.85,16,2,2,#6b8b6b,,2,1,1,,,,,1940,,,,,,,,,,
 american_20mmaa_us,american,20mmaa,support,,20mm Oerlikon AA gun,rwm_american_20mmaa_us,,180,1.62,0.65,20,4,4,#5d6b4a,,40,34,28,3,1.5,,,1942,20mm Oerlikon AA gun,aa,direct,76,59,0.3,0.72,18,18,0
 american_50calquad,american,cal_50_aa,support,,Browning AA-Gun cal.50 (4x cal.50),rwm_american_50calquad,,150,0.63,0.65,20,4,4,#5d6b4a,,40,34,28,3,1.5,,,1942,Browning AA-Gun cal.50 (4x cal.50),aa,direct,76,31,0.3,0.72,18,9,0
 american_ki_to,american,gmc_m19,support,,GMC M19 (2x 40mm Bofors M2 L/56),rwm_american_ki_to,,300,5.44,0.65,17,4,6,#5d6b4a,,30,26,21,3,1.5,,6,1942,GMC M19 (2x 40mm Bofors M2 L/56),aa,direct,55,140,0.3,0.72,18,42,0

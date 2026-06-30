@@ -27,7 +27,7 @@ Game.BUILDING_STATES = ['House_0', 'House_1', 'House_2', 'House_3'];
 Game.BUILDING_MAX_HP = 460;
 // Houses are placed at ONE fixed scale (no per-footprint resizing/stretching).
 // The GLB is exported ~1 world-unit wide, so this is the in-world house size.
-Game.BUILDING_SCALE = 6.6;   // houses sized +20% (was 5.5)
+Game.BUILDING_SCALE = 8.58;   // houses +30% on the prior 6.6 (orig 5.5)
 Game._buildingSmokeScale = 1;   // debug "Smoke ×" — scales hit/destruction smoke
 Game._buildingDmgMult = 1;      // debug "Damage ×" — scales damage dealt to buildings
 Game.buildingRecords = [];
@@ -346,6 +346,30 @@ Game.buildingNearPoint = (rec, x, z) => {
     return { x: Math.max(x0, Math.min(x, x1)), z: Math.max(z0, Math.min(z, z1)) };
 };
 
+// Logical entry points (doors) for a building: the midpoint of each footprint
+// face, nudged just outside the wall. Real houses have a front and usually a back
+// door, so infantry approach a door rather than the nearest random wall point,
+// and a squad can split across opposite faces ("both ends") instead of all
+// funnelling onto one spot. Doors that open into a blocked tile are dropped.
+Game.buildingDoors = (rec) => {
+    const T = Game.TILE, b = rec.b;
+    const x0 = b.tx * T, x1 = (b.tx + b.tw) * T, z0 = b.ty * T, z1 = (b.ty + b.th) * T;
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    const off = T * 0.6;                       // stand just outside the wall
+    const cands = [
+        { x: cx, z: z0 - off },                // front face (-Z)
+        { x: cx, z: z1 + off },                // back face  (+Z)
+        { x: x0 - off, z: cz },                // left face  (-X)
+        { x: x1 + off, z: cz },                // right face (+X)
+    ];
+    const doors = cands.filter(p => {
+        if (p.x < 1 || p.z < 1 || p.x > Game.WORLD_W - 1 || p.z > Game.WORLD_H - 1) return false;
+        const t = Game.getTileAtWorld(p.x, p.z);
+        return !t || !t.blocked;
+    });
+    return doors.length ? doors : [{ x: cx, z: cz }];
+};
+
 // Building whose footprint contains (x,z), or null.
 Game.buildingAt = (x, z) => {
     for (const rec of Game.buildingRecords) {
@@ -555,12 +579,26 @@ Game.orderEnterBuilding = (rec) => {
     if (!rec || rec.collapsed) { Game.pushMessage('Must target a standing building!', 1.4); return; }
     const inf = Game.selectedPlayerUnits().filter(u => u.alive && !Game.isTank(u.kind) && !u._garrisoned);
     if (!inf.length) { Game.pushMessage('Select infantry to enter a building.', 1.4); return; }
-    inf.forEach(u => {
+    // Rank the building's doors by closeness to the squad's centre, then send the
+    // squad in through the two nearest doors (alternating) so they use both
+    // entrances/ends instead of all piling onto one wall point.
+    const doors = Game.buildingDoors ? Game.buildingDoors(rec) : null;
+    let ranked = null;
+    if (doors && doors.length) {
+        let sx = 0, sz = 0; inf.forEach(u => { sx += u.x; sz += u.z; });
+        sx /= inf.length; sz /= inf.length;
+        ranked = [...doors].sort((a, b) =>
+            ((a.x - sx) ** 2 + (a.z - sz) ** 2) - ((b.x - sx) ** 2 + (b.z - sz) ** 2));
+    }
+    const nDoors = ranked ? Math.min(2, ranked.length) : 0;   // split across the 2 nearest
+    inf.forEach((u, i) => {
         u.forcedTargetId = null;
         u.bombardX = null; u.bombardZ = null; u._bombarding = false;
         u._faceAngle = null; u._faceUntil = 0;
         u._enterRec = rec;
-        const np = Game.buildingNearPoint ? Game.buildingNearPoint(rec, u.x, u.z) : { x: rec.cx, z: rec.cz };
+        const np = nDoors
+            ? ranked[i % nDoors]
+            : (Game.buildingNearPoint ? Game.buildingNearPoint(rec, u.x, u.z) : { x: rec.cx, z: rec.cz });
         u.targetX = np.x; u.targetZ = np.z;
         u.path = Game.findPath(u, u.x, u.z, np.x, np.z);
         u.moving = true; u.orderMode = 'move'; u._combatReady = false; u._readyTimer = 0;

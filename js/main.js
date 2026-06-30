@@ -61,13 +61,92 @@ Game.crushUnit = (tank, victim) => {
     Game.pushMessage(`${tank.label} ran over ${who} ${victim.label}.`, 1.6);
 };
 
+// Tank collision tuning (debug-adjustable). The collision radius of a tank is
+// unit.size * TANK_SEP_RADIUS. It used to be ×2.5, which made tanks react to each
+// other while still well apart ("move when not even touching"); 1.3 keeps the ring
+// close to the hull. Tunable live from the debug panel ("Tanks" group).
+Game.TANK_SEP_RADIUS = 1.3;
+Game.TANK_SEP_STRENGTH = 4.0;     // de-overlap push strength
+Game.TANK_SEP_GAP = 0.25;         // extra clearance between hulls
+Game._showTankRings = false;      // debug: draw each tank's collision boundary
+Game._showPaths = false;          // debug: draw every unit's movement path as a line
+Game.tankDebugDefaults = { tankSepRadius: 1.3, tankSepStrength: 4.0, tankRings: 0, truckMaxSteer: 0.5, truckWheelbase: 3.2, truckAccel: 0.6 };
+// Truck (wheeled) steering tunables — read in the bicycle-model branch of uMod.move.
+Game.TRUCK_MAX_STEER = 0.5;     // max wheel angle (rad); smaller = wider arc
+Game.TRUCK_WHEELBASE = 3.2;     // × unit.size; larger = bigger turn radius (slower turn)
+Game.TRUCK_ACCEL = 0.6;         // accel fraction of max speed per second
+
+// A tank's collision footprint is a RECTANGLE aligned to the hull (longer than it
+// is wide), sized just outside the model — not a round bubble. Half-extents are
+// unit.size × these multipliers; +y is forward (length), +x is across (width).
+Game.TANK_BOX_LEN = 1.5;        // half-length along the hull (× size)
+Game.TANK_BOX_WID = 1.0;        // half-width across the hull (× size)
+
+/**
+ * Push a point (a unit at ux,uz with collision radius r) out of a tank's oriented
+ * rectangular footprint, expanded by r + margin (Minkowski). Returns the world
+ * de-penetration vector {x,z} plus the per-axis penetration {px,pz}, or null when
+ * the point is clear of the box. Resolves along the least-penetrated hull axis, so
+ * a man slides squarely off the nearest flat side instead of off a circle.
+ */
+Game._tankBoxPush = (ux, uz, tank, r, margin) => {
+    const c = Math.cos(tank.angle), s = Math.sin(tank.angle);
+    const dx = ux - tank.x, dz = uz - tank.z;
+    const lx = dx * c + dz * s;        // local: along hull length (forward)
+    const lz = -dx * s + dz * c;       // local: across hull width (right)
+    const hl = tank.size * (Game.TANK_BOX_LEN || 1.5) + r + margin;
+    const hw = tank.size * (Game.TANK_BOX_WID || 1.0) + r + margin;
+    const px = hl - Math.abs(lx);      // penetration along length
+    const pz = hw - Math.abs(lz);      // penetration along width
+    if (px <= 0 || pz <= 0) return null;            // outside the box
+    let plx = 0, plz = 0;
+    if (px < pz) plx = lx >= 0 ? px : -px;          // pop out the near length face
+    else plz = lz >= 0 ? pz : -pz;                  // pop out the near width face
+    return { x: plx * c - plz * s, z: plx * s + plz * c, px, pz };
+};
+
+/**
+ * How much a tank should ease off for units CROSSING its path (1 = full speed,
+ * 0 = stop). It yields to anyone moving ACROSS its nose (so it doesn't bulldoze
+ * through troops who are meant to pass), then resumes once they clear. It does NOT
+ * yield to a man standing in the way (make-way shoves him aside — yielding there
+ * would freeze the tank forever) nor to escorts moving the same way as the tank.
+ */
+Game._tankYield = (unit) => {
+    const hx = Math.cos(unit.angle), hz = Math.sin(unit.angle);
+    const lookLen = unit.size * (Game.TANK_BOX_LEN || 1.5) + 3.2;   // just past the nose
+    const halfW = unit.size * (Game.TANK_BOX_WID || 1.0) + 0.7;
+    let factor = 1;
+    for (const o of Game.units) {
+        if (!o.alive || o.id === unit.id || Game.isTank(o.kind)) continue;
+        const rx = o.x - unit.x, rz = o.z - unit.z;
+        const ahead = rx * hx + rz * hz;
+        if (ahead < 0.2 || ahead > lookLen) continue;
+        if (Math.abs(rx * -hz + rz * hx) > halfW) continue;          // not in our lane
+        const oMoving = (o.currentSpeed || 0) > 0.15 || (o.path && o.path.length);
+        if (!oMoving) continue;                                       // standing: make-way handles him
+        // Crossing? compare his heading to ours — skip escorts moving the same way.
+        if (o.path && o.path.length) {
+            let odx = o.path[0].x - o.x, odz = o.path[0].z - o.z;
+            const ol = Math.hypot(odx, odz);
+            if (ol > 0.01 && (odx / ol) * hx + (odz / ol) * hz > 0.5) continue;
+        }
+        const f = Game.clamp(ahead / lookLen, 0, 1);                  // closer = harder yield
+        factor = Math.min(factor, f * f);
+    }
+    return factor;
+};
+
 Game.applySeparation = (unit, dt) => {
     let sepX = 0, sepZ = 0;
     const isVeh = Game.isTank(unit.kind);
-    const myRadius = isVeh ? unit.size * 2.5 : unit.size * 0.7;
+    const radMult = Game.TANK_SEP_RADIUS || 1.3;
+    const myRadius = isVeh ? unit.size * radMult : unit.size * 0.7;
     // A tank rolling at speed crushes anyone under its hull.
     const tankMoving = isVeh && (unit.currentSpeed || 0) > 0.6;
     const crushRadius = unit.size * 1.15;
+    const fwdX = Math.cos(unit.angle), fwdZ = Math.sin(unit.angle);
+    let blockedAhead = false;
 
     for (const other of Game.units) {
         if (!other.alive || other.id === unit.id) continue;
@@ -78,66 +157,129 @@ Game.applySeparation = (unit, dt) => {
 
         const otherVeh = Game.isTank(other.kind);
 
+        // MAKE WAY: a foot soldier standing in the path of an ADVANCING FRIENDLY
+        // tank scrambles aside before it arrives, so the tank isn't blocked by its
+        // own infantry and the man isn't run down. Runs ahead of the overlap test
+        // (it's a look-ahead, not a contact response). Urgency scales with how
+        // close the tank is and how deep in its lane the man stands.
+        //
+        // Gate on the tank ACTUALLY TRANSLATING (currentSpeed), not merely "having a
+        // path". A tank that is only rotating in place to line up its next waypoint
+        // has a path but isn't advancing — the old "|| has path" test made the man
+        // flee the swinging heading the whole time the hull turned, so he got swept
+        // a long way around. Once the tank rolls forward the look-ahead catches him.
+        //
+        // Only STANDING troops scramble. A man crossing under his own move order is
+        // "meant to pass" — the TANK yields to him instead (see Game._tankYield), so
+        // we skip make-way for him here and let him walk his line.
+        const manUnderOrders = unit.path && unit.path.length && !unit._idleMoving;
+        if (!isVeh && otherVeh && other.team === unit.team
+            && (other.currentSpeed || 0) > 0.45 && !manUnderOrders) {
+            const fX = Math.cos(other.angle), fZ = Math.sin(other.angle);
+            const relX = unit.x - other.x, relZ = unit.z - other.z;
+            const ahead = relX * fX + relZ * fZ;               // + = in front of the tank
+            const lateral = relX * -fZ + relZ * fX;            // signed offset across its path
+            const halfWidth = other.size * radMult + unit.size * 0.7 + 0.6;
+            // Look well ahead (scaled by the tank's speed) so the man starts moving
+            // out early rather than at the last second.
+            const lookAhead = other.size * 2.6 + (other.currentSpeed || 0) * 2.5;
+            if (ahead > -other.size && ahead < lookAhead && Math.abs(lateral) < halfWidth) {
+                // Commit to one side and HOLD it (so he doesn't dither across the
+                // centreline); a man dead-centre picks left deterministically by id.
+                if (unit._bailFor !== other.id) {
+                    unit._bailFor = other.id;
+                    unit._bailSide = Math.abs(lateral) > 0.05 ? (lateral >= 0 ? 1 : -1) : ((unit.id & 1) ? 1 : -1);
+                }
+                const dir = unit._bailSide;
+                const urgency = 1 - Math.max(0, ahead) / lookAhead;          // closer = stronger
+                const push = (halfWidth - Math.abs(lateral) + 0.6) * (6 + urgency * 10);
+                sepX += (-fZ * dir) * push;
+                sepZ += (fX * dir) * push;
+            } else if (unit._bailFor === other.id && (ahead <= -other.size || Math.abs(lateral) >= halfWidth)) {
+                unit._bailFor = null;                          // cleared the lane — release
+            }
+        }
+
         // Run-over: a moving tank overlapping ENEMY foot soldiers flattens them
-        // rather than nudging them aside (no more "bounce off the bow"). Friendly
-        // infantry are never crushed — they fall through to separation and dodge.
+        // rather than nudging them aside. Friendly infantry are never crushed.
         if (isVeh && !otherVeh && tankMoving && other.team !== unit.team
             && distSq < crushRadius * crushRadius) {
             Game.crushUnit(unit, other);
             continue;
         }
 
-        const otherRadius = otherVeh ? other.size * 2.5 : other.size * 0.7;
-        const minDist = myRadius + otherRadius + 0.3;
-        const minDistSq = minDist * minDist;
-
-        if (distSq < minDistSq && distSq > 0.001) {
-            const dist = Math.sqrt(distSq);
-            const overlap = minDist - dist;
-            const nx = dx / dist;
-            const nz = dz / dist;
-
-            let strength = overlap * 3.0;
-
-            // Infantry vs tank: a *parked* tank is a solid obstacle to step around.
-            // A moving ENEMY tank is not pushed away from — it drives over you. A
-            // moving FRIENDLY tank we scramble clear of (it won't crush us anyway).
-            if (!isVeh && otherVeh) {
-                const tankRolling = (other.currentSpeed || 0) > 0.6;
-                if (tankRolling && other.team !== unit.team) {
-                    strength = 0; // only an ENEMY tank rolls over us
-                } else {
-                    strength *= 4.0; // shoulder past a stopped hull
-                    // A FRIENDLY tank bearing down: step ASIDE, perpendicular to
-                    // its heading toward the nearer side, so we clear its path
-                    // instead of being shoved straight ahead of it (= bulldozed).
-                    if (tankRolling) {
-                        const fX = Math.cos(other.angle), fZ = Math.sin(other.angle);
-                        let pX = -fZ, pZ = fX;                              // tank's side axis
-                        if (dx * pX + dz * pZ < 0) { pX = -pX; pZ = -pZ; }  // pick the nearer side
-                        const lateral = (overlap + 0.6) * 9.0;
-                        sepX += pX * lateral;
-                        sepZ += pZ * lateral;
-                    }
+        // Infantry vs tank — RECTANGULAR collide-and-slide against the hull box
+        // (slightly larger than the model), handled here (before the circular gate)
+        // so the box's full length/corners are respected. De-penetrate by exactly
+        // the overlap, once, along the nearest hull face: no spring, no halt — the
+        // man grazes the side and slides along it (his path/detour route him round).
+        if (!isVeh && otherVeh) {
+            const tankRolling = (other.currentSpeed || 0) > 0.6;
+            const enemyRolling = tankRolling && other.team !== unit.team;
+            const push = Game._tankBoxPush(unit.x, unit.z, other, unit.size * 0.7, 0.12);
+            if (push) {
+                if (!enemyRolling) { unit.x += push.x; unit.z += push.z; }
+                if (tankRolling) {   // scramble toward a flank to clear the lane
+                    const fX = Math.cos(other.angle), fZ = Math.sin(other.angle);
+                    let pX = -fZ, pZ = fX;
+                    if (dx * pX + dz * pZ < 0) { pX = -pX; pZ = -pZ; }
+                    const m = Math.max(push.px, push.pz) + 0.6;
+                    sepX += pX * m * 7.0; sepZ += pZ * m * 7.0;
                 }
             }
-            // Tanks are immovable by infantry
-            if (isVeh && !otherVeh) strength = 0;
+            continue;
+        }
 
+        const otherRadius = otherVeh ? other.size * radMult : other.size * 0.7;
+        const gap = (isVeh && otherVeh) ? (Game.TANK_SEP_GAP ?? 0.25) : 0.3;
+        const minDist = myRadius + otherRadius + gap;
+        const minDistSq = minDist * minDist;
+        if (distSq >= minDistSq || distSq <= 0.0001) continue;
+
+        const dist = Math.sqrt(distSq);
+        const overlap = minDist - dist;
+        const nx = dx / dist, nz = dz / dist;
+        let strength = overlap * (Game.TANK_SEP_STRENGTH || 3.0);
+
+        if (isVeh && otherVeh) {
+            // Tank vs tank: a tank can NOT drive through another. A STATIONARY tank
+            // holds its ground (immovable) while the MOVER de-overlaps and routes
+            // around it — so a moving tank never shoves a parked friendly aside.
+            // De-overlap off the other hull's RECTANGULAR box (nearest face), not a
+            // circle, so hulls sit flush alongside instead of bouncing on round rings.
+            const iMoving = (unit.currentSpeed || 0) > 0.3 || (unit.path && unit.path.length > 0);
+            const otherMoving = (other.currentSpeed || 0) > 0.3 || (other.path && other.path.length > 0);
+            const boxPush = Game._tankBoxPush(unit.x, unit.z, other, unit.size * radMult, Game.TANK_SEP_GAP ?? 0.25);
+            if (boxPush && (iMoving || !otherMoving)) {
+                sepX += boxPush.x * (Game.TANK_SEP_STRENGTH || 4.0);
+                sepZ += boxPush.z * (Game.TANK_SEP_STRENGTH || 4.0);
+            }
+            // Yield (brief stop) only if the OTHER hull is ahead AND has priority —
+            // a stationary tank, or the lower-id one among two movers. This breaks
+            // the symmetry so two tanks meeting never both freeze and lock together;
+            // exactly one eases around while the other proceeds.
+            const otherAhead = (-nx) * fwdX + (-nz) * fwdZ > 0.25;
+            if (boxPush && otherAhead && (!otherMoving || other.id < unit.id)) blockedAhead = true;
+        } else if (isVeh && !otherVeh) {
+            // Tank vs infantry: a tank is immovable by men (no push on the tank).
+        } else {
+            // Infantry vs infantry.
             sepX += nx * strength;
             sepZ += nz * strength;
         }
     }
 
     if (isVeh) {
-        // Vehicles: project separation onto forward axis only.
-        // This prevents lateral sliding — the tank can only be
-        // pushed forward or backward along its facing direction.
-        const fwdX = Math.cos(unit.angle);
-        const fwdZ = Math.sin(unit.angle);
-        const dot = sepX * fwdX + sepZ * fwdZ;
-        unit.x += fwdX * dot * dt;
-        unit.z += fwdZ * dot * dt;
+        // De-overlap directly apart (capped). The old code projected separation onto
+        // the forward axis only, which let a tank bulldoze a hull in front of it.
+        const sepMag = Math.hypot(sepX, sepZ);
+        if (sepMag > 0.0001) {
+            const m = Math.min(sepMag, 6.0);
+            unit.x += (sepX / sepMag) * m * dt;
+            unit.z += (sepZ / sepMag) * m * dt;
+        }
+        // Yield to a tank sitting in our path: pause rather than grind into it.
+        if (blockedAhead) unit.stopTimer = Math.max(unit.stopTimer || 0, 0.2);
     } else {
         // Infantry: push in any direction
         const sepMag = Math.hypot(sepX, sepZ);
@@ -148,8 +290,142 @@ Game.applySeparation = (unit, dt) => {
         }
         unit.x += sepX * dt;
         unit.z += sepZ * dt;
+        // A tank blocking the way ahead: pause path-stepping briefly so the lateral
+        // steer above carries him around the hull instead of grinding into it.
+        if (blockedAhead) unit.stopTimer = Math.max(unit.stopTimer || 0, 0.15);
     }
 };
+
+// ── Local obstacle avoidance around tanks ───────────────────────────────────
+// A tank is a moving obstacle A* can't see (tanks aren't in the static tile
+// grid). Without this, anything routed through one grinds against it — tanks
+// nose to nose, and FOOT TROOPS marching on the spot into a hull. This maintains
+// a temporary side-step waypoint ("invisible waypoint, dynamically updated") that
+// the normal path-follower steers toward, carrying the unit around the tank and
+// back onto its route. Applies to tanks, trucks AND infantry; the side is chosen
+// once and held until the tank is cleared, so the unit doesn't waver.
+Game._vehicleAvoid = (unit) => {
+    if (unit.retreating || unit._garrisoned || !unit.path || !unit.path.length) {
+        unit._detour = null; return;
+    }
+    const radMult = Game.TANK_SEP_RADIUS || 1.3;
+    const selfIsTank = Game.isTank(unit.kind);
+    const isTruck = unit.kind === 'fuel' || unit.kind === 'supply';
+    const vehSized = selfIsTank || isTruck;              // vehicle-sized footprint
+    const myR = vehSized ? unit.size * radMult : unit.size * 0.7;
+    const goal = unit.path[unit.path.length - 1];
+    // Arriving at the final destination — let de-overlap settle it, don't circle.
+    if (unit.path.length === 1 && Game.dist(unit.x, unit.z, goal.x, goal.z) < myR * 2.2) {
+        if (unit._detour && unit.path[0] === unit._detour) unit.path.shift();
+        unit._detour = null; return;
+    }
+    // Destination sits ON a tank (A* routes over the grid and can't see tanks, so a
+    // goal under/behind a hull is unreachable). Once we're up against that tank,
+    // call it arrived instead of orbiting the hull forever trying to step onto it.
+    if (unit.path.length === 1) {
+        for (const o of Game.units) {
+            if (!o.alive || o.id === unit.id || !Game.isTank(o.kind)) continue;
+            const tr = o.size * radMult;
+            if (Game.distSq(goal.x, goal.z, o.x, o.z) < (tr + 0.4) * (tr + 0.4)
+                && Game.distSq(unit.x, unit.z, o.x, o.z) < (tr + myR + 0.8) * (tr + myR + 0.8)) {
+                if (unit._detour && unit.path[0] === unit._detour) unit.path.shift();
+                unit._detour = null; unit.path.length = 0; unit.moving = false;
+                return;
+            }
+        }
+    }
+    const hx = Math.cos(unit.angle), hz = Math.sin(unit.angle);
+
+    // Most-blocking TANK inside a corridor straight ahead. Trucks turn wide, so
+    // they look further ahead to start the detour in time.
+    let block = null, blockD = Infinity;
+    const lookAhead = myR + (isTruck ? 9 : (selfIsTank ? 6 : 3.5));
+    for (const o of Game.units) {
+        if (!o.alive || o.id === unit.id || !Game.isTank(o.kind)) continue;
+        const rx = o.x - unit.x, rz = o.z - unit.z;
+        const ahead = rx * hx + rz * hz;                 // along heading
+        if (ahead <= 0.3 || ahead > lookAhead) continue;
+        const lateral = rx * -hz + rz * hx;              // signed perpendicular offset
+        const corridor = myR + o.size * radMult + 0.4;
+        if (Math.abs(lateral) > corridor) continue;      // not in our lane
+        // Tank vs tank: only the higher-id mover swerves (the other holds course)
+        // so they don't mirror each other. Trucks and foot troops ALWAYS go round
+        // a tank (a tank has right of way over them).
+        const oMoving = (o.currentSpeed || 0) > 0.3 || (o.path && o.path.length > 0);
+        if (selfIsTank && oMoving && o.id < unit.id) continue;
+        if (ahead < blockD) { blockD = ahead; block = o; }
+    }
+
+    if (!block) {                                        // path clear — retire the detour
+        if (unit._detour && unit.path[0] === unit._detour) unit.path.shift();
+        unit._detour = null; return;
+    }
+
+    const blockMoving = (block.currentSpeed || 0) > 0.3 || (block.path && block.path.length > 0);
+    // Reuse the chosen side while still avoiding the same tank; pick afresh otherwise.
+    let side;
+    if (unit._detour && unit._detour.forId === block.id) {
+        side = unit._detour.side;
+    } else if (blockMoving) {
+        // Crossing tank: pass BEHIND it. Pick the side toward the tank's rear so we
+        // cut in behind rather than across its nose.
+        const fx = Math.cos(block.angle), fz = Math.sin(block.angle);
+        const perpDotFwd = (-hz) * fx + hx * fz;         // p·F for the side=+1 axis
+        if (Math.abs(perpDotFwd) < 0.2) {                // moving roughly parallel — clearer side
+            const lateral = (block.x - unit.x) * -hz + (block.z - unit.z) * hx;
+            side = lateral > 0 ? -1 : 1;
+        } else {
+            side = perpDotFwd > 0 ? -1 : 1;              // the rear-ward side
+        }
+    } else {
+        const lateral = (block.x - unit.x) * -hz + (block.z - unit.z) * hx;
+        side = lateral > 0 ? -1 : 1;                     // stationary: side the hull isn't on
+    }
+    const off = myR + block.size * radMult + 0.8;
+    let px = -hz * side, pz = hx * side;
+    let gx = block.x + px * off, gz = block.z + pz * off;
+    if (blockMoving) {                                   // bias the waypoint toward the tank's rear
+        const fx = Math.cos(block.angle), fz = Math.sin(block.angle);
+        gx -= fx * off * 0.5; gz -= fz * off * 0.5;
+    } else {
+        // Stationary tank: lead the waypoint PAST the hull toward the goal, not just
+        // beside it. Otherwise the unit reaches the side, the goal again lines up
+        // through the tank, and it re-detours on the spot — orbiting the hull. The
+        // forward bias rounds it and carries it onward so it clears in one pass.
+        const tgx = goal.x - block.x, tgz = goal.z - block.z;
+        const tgl = Math.hypot(tgx, tgz) || 1;
+        gx += (tgx / tgl) * off * 0.7;
+        gz += (tgz / tgl) * off * 0.7;
+    }
+    gx = Game.clamp(gx, 1, Game.WORLD_W - 1);
+    gz = Game.clamp(gz, 1, Game.WORLD_H - 1);
+    const t = Game.getTileAtWorld(gx, gz);
+    if (t && (t.blocked || (vehSized && t.vehicleBlocked))) {  // that side is walled — try the other
+        side = -side; px = -px; pz = -pz;
+        gx = Game.clamp(block.x + px * off, 1, Game.WORLD_W - 1);
+        gz = Game.clamp(block.z + pz * off, 1, Game.WORLD_H - 1);
+    }
+
+    if (unit._detour && unit.path[0] === unit._detour) {
+        unit._detour.x = gx; unit._detour.z = gz; unit._detour.forId = block.id; unit._detour.side = side;
+    } else {
+        unit._detour = { x: gx, z: gz, forId: block.id, side, _detour: true };
+        unit.path.unshift(unit._detour);
+    }
+};
+
+// Debug controls for tank collision (registered into the post-FX panel).
+Game._tankControlDefs = () => [
+    { group: 'Tanks', key: 'tankSepRadius', label: 'Collision radius x (size)', min: 0.5, max: 3, step: 0.05, apply: v => { Game.TANK_SEP_RADIUS = v; } },
+    { group: 'Tanks', key: 'tankSepStrength', label: 'Separation push x', min: 1, max: 10, step: 0.5, apply: v => { Game.TANK_SEP_STRENGTH = v; } },
+    { group: 'Tanks', key: 'tankBoxLen', label: 'Hull box length x (size)', min: 0.6, max: 3, step: 0.05, apply: v => { Game.TANK_BOX_LEN = v; } },
+    { group: 'Tanks', key: 'tankBoxWid', label: 'Hull box width x (size)', min: 0.5, max: 2, step: 0.05, apply: v => { Game.TANK_BOX_WID = v; } },
+    { group: 'Tanks', key: 'tankRings', label: 'Show collision box (0/1)', min: 0, max: 1, step: 1, apply: v => { Game._showTankRings = v >= 1; } },
+    { group: 'Tanks', key: 'showPaths', label: 'Show movement paths (0/1)', min: 0, max: 1, step: 1, apply: v => { Game._showPaths = v >= 1; } },
+    { group: 'Trucks', key: 'truckMaxSteer', label: 'Max steer (rad)', min: 0.2, max: 0.9, step: 0.02, apply: v => { Game.TRUCK_MAX_STEER = v; } },
+    { group: 'Trucks', key: 'truckWheelbase', label: 'Wheelbase x size (turn radius)', min: 1.5, max: 6, step: 0.1, apply: v => { Game.TRUCK_WHEELBASE = v; } },
+    { group: 'Trucks', key: 'truckAccel', label: 'Acceleration', min: 0.2, max: 2, step: 0.05, apply: v => { Game.TRUCK_ACCEL = v; } },
+];
 
 // ═══════════════════════════════════════════════════════
 //  PER-UNIT UPDATE
@@ -1783,8 +2059,15 @@ Game.dbgScanTank = () => {
 
         wrapSlider.addEventListener('input', () => {
             const v = parseFloat(wrapSlider.value);
-            modelInner.position.y = v;
+            modelInner.position.y = v;                 // live
             wrapVal.textContent = v.toFixed(2);
+            // PERSIST: store as the absolute wrapper-Y override for this model so it
+            // sticks across reloads/new spawns and shows up in the copy-config. This
+            // is what makes the value you set here (e.g. 0.80) the value that's kept.
+            const tk = unit.team + '_' + unit.kind;
+            Game.MODEL_WRAPPER_Y = Game.MODEL_WRAPPER_Y || {};
+            Game.MODEL_WRAPPER_Y[tk] = v;
+            if (Game._refreshPostFXCopyBox) Game._refreshPostFXCopyBox();
         });
 
         wrapRow.appendChild(wrapSlider);

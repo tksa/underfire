@@ -25,6 +25,21 @@ The French **Char B1 bis** tank model (`models/french_b1.glb`) is by
 used under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 Source: https://sketchfab.com/3d-models/char-b1-bis-e8a1fbe0981940b1b4ddcc1a4271ae93
 
+"French Somua S35" (`models/french_s35.glb`) is by **Basic Hsu**
+(https://skfb.ly/ptt8z), used under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+(Textures downscaled to 1024 and recompressed for web; geometry unchanged.)
+
+"Hotchkiss H35" (`models/french_h35.glb`) is by **theonrad**
+(https://skfb.ly/RLFI), used under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+(Textures downscaled and recompressed for web; geometry unchanged.)
+
+"Renault R35(Girls Und Panzer)" (`models/french_r35.glb`) is by
+**Sankocho_DePoligonos** (https://skfb.ly/oP7Yo), used under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). (Its placeholder
+textures were replaced in-engine with a weathered French-green repaint.)
+
 ## Textures (OpenGameArt.org, CC0)
 - **Dirty Grass Seamless** (ground detail normal + AO) — used as terrain detail maps.
   Source: "4K Seamless Grass Dirt Ground Texture with all Shader Maps", CC0.

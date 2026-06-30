@@ -10,6 +10,8 @@
 Game.syncUnitMeshes = (dt) => {
     const THREE = Game.THREE;
 
+    if (Game._updatePathLines) Game._updatePathLines();
+
     Game.units.forEach(unit => {
         if (!unit.mesh) return;
         if (!unit.alive) {
@@ -194,6 +196,34 @@ Game.syncUnitMeshes = (dt) => {
         // Selection ring
         if (unit.mesh.userData.selectionRing) {
             unit.mesh.userData.selectionRing.visible = Game.selection.has(unit.id);
+        }
+
+        // Debug: tank collision-boundary BOX (the rectangular hull footprint used by
+        // the physics), aligned to the hull and sized to TANK_BOX_LEN/WID × size.
+        if (Game.isTank(unit.kind)) {
+            let cr = unit.mesh.userData.collisionRing;
+            if (Game._showTankRings) {
+                if (!cr) {
+                    const TH = Game.THREE;
+                    // Edge outline of a unit plane; scaled to the box each frame. The
+                    // plane lies flat (rot.x) and inherits the mesh yaw, so its long
+                    // axis tracks the hull's forward (+z local).
+                    cr = new TH.LineSegments(
+                        new TH.EdgesGeometry(new TH.PlaneGeometry(1, 1)),
+                        new TH.LineBasicMaterial({ color: 0x33ddff, transparent: true, opacity: 0.85, depthTest: false })
+                    );
+                    cr.rotation.x = -Math.PI / 2;
+                    cr.position.y = 0.06;
+                    cr.renderOrder = 999;
+                    unit.mesh.add(cr);
+                    unit.mesh.userData.collisionRing = cr;
+                }
+                const sz = unit.size || 0.8;
+                cr.scale.set(sz * (Game.TANK_BOX_WID || 1.0) * 2, sz * (Game.TANK_BOX_LEN || 1.5) * 2, 1);
+                cr.visible = true;
+            } else if (cr) {
+                cr.visible = false;
+            }
         }
 
         // Health bar update
@@ -901,11 +931,17 @@ Game.updateFires = (dt) => {
 Game._applyInfantryPose = (unit, dt) => {
     const rig = unit.mesh.userData.rig;
     if (!rig) return;
+    // Pause freezes the world: hold the rig exactly as it is (the walk cycle is
+    // driven off Game.gameClock, which keeps ticking, so without this the feet
+    // would keep marching while the game is paused).
+    if (Game._paused) return;
     const st = unit.stance;
     const moving = unit.moving && (unit.currentSpeed || 0) > 0.05;
 
-    // Target pose per stance: rootPitch (whole-body), rootY (hip height),
-    // thigh + knee bend, upper-body lean, arm angle.
+    // Target pose per stance. Channels: rootPitch (whole-body tilt), rootRoll
+    // (lying on a side), rootY (hip height), thigh/knee (symmetric default) or
+    // thighL/thighR + kneeL/kneeR (asymmetric, e.g. kneeling), splay (legs apart),
+    // upper-body lean, arm angle.
     let T;
     if (st === 'prone') {
         // body pitched flat; upper-body arched UP (negative) so the head/chest
@@ -913,19 +949,63 @@ Game._applyInfantryPose = (unit, dt) => {
         T = { rootPitch: 1.3, rootY: 0.0, thigh: 0.05, knee: 0.15, upper: -0.6, arm: -0.35 };
     } else if (st === 'crouch') {
         T = { rootPitch: 0, rootY: -0.14, thigh: 0.85, knee: -1.35, upper: 0.28, arm: -0.7 };
+    } else if (st === 'rest') {
+        // Seated — several positions, chosen per soldier (unit._sitVariant).
+        const v = (Game._INF_SIT_POSES && Game._INF_SIT_POSES[unit._sitVariant]) || Game._INF_SIT_POSES.sit;
+        T = Object.assign({ rootPitch: 0, rootY: -0.28, thigh: 1.5, knee: -0.85, upper: 0, arm: -0.12 }, v);
+    } else if (st === 'ease') {
+        // At ease: standing relaxed, weight settled, rifle lowered (not shouldered).
+        T = { rootPitch: 0, rootY: -0.02, thigh: 0.0, knee: -0.06, upper: 0.05, arm: -0.22 };
     } else {
         const lean = (st === 'run' && moving) ? 0.22 : 0.05;
         T = { rootPitch: 0, rootY: 0, thigh: 0, knee: 0, upper: lean, arm: -0.65 };
     }
 
+    // Fill in the per-leg / roll / splay channels from the symmetric defaults so the
+    // springs always have a target to ease toward (and back from).
+    if (T.thighL == null) T.thighL = T.thigh;
+    if (T.thighR == null) T.thighR = T.thigh;
+    if (T.kneeL == null) T.kneeL = T.knee;
+    if (T.kneeR == null) T.kneeR = T.knee;
+    if (T.rootRoll == null) T.rootRoll = 0;
+    const splay = T.splay || 0;
+    if (T.splayL == null) T.splayL = splay;
+    if (T.splayR == null) T.splayR = splay;
+    delete T.splay;
+
     let p = unit._pose;
-    if (!p) p = unit._pose = { ...T };
-    const k = Math.min(1, dt * 7);   // ~0.15s transition
-    for (const key in T) p[key] = Game.lerp(p[key], T[key], k);
+    if (!p) { p = unit._pose = { ...T }; unit._poseVel = {}; }
+    const vel = unit._poseVel || (unit._poseVel = {});
+
+    // Natural transitions via critically-damped springs (SmoothDamp): eases in
+    // and out and reverses cleanly if the target stance changes mid-move (e.g. a
+    // soldier roused while sitting down stands back up smoothly). Combat dives
+    // (prone/crouch/run) resolve fast; relaxing (sit/at-ease) settles slowly and
+    // naturally. Hips + legs lead, torso + arms follow a beat later so the body
+    // has weight-shift and follow-through instead of every joint moving in lockstep.
+    let scale = 0.7;                                   // stand / default
+    if (st === 'prone' || st === 'crouch' || st === 'run') scale = 0.5;  // snap to cover
+    else if (st === 'rest' || st === 'ease') scale = 1.0;                // unhurried
+    const ST = { rootPitch: 0.30, rootRoll: 0.34, rootY: 0.30, upper: 0.40, arm: 0.42,
+        thighL: 0.27, thighR: 0.27, kneeL: 0.26, kneeR: 0.26, splayL: 0.30, splayR: 0.30 };
+    for (const key in T) {
+        p[key] = Game.smoothDamp(p[key], T[key], vel, key, (ST[key] || 0.3) * scale, dt);
+    }
+
+    // Idle breathing: a gentle chest/shoulder rise so a standing or resting man is
+    // never a frozen statue. Suppressed while moving (the walk bob takes over).
+    let breatheY = 0, breatheUp = 0;
+    if (!moving) {
+        const br = Math.sin((Game.gameClock || 0) * 1.5 + unit.id * 0.7);
+        const amp = st === 'rest' ? 0.014 : (st === 'ease' ? 0.011 : 0.007);
+        breatheY = br * amp;
+        breatheUp = br * 0.018;
+    }
 
     rig.root.rotation.x = p.rootPitch;
-    rig.root.position.y = p.rootY;
-    rig.upper.rotation.x = p.upper;
+    rig.root.rotation.z = p.rootRoll;
+    rig.root.position.y = p.rootY + breatheY;
+    rig.upper.rotation.x = p.upper + breatheUp;
     rig.armL.rotation.x = p.arm;
     rig.armR.rotation.x = p.arm - 0.15;
 
@@ -941,10 +1021,64 @@ Game._applyInfantryPose = (unit, dt) => {
         rig.armL.rotation.x = p.arm - swing * 0.4;
         rig.armR.rotation.x = p.arm - 0.15 + swing * 0.4;
     }
-    rig.legL.rotation.x = p.thigh + swing;
-    rig.legR.rotation.x = p.thigh - swing;
-    rig.kneeL.rotation.x = p.knee;
-    rig.kneeR.rotation.x = p.knee;
+    rig.legL.rotation.x = p.thighL + swing;
+    rig.legR.rotation.x = p.thighR - swing;
+    rig.legL.rotation.z = p.splayL;
+    rig.legR.rotation.z = -p.splayR;
+    rig.kneeL.rotation.x = p.kneeL;
+    rig.kneeR.rotation.x = p.kneeR;
+};
+
+// Debug: draw every unit's movement path as a coloured line from the unit through
+// its remaining waypoints (armor cyan, infantry green, others amber). Lets you SEE
+// the routes — overlapping lines mean two units are heading through the same point.
+Game._updatePathLines = () => {
+    const TH = Game.THREE;
+    let pl = Game._pathLineObj;
+    if (!Game._showPaths) { if (pl) pl.visible = false; return; }
+    const pts = [], cols = [];
+    for (const u of Game.units) {
+        if (!u.alive || !u.path || !u.path.length) continue;
+        const y = (u.y || 0) + 0.25;
+        let px = u.x, pz = u.z;
+        const c = Game.isTank(u.kind) ? [0.25, 0.9, 1.0]
+            : (u.class === 'infantry' ? [0.35, 1.0, 0.45] : [1.0, 0.7, 0.2]);
+        for (const wp of u.path) {
+            pts.push(px, y, pz, wp.x, y, wp.z);
+            cols.push(c[0], c[1], c[2], c[0], c[1], c[2]);
+            px = wp.x; pz = wp.z;
+        }
+        // a small marker spoke at the final destination
+        const g = u.path[u.path.length - 1];
+        pts.push(g.x - 0.4, y, g.z, g.x + 0.4, y, g.z, g.x, y, g.z - 0.4, g.x, y, g.z + 0.4);
+        for (let k = 0; k < 4; k++) cols.push(c[0], c[1], c[2]);
+    }
+    if (!pl) {
+        const geo = new TH.BufferGeometry();
+        pl = Game._pathLineObj = new TH.LineSegments(geo,
+            new TH.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, depthTest: false }));
+        pl.renderOrder = 998;
+        pl.frustumCulled = false;
+        Game.scene.add(pl);
+    }
+    pl.geometry.setAttribute('position', new TH.Float32BufferAttribute(pts, 3));
+    pl.geometry.setAttribute('color', new TH.Float32BufferAttribute(cols, 3));
+    pl.geometry.attributes.position.needsUpdate = true;
+    pl.geometry.attributes.color.needsUpdate = true;
+    pl.visible = true;
+};
+
+// Seated pose variants (unit._sitVariant). Per-leg + roll channels let us do an
+// asymmetric kneel and a lying-on-side pose, not just a symmetric sit.
+Game._INF_SIT_POSES = {
+    // Cross-legged-ish sit, legs out front and a little apart.
+    sit:     { rootPitch: 0.0,  rootY: -0.28, thigh: 1.50, knee: -0.85, upper: -0.04, arm: -0.12, splay: 0.14 },
+    // One knee up, the other folded back under (kneeling on the right knee).
+    kneel:   { rootPitch: 0.02, rootY: -0.12, thighL: 1.15, kneeL: -1.55, thighR: 0.20, kneeR: -2.30, upper: 0.05, arm: -0.5 },
+    // Leaning back propped on the hands, legs forward.
+    recline: { rootPitch: -0.30, rootY: -0.30, thigh: 1.30, knee: -0.45, upper: -0.18, arm: 0.55, splay: 0.20 },
+    // Lying on one side, knees drawn up.
+    sidelay: { rootPitch: 0.0,  rootRoll: 1.45, rootY: -0.22, thigh: 0.85, knee: -1.25, upper: 0.10, arm: -0.30 },
 };
 
 /**

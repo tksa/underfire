@@ -14,7 +14,7 @@ Edit a file in `js/`, refresh, see the change. See the `run-and-test` skill for 
 
 ## Golden rules (do not break these)
 
-1. **No build step.** Plain HTML/CSS/JS. Do not add bundlers, transpilers, or a runtime npm dependency. Three.js loads from a pinned CDN importmap in `index.html`.
+1. **No build step.** Plain HTML/CSS/JS. Do not add bundlers, transpilers, or a runtime npm dependency. ESM deps (Three.js r180 + addons, postprocessing, ez-tree, fflate) are **vendored locally in `/vendor`** and wired via the importmap in `index.html`. (They used to load from CDNs, but intermittent CDN 404s broke the fatal top-level imports in `main.js` and the game wouldn't boot, so they're now served from the same origin — still no build step.) Exception: the Draco decoder still loads from a CDN at runtime (`js/engine.js`), used only for Draco-compressed models.
 2. **Assets are CC0 / public-domain only.** Every bundled model/texture/sound must be CC0 and listed in `CREDITS.md`. Never add ripped or unlicensed assets.
 3. **Don't rename the `Game` global** (the whole codebase hangs off `window.Game`) or the `underFire` unit property (different thing from the game name "Under Fire").
 4. **Keep it degradable.** Prefer procedural defaults so the game still runs if an optional asset is missing.

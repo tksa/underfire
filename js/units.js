@@ -291,19 +291,19 @@ Game.UNIT_STATS = {
         color: '#88aacc', cost: 1,
     },
     french_supply_truck: {
-        label: 'Supply Truck', kind: 'supply', class: 'support', supportType: 'supply',
+        label: 'Renault AHN Supply Truck', kind: 'supply', class: 'support', supportType: 'supply',
         weapon: 'none',
         speed: 5.0, hp: 80, size: 0.85,
         armor: { front: 2, side: 1, rear: 1 },
-        sight: 16, rotationSpeed: 5,
+        sight: 16, rotationSpeed: 2,
         color: '#8b8d6b', cost: 2,
     },
     french_fuel_truck: {
-        label: 'Fuel Truck', kind: 'fuel', class: 'support', supportType: 'fuel',
+        label: 'Laffly S20 Fuel Truck', kind: 'fuel', class: 'support', supportType: 'fuel',
         weapon: 'none',
         speed: 5.0, hp: 80, size: 0.85,
         armor: { front: 2, side: 1, rear: 1 },
-        sight: 16, rotationSpeed: 5,
+        sight: 16, rotationSpeed: 2,
         color: '#6b8b6b', cost: 2,
     },
     french_officer: {
@@ -341,19 +341,19 @@ Game.UNIT_STATS = {
         color: '#88aacc', cost: 1,
     },
     german_supply_truck: {
-        label: 'Munitionswagen', kind: 'supply', class: 'support', supportType: 'supply',
+        label: 'Opel Blitz Supply Truck', kind: 'supply', class: 'support', supportType: 'supply',
         weapon: 'none',
         speed: 5.0, hp: 80, size: 0.85,
         armor: { front: 2, side: 1, rear: 1 },
-        sight: 16, rotationSpeed: 5,
+        sight: 16, rotationSpeed: 2,
         color: '#8b8d6b', cost: 2,
     },
     german_fuel_truck: {
-        label: 'Tanklaster', kind: 'fuel', class: 'support', supportType: 'fuel',
+        label: 'Opel Blitz Fuel Truck', kind: 'fuel', class: 'support', supportType: 'fuel',
         weapon: 'none',
         speed: 5.0, hp: 80, size: 0.85,
         armor: { front: 2, side: 1, rear: 1 },
-        sight: 16, rotationSpeed: 5,
+        sight: 16, rotationSpeed: 2,
         color: '#6b8b6b', cost: 2,
     },
 };
@@ -844,9 +844,9 @@ Game._createUnitMesh = (unit) => {
 
     // Selection ring
     const ringRadius = isVeh ? unit.size + 0.3 : (isSup ? unit.size + 0.2 : unit.size + 0.15);
-    const ringGeo = new THREE.RingGeometry(ringRadius - 0.08, ringRadius, 24);
+    const ringGeo = new THREE.RingGeometry(ringRadius - 0.17, ringRadius, 28);   // thicker band
     const ringMat = new THREE.MeshBasicMaterial({
-        color: 0xdbbe73,
+        color: 0x39ff5e,                 // match the green move cursor (was gold)
         side: THREE.DoubleSide,
         transparent: true,
         opacity: 0.9
@@ -904,14 +904,67 @@ Game._loadUnitModel = (unit, mesh) => {
     if (Game._modelLoadFailed.has(teamKind)) return;
     const paths = [`models/${teamKind}.glb`, `models/${unit.kind}.glb`];
 
-    // Per-model corrections: yaw (radians) when the source faces the wrong way,
-    // and an extra scale multiplier on top of footprint normalization.
-    const MODEL_YAW = {};
-    const MODEL_SCALE = { french_b1: 1.6 };        // Char B1 bis (2x then -20%)
+    // Per-model placement corrections, kept as live Game.* globals so the debug
+    // panel ("Selected Model" group) can tune them and the copy-config can dump
+    // them. Initialised once; user edits persist across newly-spawned units.
+    //  - MODEL_YAW: yaw (radians) when the source faces the wrong way.
+    //  - MODEL_Y_TRIM: ground-snap trim (world units); negative seats a floater.
+    //  - MODEL_STEER_PIVOT: body shift (fraction of half-length) so it pivots about
+    //    an axle; negative = pivot toward the FRONT (after MODEL_YAW).
+    //  - MODEL_SCALE: extra scale multiplier on top of footprint normalization.
+    //  - MODEL_WRAPPER_Y: ABSOLUTE wrapper height override (world units). When set
+    //    it wins over the ground-snap + Y_TRIM. This is the value the debug panel's
+    //    "Scan Nodes → Wrapper Y" slider writes, so what you set there persists,
+    //    survives a model reload, and shows up in the copy-config.
+    Game.MODEL_YAW = Game.MODEL_YAW || { french_s35: Math.PI, french_fuel: Math.PI, french_supply: Math.PI };
+    Game.MODEL_Y_TRIM = Game.MODEL_Y_TRIM || {};
+    Game.MODEL_WRAPPER_Y = Game.MODEL_WRAPPER_Y || { french_r35: 0.80 };
+    // STEER_PIVOT offsets the body from the unit's rotation centre. That makes a
+    // turning truck's body swing sideways ("skid"), so it's left empty: the
+    // kinematic bicycle model (uMod.move) already gives realistic front-wheel
+    // steering, and a centred body turns cleanly like the procedural trucks do.
+    Game.MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT || {};
+    Game.MODEL_SCALE = Game.MODEL_SCALE || { french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35, french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1 };
+    const MODEL_YAW = Game.MODEL_YAW, MODEL_Y_TRIM = Game.MODEL_Y_TRIM, MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT, MODEL_SCALE = Game.MODEL_SCALE;
     // Fused-mesh tanks (turret modelled into the hull, no separate node): aim by
     // rotating the whole hull. The B1 model now has a real "turret" node, so it's
     // no longer listed here — the loader wires its turret for true traverse.
     const MODEL_HULL_AIM = new Set();
+    // Models whose turret is real geometry but NOT in a named node (Sketchfab
+    // exports with generic "Object_N" mesh names). We group the listed meshes into
+    // a synthetic pivot at load time so the turret traverses for real. `head`/`gun`
+    // are the body + barrel used for aim tracking; pivot defaults to the head's
+    // horizontal centre. Mesh names are from the source GLB — update if re-exported.
+    const MODEL_TURRET_GROUP = {
+        french_panhard: {
+            meshes: ['Object_16', 'Object_5', 'Object_6', 'Object_7', 'Object_12', 'Object_13', 'Object_14'],
+            head: 'Object_16', gun: 'Object_12',
+        },
+        // H35: the turret ("tower") is its own mesh, but with a baked origin — group
+        // it so we re-pivot at the turret-ring centre rather than the model origin.
+        french_h35: { meshes: ['body_tower_0'], head: 'body_tower_0' },
+    };
+    // Single fused mesh (no separate turret geometry, e.g. a baked GLB): split the
+    // mesh at load time into hull + turret by region so the turret can traverse.
+    // Fractions are of the geometry's local bbox (Y-up). A triangle is "turret" if
+    // its centroid is above yFrac of the height AND within zFracCut of the centre
+    // width (excludes wide hull fenders). pivot = centroid of the turret BODY
+    // (verts above bodyYFrac) so the gun swings about the ring, not the model origin.
+    const MODEL_TURRET_SPLIT = {
+        french_s35: { yFrac: 0.50, zFracCut: 0.80, bodyYFrac: 0.66 },
+    };
+    // Models whose own textures are broken/placeholder: repaint with a realistic
+    // weathered paint job. `body` colour on hull/turret/gun, `running` (dark
+    // gunmetal) on tracks/wheels/suspension matched by name keyword.
+    const MODEL_RECOLOR = {
+        french_r35: {
+            body: 0x6e8070, running: 0x27292b,   // fallback colours if no texture
+            runningKeywords: ['rueda', 'track', 'suspenc', 'spring', 'gear', 'cylinder', 'wheel'],
+            // Hand-painted texture mapped to the R35's OWN UVs (exported via the UV
+            // layout), so it maps correctly. Applied to every mesh as baseColor.
+            texture: 'textures/r35_paint.jpg',
+        },
+    };
 
     // Try each path sequentially until one works
     const tryLoad = (idx) => {
@@ -1013,7 +1066,22 @@ Game._loadUnitModel = (unit, mesh) => {
             modelWrapper.updateMatrixWorld(true);
             const finalBox = new THREE.Box3().setFromObject(modelWrapper);
             modelWrapper.position.y = -finalBox.min.y;
-            console.log(`Ground snap: shifted Y by ${(-finalBox.min.y).toFixed(2)}`);
+            if (MODEL_Y_TRIM[teamKind]) modelWrapper.position.y += MODEL_Y_TRIM[teamKind];
+            // Absolute wrapper-Y override (debug "Scan Nodes → Wrapper Y"). Wins over
+            // the auto ground-snap + trim, and is re-applied on every reload.
+            if (Game.MODEL_WRAPPER_Y && Game.MODEL_WRAPPER_Y[teamKind] != null) {
+                modelWrapper.position.y = Game.MODEL_WRAPPER_Y[teamKind];
+            }
+            console.log(`Ground snap: shifted Y by ${(modelWrapper.position.y).toFixed(2)}`);
+
+            // Front-wheel steering: shift the body forward (+Z is forward after
+            // orientation) so the mesh origin sits at the rear axle. The body then
+            // pivots about its rear and the front swings into turns.
+            const steerFrac = MODEL_STEER_PIVOT[teamKind];
+            if (steerFrac) {
+                const fwdLen = finalBox.max.z - finalBox.min.z;
+                modelWrapper.position.z += (fwdLen / 2) * steerFrac;
+            }
 
             // ── 6. Search for turret and gun nodes within the model ──
             let turretNode = null;
@@ -1035,13 +1103,102 @@ Game._loadUnitModel = (unit, mesh) => {
             });
 
             // ── 7. Wire turret rotation ──
-            if (isVeh && MODEL_HULL_AIM.has(teamKind)) {
+            const turretGroupCfg = MODEL_TURRET_GROUP[teamKind];
+            if (isVeh && turretGroupCfg) {
+                // Group named meshes into a pivot so the real turret traverses.
+                const byName = {};
+                model.traverse(c => { if (c.name) byName[c.name] = c; });
+                const parts = turretGroupCfg.meshes.map(n => byName[n]).filter(Boolean);
+                const headNode = byName[turretGroupCfg.head] || parts[0];
+                const gunNode = byName[turretGroupCfg.gun] || null;
+                if (parts.length && headNode) {
+                    modelWrapper.updateMatrixWorld(true);
+                    // Pivot at the turret head's horizontal centre (world), so the
+                    // gun swings about the ring. Y is irrelevant for a yaw pivot.
+                    const headBox = new THREE.Box3().setFromObject(headNode);
+                    const pivotWorld = new THREE.Vector3();
+                    headBox.getCenter(pivotWorld);
+                    const turretGroup = new THREE.Group();
+                    turretGroup.name = 'turretGroup';
+                    model.add(turretGroup);
+                    model.updateMatrixWorld(true);
+                    turretGroup.position.copy(model.worldToLocal(pivotWorld.clone()));
+                    turretGroup.updateMatrixWorld(true);
+                    // attach() reparents while preserving each mesh's world transform.
+                    parts.forEach(m => turretGroup.attach(m));
+
+                    mesh.userData.turret = turretGroup;
+                    mesh.userData.gunNode = gunNode;
+                    mesh.userData.headNode = headNode;
+                    mesh.userData.turretAxis = 'y';
+                    mesh.userData.turretBaseRot = { x: turretGroup.rotation.x, y: turretGroup.rotation.y, z: turretGroup.rotation.z };
+                    unit.hasTurret = true;
+                    console.log(`Turret grouped from ${parts.length} meshes for ${unit.label}: axis=y`);
+                } else {
+                    console.warn(`Turret-group config for ${unit.label} matched no meshes!`);
+                }
+            } else if (isVeh && MODEL_HULL_AIM.has(teamKind)) {
                 // Fused mesh — no independent turret. Aim by rotating the hull
                 // (the fire module hull-rotates when the unit has no turret).
                 unit.hasTurret = false;
                 mesh.userData.turret = null;
                 mesh.userData.gunNode = null;
                 console.log(`Hull-aim wired for ${unit.label} (fused-mesh turret)`);
+            } else if (isVeh && MODEL_TURRET_SPLIT[teamKind]) {
+                // Fused mesh: carve the turret out of the single geometry by region
+                // so it traverses. Keep the hull on the original mesh; move the
+                // turret triangles onto a pivoted child group at the turret ring.
+                const cfg = MODEL_TURRET_SPLIT[teamKind];
+                let glbMesh = null;
+                model.traverse(o => { if (o.isMesh && o.geometry && o.geometry.index && !glbMesh) glbMesh = o; });
+                if (glbMesh) {
+                    const geo = glbMesh.geometry;
+                    geo.computeBoundingBox();
+                    const bb = geo.boundingBox, H = bb.max.y - bb.min.y;
+                    const cz = (bb.min.z + bb.max.z) / 2, halfZ = (bb.max.z - bb.min.z) / 2;
+                    const yThresh = bb.min.y + cfg.yFrac * H;
+                    const zCut = cfg.zFracCut * halfZ;
+                    const bodyY = bb.min.y + cfg.bodyYFrac * H;
+                    const pos = geo.attributes.position;
+                    const idx = geo.index.array;
+                    const turretTris = [], hullTris = [];
+                    let bx = 0, bz = 0, bn = 0;
+                    for (let t = 0; t < idx.length; t += 3) {
+                        const a = idx[t], b = idx[t + 1], c = idx[t + 2];
+                        const cy = (pos.getY(a) + pos.getY(b) + pos.getY(c)) / 3;
+                        const tzc = (pos.getZ(a) + pos.getZ(b) + pos.getZ(c)) / 3;
+                        if (cy > yThresh && Math.abs(tzc - cz) < zCut) {
+                            turretTris.push(a, b, c);
+                            if (cy > bodyY) { bx += (pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3; bz += tzc; bn++; }
+                        } else { hullTris.push(a, b, c); }
+                    }
+                    if (turretTris.length && hullTris.length) {
+                        const pivotX = bn ? bx / bn : 0;
+                        const pivotZ = bn ? bz / bn : cz;
+                        const hullGeo = geo.clone(); hullGeo.setIndex(hullTris);
+                        const turretGeo = geo.clone(); turretGeo.setIndex(turretTris);
+                        glbMesh.geometry = hullGeo;            // original mesh keeps the hull
+                        const turretMesh = new THREE.Mesh(turretGeo, glbMesh.material);
+                        turretMesh.name = 'split_turret';
+                        turretMesh.castShadow = true; turretMesh.receiveShadow = true;
+                        turretMesh.position.set(-pivotX, 0, -pivotZ);
+                        const turretGroup = new THREE.Group();
+                        turretGroup.name = 'turretGroup';
+                        turretGroup.position.set(pivotX, 0, pivotZ);
+                        turretGroup.add(turretMesh);
+                        glbMesh.add(turretGroup);               // pivot rides the hull's transform
+
+                        mesh.userData.turret = turretGroup;
+                        mesh.userData.headNode = turretMesh;
+                        mesh.userData.gunNode = null;
+                        mesh.userData.turretAxis = 'y';
+                        mesh.userData.turretBaseRot = { x: 0, y: 0, z: 0 };
+                        unit.hasTurret = true;
+                        console.log(`Turret split from fused mesh for ${unit.label}: ${turretTris.length / 3} turret tris, pivot=(${pivotX.toFixed(2)},${pivotZ.toFixed(2)})`);
+                    } else {
+                        console.warn(`Turret split for ${unit.label} produced empty hull/turret — check thresholds`);
+                    }
+                }
             } else if (turretNode && isVeh) {
                 let turretGroup;
 
@@ -1120,11 +1277,40 @@ Game._loadUnitModel = (unit, mesh) => {
                 console.warn(`No turret node found for ${unit.label}!`);
             }
 
-            // ── 8. Enable shadows on all meshes ──
+            // ── 8. Enable shadows on all meshes (+ optional repaint) ──
+            const recolor = MODEL_RECOLOR[teamKind];
             model.traverse(child => {
                 if (child.isMesh) {
                     child.castShadow = true;
                     child.receiveShadow = true;
+                    if (recolor) {
+                        if (recolor.texture) {
+                            // Hand-painted texture mapped to the model's OWN UVs —
+                            // apply to every mesh as baseColor (no weathering, so the
+                            // painted art shows as-is). Cached + GLB UV convention.
+                            if (!Game._borrowTexCache) Game._borrowTexCache = {};
+                            let tex = Game._borrowTexCache[recolor.texture];
+                            if (!tex) {
+                                tex = new THREE.TextureLoader().load(recolor.texture);
+                                tex.flipY = false;
+                                tex.colorSpace = THREE.SRGBColorSpace;
+                                Game._borrowTexCache[recolor.texture] = tex;
+                            }
+                            child.material = new THREE.MeshStandardMaterial({ color: 0xffffff, map: tex, roughness: 0.78, metalness: 0.08 });
+                        } else {
+                            // Decide paint by ancestor names (mesh nodes are "Object_N",
+                            // the descriptive name is on the parent).
+                            let nm = ''; let n = child;
+                            while (n && n !== model) { nm += ' ' + (n.name || '').toLowerCase(); n = n.parent; }
+                            const run = recolor.runningKeywords.some(k => nm.includes(k));
+                            const m = new THREE.MeshStandardMaterial({
+                                color: run ? recolor.running : recolor.body,
+                                roughness: run ? 0.82 : 0.72, metalness: run ? 0.35 : 0.12,
+                            });
+                            if (Game._addWeathering) Game._addWeathering(m, run ? 0.16 : 0.20);
+                            child.material = m;
+                        }
+                    }
                     child._originalMaterial = child.material;
                 }
             });
@@ -1156,6 +1342,44 @@ Game._loadUnitModel = (unit, mesh) => {
 /**
  * Create a unit and add it to the game.
  */
+// Footprint radius used for spawn spacing + separation (tanks/trucks are bigger).
+Game._unitFootprint = (kindOrUnit, size) => {
+    const kind = (kindOrUnit && kindOrUnit.kind !== undefined) ? kindOrUnit.kind : kindOrUnit;
+    const sz = size != null ? size : ((kindOrUnit && kindOrUnit.size) || 0.85);
+    const big = Game.isTank(kind) || kind === 'fuel' || kind === 'supply';
+    return sz * (big ? (Game.TANK_SEP_RADIUS || 1.3) : 0.7);
+};
+
+// Find a clear spot near (x,z) so a new unit doesn't spawn on top of another.
+// Spirals outward until it finds a gap clear of all living units (and not on
+// blocked terrain), falling back to the requested point if none is found.
+Game._findClearSpawn = (x, z, base) => {
+    if (!Game.units || !Game.units.length) return { x, z };
+    const myR = Game._unitFootprint(base.kind, base.size);
+    const big = Game.isTank(base.kind) || base.kind === 'fuel' || base.kind === 'supply';
+    const clearOf = (cx, cz) => {
+        for (const u of Game.units) {
+            if (!u.alive) continue;
+            const min = myR + Game._unitFootprint(u) + 0.3;
+            if (Game.distSq(cx, cz, u.x, u.z) < min * min) return false;
+        }
+        return true;
+    };
+    if (clearOf(x, z)) return { x, z };
+    const step = Math.max(1.2, (base.size || 0.85) * 1.8);
+    for (let r = 1; r <= 8; r++) {
+        for (let k = 0; k < 12; k++) {
+            const a = (k / 12) * Math.PI * 2 + r * 0.3;   // offset each ring so spots don't line up
+            const cx = Game.clamp(x + Math.cos(a) * r * step, 1, Game.WORLD_W - 1);
+            const cz = Game.clamp(z + Math.sin(a) * r * step, 1, Game.WORLD_H - 1);
+            const t = Game.getTileAtWorld ? Game.getTileAtWorld(cx, cz) : null;
+            if (t && (t.blocked || (big && t.vehicleBlocked))) continue;
+            if (clearOf(cx, cz)) return { x: cx, z: cz };
+        }
+    }
+    return { x, z };  // no gap found — spawn anyway (separation will ease it apart)
+};
+
 Game.makeUnit = (team, kind, x, z, opts = {}) => {
     const key = team + '_' + kind;
     const base = Game.UNIT_STATS[key];
@@ -1163,6 +1387,9 @@ Game.makeUnit = (team, kind, x, z, opts = {}) => {
         console.warn(`Unknown unit type: ${key}`);
         return null;
     }
+
+    // Don't drop the new unit on top of an existing one.
+    if (Game._findClearSpawn) { const c = Game._findClearSpawn(x, z, base); x = c.x; z = c.z; }
 
     const weaponDef = Game.WEAPONS[base.weapon] || {};
     const isVehClass = base.class === 'vehicle';
@@ -1328,4 +1555,72 @@ Game.formationOffsets = (count, spacing = 2.0, type) => {
             break;
     }
     return offsets;
+};
+
+// ═══════════════════════════════════════════════════════
+//  PER-MODEL PLACEMENT CONFIG  (debug-tunable + copy-config)
+// ═══════════════════════════════════════════════════════
+// These live at module scope so the debug panel can build its "Model: *" controls
+// and the copy-config can dump them BEFORE any unit of that type has spawned.
+// _loadUnitModel reads these same Game.* objects (its internal `|| {}` defaults are
+// now no-ops because these run first at script load). Keyed by `${team}_${kind}`.
+//  - MODEL_SCALE: extra scale multiplier on top of footprint normalization.
+//  - MODEL_Y_TRIM: ground-snap trim (world units); negative seats a floater.
+//  - MODEL_YAW: yaw (radians) when the source faces the wrong way.
+//  - MODEL_STEER_PIVOT: body shift; left empty (caused turning "skid").
+//  - MODEL_WRAPPER_Y: absolute wrapper-Y override (debug "Scan Nodes → Wrapper Y");
+//    wins over ground-snap + trim, persists, survives reload, shows in copy-config.
+Game.MODEL_YAW = Game.MODEL_YAW || { french_s35: Math.PI, french_fuel: Math.PI, french_supply: Math.PI };
+Game.MODEL_Y_TRIM = Game.MODEL_Y_TRIM || {};
+Game.MODEL_WRAPPER_Y = Game.MODEL_WRAPPER_Y || { french_r35: 0.80 };
+Game.MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT || {};
+Game.MODEL_SCALE = Game.MODEL_SCALE || { french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35, french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1 };
+
+// Rebuild the loaded model for every live unit of a teamKind, re-reading the
+// current Game.MODEL_* values. The GLB is cached (Game.loadModel clones it), so
+// this is cheap enough to drive live from a debug slider.
+Game.reloadModelFor = (teamKind) => {
+    if (!Game.units) return;
+    if (Game._modelLoadFailed) Game._modelLoadFailed.delete(teamKind);  // allow re-probe
+    Game.units.forEach(u => {
+        if (!u.alive || !u.mesh) return;
+        if (`${u.team}_${u.kind}` !== teamKind) return;
+        const w = u.mesh.userData.modelWrapper;
+        if (w) { u.mesh.remove(w); u.mesh.userData.modelWrapper = null; }
+        if (Game._loadUnitModel) Game._loadUnitModel(u, u.mesh);
+    });
+};
+
+// Debounce reloads so dragging a slider doesn't rebuild every frame.
+Game._modelReloadTimers = {};
+Game._scheduleModelReload = (teamKind) => {
+    if (Game._modelReloadTimers[teamKind]) clearTimeout(Game._modelReloadTimers[teamKind]);
+    Game._modelReloadTimers[teamKind] = setTimeout(() => {
+        Game._modelReloadTimers[teamKind] = null;
+        Game.reloadModelFor(teamKind);
+    }, 220);
+};
+
+// Debug-panel control descriptors for every configured model (merged into
+// Game._postfxControlDefs()). One "Model: <teamKind>" group per model with
+// Scale / Height / Yaw / Steer sliders bound to the live Game.MODEL_* objects.
+Game._modelControlDefs = () => {
+    const keysOf = (o) => Object.keys(o || {});
+    const models = [...new Set([
+        ...keysOf(Game.MODEL_SCALE), ...keysOf(Game.MODEL_YAW),
+        ...keysOf(Game.MODEL_Y_TRIM), ...keysOf(Game.MODEL_STEER_PIVOT),
+    ])].sort();
+    const defs = [];
+    models.forEach(m => {
+        const grp = 'Model: ' + m;
+        defs.push({ group: grp, key: `m_${m}_scale`, label: 'Scale x', min: 0.2, max: 4, step: 0.01,
+            default: (Game.MODEL_SCALE[m] ?? 1), apply: v => { Game.MODEL_SCALE[m] = v; Game._scheduleModelReload(m); } });
+        defs.push({ group: grp, key: `m_${m}_ytrim`, label: 'Height (Y trim)', min: -3, max: 3, step: 0.05,
+            default: (Game.MODEL_Y_TRIM[m] ?? 0), apply: v => { if (v) Game.MODEL_Y_TRIM[m] = v; else delete Game.MODEL_Y_TRIM[m]; Game._scheduleModelReload(m); } });
+        defs.push({ group: grp, key: `m_${m}_yaw`, label: 'Yaw (rad)', min: -3.15, max: 3.15, step: 0.01,
+            default: (Game.MODEL_YAW[m] ?? 0), apply: v => { if (v) Game.MODEL_YAW[m] = v; else delete Game.MODEL_YAW[m]; Game._scheduleModelReload(m); } });
+        defs.push({ group: grp, key: `m_${m}_steer`, label: 'Steer pivot', min: -1, max: 1, step: 0.05,
+            default: (Game.MODEL_STEER_PIVOT[m] ?? 0), apply: v => { if (v) Game.MODEL_STEER_PIVOT[m] = v; else delete Game.MODEL_STEER_PIVOT[m]; Game._scheduleModelReload(m); } });
+    });
+    return defs;
 };

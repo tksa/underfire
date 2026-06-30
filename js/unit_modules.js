@@ -144,7 +144,23 @@ Game.uMod.scan = (unit, ctx) => {
     // A holding or retreating unit (or one ordered to hold fire) doesn't go
     // looking for a fight.
     if (!enemy && !facing && !unit.holdFire && unit.orderMode !== 'hold' && unit.orderMode !== 'retreat') {
-        enemy = Game.nearestEnemy(unit);
+        const cand = Game.nearestEnemy(unit);
+        // Target hysteresis: keep the current target through small distance
+        // shuffles so the unit doesn't twitch back and forth between two roughly
+        // equidistant enemies. Only switch when the current target is gone/unseen,
+        // or a new one is clearly closer (>20%) AND we've held the current one for
+        // a minimum dwell (kills the rapid retarget jitter).
+        const cur = unit._engageId != null ? Game.getUnitById(unit._engageId) : null;
+        const curValid = cur && cur.alive && cur.team !== unit.team && Game.unitCanSee(unit, cur)
+            && Game.dist(unit.x, unit.z, cur.x, cur.z) <= unit.sight * 1.1;
+        if (curValid && cand && cand.id !== cur.id) {
+            const dCur = Game.distSq(unit.x, unit.z, cur.x, cur.z);
+            const dCand = Game.distSq(unit.x, unit.z, cand.x, cand.z);
+            const dwellOk = (Game.gameClock - (unit._targetSince || 0)) > 0.8;
+            enemy = (dCand < dCur * 0.64 && dwellOk) ? cand : cur;  // 0.64 = 0.8² → ~20% closer
+        } else {
+            enemy = curValid ? cur : cand;
+        }
     }
     // Sticky engagement: once a unit acquires a target it commits to it through a
     // brief sight/LOS flicker, instead of snapping to face it then spinning back
@@ -152,6 +168,7 @@ Game.uMod.scan = (unit, ctx) => {
     // Firing is still line-of-sight gated in the fire module, so it won't shoot
     // blind — this only steadies facing/tracking.
     if (enemy) {
+        if (unit._engageId !== enemy.id) unit._targetSince = Game.gameClock;  // stamp on real switch only
         unit._engageId = enemy.id;
         unit._engageTime = Game.gameClock;
     } else if (unit._engageId != null && unit.orderMode !== 'retreat' && !unit.holdFire && !facing
@@ -303,7 +320,11 @@ Game.uMod.fire = (unit, ctx) => {
                     unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
                 }
             } else {
-                unit.angle = aimAngleToEnemy;
+                // Infantry: turn the body toward the target at a finite rate
+                // instead of snapping instantly each frame. A hard snap is what
+                // made riflemen visibly twitch when a target shifted or when two
+                // enemies were near-equidistant. ~8 rad/s is quick but smooth.
+                unit.angle = Game.rotateTo(unit.angle, aimAngleToEnemy, 8 * dt);
                 unit.turretAngle = unit.angle;
                 if (ready && unit.cooldownLeft <= 0) {
                     Game.applyShot(unit, enemy);
@@ -328,6 +349,7 @@ Game.uMod.fire = (unit, ctx) => {
 Game.uMod.move = (unit, ctx) => {
     const dt = ctx.dt;
     const isVeh = ctx.isVeh;
+    const isTruck = unit.kind === 'fuel' || unit.kind === 'supply';   // wheeled, bicycle-model steering
     const enemy = ctx.enemy;
     const hasTurret = ctx.hasTurret;
     const aimAngleToEnemy = ctx.aimAngleToEnemy;
@@ -335,9 +357,9 @@ Game.uMod.move = (unit, ctx) => {
 
     let maxSpeed = unit.speed;
 
-    if (!isVeh) {
+    if (!isVeh && !isTruck) {
         const speedFactor = Game.clamp(1 - unit.suppressionValue / 135, 0.3, 1);
-        const STANCE_SPEED = { prone: 0.28, crouch: 0.55, stand: 1.0, run: 1.5 };
+        const STANCE_SPEED = { prone: 0.28, crouch: 0.55, stand: 1.0, run: 1.5, ease: 1.0, rest: 0.0 };
         maxSpeed *= 0.6 * speedFactor * (STANCE_SPEED[unit.stance] ?? 1.0);
 
         const tile = Game.getTileAtWorld(unit.x, unit.z);
@@ -356,7 +378,7 @@ Game.uMod.move = (unit, ctx) => {
         maxSpeed = 0;
     }
 
-    if (isVeh && Game.getTerrainSlope) {
+    if ((isVeh || isTruck) && Game.getTerrainSlope) {
         const slope = Game.getTerrainSlope(unit.x, unit.z);
         maxSpeed *= Game.clamp(1 - slope * 1.5, 0.45, 1);
     }
@@ -365,6 +387,26 @@ Game.uMod.move = (unit, ctx) => {
         maxSpeed = 0;
     }
 
+    // Combined-movement: while moving as a group, hold the slowest member's pace so
+    // armor and trucks don't outrun the infantry they set off with. Applied AFTER
+    // the per-unit modifiers (infantry carry a hidden 0.6 foot factor that vehicles
+    // don't), so _groupSpeed is an EFFECTIVE speed and the cap actually bites on the
+    // fast units while leaving the slowest unit (already at that pace) untouched.
+    if (unit._groupMoveActive && unit._groupSpeed && unit.path && unit.path.length && maxSpeed > 0) {
+        maxSpeed = Math.min(maxSpeed, unit._groupSpeed);
+    }
+
+    // Yield to units crossing the lane: a tank eases off / halts for troops moving
+    // across its nose, then resumes once they've passed (so it respects their path
+    // instead of grinding through them). Standing men are scattered by make-way.
+    if (isVeh && maxSpeed > 0 && Game._tankYield) maxSpeed *= Game._tankYield(unit);
+
+    // Insert/refresh a side-step waypoint to route around any tank blocking the
+    // lane ahead (dynamic obstacle avoidance) before we read the next waypoint.
+    // Runs for tanks, trucks and infantry so foot troops walk AROUND a hull
+    // instead of marching on the spot against it.
+    if (Game._vehicleAvoid) Game._vehicleAvoid(unit);
+
     if (unit.path && unit.path.length && unit.stopTimer <= 0 && (unit.orderDelay || 0) <= 0
         && (!unit.deployable || unit._canMove)) {
         let next = unit.path[0];
@@ -372,12 +414,12 @@ Game.uMod.move = (unit, ctx) => {
         let dz = next.z - unit.z;
         let d = Math.hypot(dx, dz);
 
-        const arrivalDist = isVeh ? 1.5 : 0.4;
+        const arrivalDist = (isVeh || isTruck) ? 1.5 : 0.4;
 
         while (unit.path.length && d < arrivalDist) {
             unit.path.shift();
 
-            if (isVeh) {
+            if (isVeh || isTruck) {
                 while (unit.path.length > 1) {
                     const peek = unit.path[0];
                     const peekDx = peek.x - unit.x;
@@ -400,6 +442,9 @@ Game.uMod.move = (unit, ctx) => {
 
             if (!unit.path.length) {
                 unit.moving = false;
+                unit._groupMoveActive = false;        // arrived — release the group pace cap
+                if (unit._reverseMove) { unit.currentSpeed = 0; unit._reversing = false; }  // stop dead, no forward lurch
+                unit._reverseMove = false;            // reverse-into-spot done
                 unit.currentSpeed = Math.max(0, unit.currentSpeed - maxSpeed * 0.8 * dt);
                 break;
             }
@@ -430,6 +475,31 @@ Game.uMod.move = (unit, ctx) => {
                     unit.currentSpeed = revSpeed;
                     unit._reversing = true;
                     unit.turretAngle = hasTurret ? faceAng : unit.angle;
+                    unit.moving = true;
+                    unit._trackDist = (unit._trackDist || 0) + step;
+                    if (unit._trackDist > 1.2) {
+                        unit._trackDist = 0;
+                        Game.trackMarks = Game.trackMarks || [];
+                        Game.trackMarks.push({ x: unit.x, z: unit.z, angle: unit.angle, size: unit.size, team: unit.team, life: 15.0, total: 15.0, mesh: null });
+                    }
+                } else if (unit._reverseMove) {
+                    // Short backward move: the destination is close and behind, so
+                    // reverse straight into it instead of turning the hull around.
+                    // Keep the nose roughly where it is (rear tracks toward the goal).
+                    const revAng = ang + Math.PI;                         // heading that aims our REAR at the waypoint
+                    unit.angle = Game.rotateTo(unit.angle, revAng, unit.rotationSpeed * 0.6 * dt);
+                    const revSpeed = maxSpeed * 0.45;
+                    unit.currentSpeed = Math.min(revSpeed, (unit.currentSpeed || 0) + maxSpeed * 0.5 * dt);
+                    const step = Math.min(unit.currentSpeed * dt, d);
+                    // Back straight up along the hull's OWN axis (rear-first). Translating
+                    // toward the goal bearing instead lets the body slide sideways while it's
+                    // still turning — that decoupled slide is the "not reversing properly"
+                    // look. The hull steers so its rear lines up on the waypoint; the motion
+                    // always follows the heading, matching the coast block below.
+                    unit.x -= Math.cos(unit.angle) * step;
+                    unit.z -= Math.sin(unit.angle) * step;
+                    unit.turretAngle = (hasTurret && enemy && aimAngleToEnemy !== null) ? aimAngleToEnemy : unit.angle;
+                    unit._reversing = true;
                     unit.moving = true;
                     unit._trackDist = (unit._trackDist || 0) + step;
                     if (unit._trackDist > 1.2) {
@@ -552,6 +622,74 @@ Game.uMod.move = (unit, ctx) => {
                 unit.moving = true;
                 } // end normal differential drive (else of reverseRetreat)
 
+            } else if (isTruck && unit._reverseMove) {
+                // Short backward move: reverse the truck straight into a close spot
+                // behind it rather than swinging the whole lorry around.
+                const revAng = ang + Math.PI;
+                unit.angle = Game.rotateTo(unit.angle, revAng, (unit.rotationSpeed || 2) * 0.4 * dt);
+                const revSpeed = maxSpeed * 0.4;
+                unit.currentSpeed = Math.min(revSpeed, (unit.currentSpeed || 0) + maxSpeed * 0.5 * dt);
+                const step = Math.min(unit.currentSpeed * dt, d);
+                // Back straight up along the hull's own axis (rear-first) so the lorry
+                // reverses instead of sliding toward the spot while still turning.
+                unit.x -= Math.cos(unit.angle) * step;
+                unit.z -= Math.sin(unit.angle) * step;
+                unit.turretAngle = unit.angle;
+                unit._reversing = true;
+                unit.moving = true;
+                unit._trackDist = (unit._trackDist || 0) + step;
+                if (unit._trackDist > 1.5) {
+                    unit._trackDist = 0;
+                    Game.trackMarks = Game.trackMarks || [];
+                    Game.trackMarks.push({ x: unit.x, z: unit.z, angle: unit.angle, size: unit.size, team: unit.team, life: 15.0, total: 15.0, mesh: null });
+                }
+            } else if (isTruck) {
+                // Wheeled steering (kinematic bicycle model). Heading only changes
+                // while rolling, turn rate ∝ speed and capped steering angle, so the
+                // truck arcs round like a real lorry — no spin-in-place, no instant
+                // snap. dθ = (v / wheelbase) · tan(steer) · dt.
+                const headErr = Game.angleDiff(unit.angle, ang);   // signed bearing error
+                const MAX_STEER = Game.TRUCK_MAX_STEER ?? 0.5;     // ~29° max wheel angle
+                // Wheelbase (turn radius) scales with the truck's VISUAL size: a
+                // model drawn larger (the 2x fuel truck) then arcs on a
+                // proportionally bigger radius, matching the supply truck's
+                // turn-radius-per-length instead of pivoting tightly on the spot —
+                // that tight pivot under a long body is what read as "drifting".
+                const mScale = (Game.MODEL_SCALE && Game.MODEL_SCALE[unit.team + '_' + unit.kind]) || 1;
+                const WHEELBASE = Math.max(0.8, (unit.size || 0.85) * (Game.TRUCK_WHEELBASE ?? 3.2) * mScale);
+                const steer = Game.clamp(headErr, -MAX_STEER, MAX_STEER);
+
+                // Smooth accel/brake; ease off for sharp turns and on approach, but
+                // keep rolling (floor) so turns don't crawl.
+                let targetSpeed = maxSpeed * Game.clamp(1 - Math.abs(headErr) / 1.8, 0.30, 1);
+                if (isLastWaypoint && d < 4) targetSpeed = Math.min(targetSpeed, maxSpeed * (d / 4));
+                const accelRate = maxSpeed * (Game.TRUCK_ACCEL ?? 0.6);
+                const brakeRate = maxSpeed * 1.5;
+                if (unit.currentSpeed < targetSpeed) unit.currentSpeed = Math.min(targetSpeed, unit.currentSpeed + accelRate * dt);
+                else unit.currentSpeed = Math.max(targetSpeed, unit.currentSpeed - brakeRate * dt);
+
+                unit.angle += (unit.currentSpeed / WHEELBASE) * Math.tan(steer) * dt;
+                // Slow-turn assist: while easing through a sharp turn, add a little
+                // reorientation so it doesn't crawl/orbit a target that's well off-axis.
+                // Scaled down for long (large-model) trucks so it eases the wheel
+                // rather than visibly pivoting the body in place.
+                if (unit.currentSpeed < maxSpeed * 0.45 && Math.abs(headErr) > 0.9) {
+                    unit.angle = Game.rotateTo(unit.angle, ang, unit.rotationSpeed * 0.5 / mScale * dt);
+                }
+                unit.turretAngle = unit.angle;
+
+                const step = unit.currentSpeed * dt;
+                if (step > 0.001) {
+                    unit.x += Math.cos(unit.angle) * step;
+                    unit.z += Math.sin(unit.angle) * step;
+                    unit._trackDist = (unit._trackDist || 0) + step;
+                    if (unit._trackDist > 1.5) {
+                        unit._trackDist = 0;
+                        Game.trackMarks = Game.trackMarks || [];
+                        Game.trackMarks.push({ x: unit.x, z: unit.z, angle: unit.angle, size: unit.size, team: unit.team, life: 15.0, total: 15.0, mesh: null });
+                    }
+                }
+                unit.moving = true;
             } else {
                 const turnRate = unit.rotationSpeed;
                 unit.angle = Game.lerpAngle(unit.angle, ang, Game.clamp(turnRate * dt, 0, 1));
@@ -580,11 +718,15 @@ Game.uMod.move = (unit, ctx) => {
             const coastRate = isVeh ? maxSpeed * 0.8 : maxSpeed * 3.0;
             unit.currentSpeed = Math.max(0, unit.currentSpeed - coastRate * dt);
             if (isVeh) {
-                unit.x += Math.cos(unit.angle) * unit.currentSpeed * dt;
-                unit.z += Math.sin(unit.angle) * unit.currentSpeed * dt;
+                // Coast in the direction we were actually travelling — a reversing
+                // tank must not lurch FORWARD on its residual momentum when it stops.
+                const dir = unit._reversing ? -1 : 1;
+                unit.x += Math.cos(unit.angle) * unit.currentSpeed * dt * dir;
+                unit.z += Math.sin(unit.angle) * unit.currentSpeed * dt * dir;
             }
         } else {
             unit.currentSpeed = 0;
+            unit._reversing = false;
         }
 
         // Manual "Rotate" order: turn in place toward the ordered bearing. Tanks
@@ -682,7 +824,17 @@ Game.updateUnit = (unit, dt) => {
         if ((!unit.path || !unit.path.length) && Game._footprintDistSq
             && Game._footprintDistSq(unit._enterRec, unit.x, unit.z) > 6.25) {
             const rec = unit._enterRec;
-            const np = Game.buildingNearPoint ? Game.buildingNearPoint(rec, unit.x, unit.z) : { x: rec.cx, z: rec.cz };
+            // Re-path to the nearest door (face midpoint) rather than the closest
+            // arbitrary wall point, so they head for a real entrance.
+            let np;
+            if (Game.buildingDoors) {
+                const doors = Game.buildingDoors(rec);
+                np = doors.reduce((best, p) => {
+                    const d = (p.x - unit.x) ** 2 + (p.z - unit.z) ** 2;
+                    return (!best || d < best._d) ? { x: p.x, z: p.z, _d: d } : best;
+                }, null);
+            }
+            if (!np) np = Game.buildingNearPoint ? Game.buildingNearPoint(rec, unit.x, unit.z) : { x: rec.cx, z: rec.cz };
             unit.path = Game.findPath(unit, unit.x, unit.z, np.x, np.z);
             unit.moving = true;
         }
@@ -697,5 +849,8 @@ Game.updateUnit = (unit, dt) => {
     M.engage(unit, ctx);
     if (unit.team === Game.TEAM.GERMAN) Game.updateAI(unit, dt, ctx.enemy);
     M.fire(unit, ctx);
+    // Idle/ambient posture (rest, at-ease, ready). Runs just before move so a
+    // roused soldier is on his feet before the move module reads his stance.
+    if (M.ambient) M.ambient(unit, ctx);
     M.move(unit, ctx);
 };
