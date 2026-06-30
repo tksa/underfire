@@ -100,13 +100,21 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false) => {
         // into range, then push on. A plain move is a RELOCATE order: obey it and
         // get to the destination, do NOT stop to fight or chase (it can still
         // return fire on the move, but never halts/diverts). Hold = put-and-defend.
-        if (mode === 'attack') { unit.orderMode = 'assault'; unit.holdFire = false; }
-        else if (mode === 'hold') unit.orderMode = 'hold';
+        if (mode === 'attack') {
+            unit.orderMode = 'assault'; unit.holdFire = false;
+            // Remember WHERE the attack-move is headed. The engage module clears the
+            // path to stop and fight when an enemy comes into range; without this the
+            // unit would just sit where the last enemy fell. With it, once the local
+            // fight is over it resumes the advance to the ordered spot (the red circle).
+            unit._assaultGoal = { x: tx, z: tz };
+        }
+        else if (mode === 'hold') { unit.orderMode = 'hold'; unit._assaultGoal = null; }
         else {
             // Plain move. Reset any standing 'assault'/forced-target lock so the
             // engage module can't halt the unit when an enemy is in range — this
             // is what made a tank under fire "not listen" and refuse to pull back.
             unit.orderMode = 'move';
+            unit._assaultGoal = null;
             unit._engageId = null;
             unit._inFiringPos = false;
             unit._pursueAnchor = null;
@@ -202,6 +210,7 @@ Game.orderRetreat = (x, z) => {
         u.forcedTargetId = null;
         u.bombardX = null; u.bombardZ = null; u._bombarding = false;
         u._enterRec = null;
+        u._assaultGoal = null;
         if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
         u.orderMode = 'retreat';
         u.retreating = true;
@@ -955,6 +964,7 @@ Game.handleInputEvents = () => {
                 u.forcedTargetId = null;
                 u.bombardX = null; u.bombardZ = null;
                 u._bombarding = false;
+                u._assaultGoal = null;
                 if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
             });
             Game.pushMessage('Units stopped.', 1.0);

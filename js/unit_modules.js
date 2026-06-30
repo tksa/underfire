@@ -254,6 +254,20 @@ Game.uMod.engage = (unit, ctx) => {
             unit.stopTimer = Math.max(unit.stopTimer || 0, 0.6);
         }
     }
+
+    // Attack-move RESUME: when the local fight is over (no target in view) and the
+    // unit isn't already routed, push on to the ordered destination instead of
+    // halting where the last enemy fell. This is what gets tanks + infantry all the
+    // way to the red circle after they've cleared resistance on the way.
+    if (unit.orderMode === 'assault' && unit._assaultGoal && !enemy
+        && (unit.stopTimer || 0) <= 0 && (!unit.path || !unit.path.length)) {
+        if (Game.dist(unit.x, unit.z, unit._assaultGoal.x, unit._assaultGoal.z) > 2.2) {
+            unit.path = Game.findPath(unit, unit.x, unit.z, unit._assaultGoal.x, unit._assaultGoal.z);
+            unit.moving = true;
+        } else {
+            unit._assaultGoal = null;     // arrived at the ordered spot
+        }
+    }
 };
 
 // Fire: turret/weapon tracking and shooting. Sets ctx.hasTurret /
@@ -415,6 +429,27 @@ Game.uMod.move = (unit, ctx) => {
         let d = Math.hypot(dx, dz);
 
         const arrivalDist = (isVeh || isTruck) ? 1.5 : 0.4;
+
+        // SETTLE WHEN CROWDED: a foot soldier elbowed out of his exact formation slot
+        // by friendlies can't reach the tight 0.4 arrival radius and would shuffle on
+        // the spot forever (the clump-and-circle look). On his final leg, near the
+        // slot, if he STOPS CLOSING the distance for a moment (blocked), call it
+        // arrived. Progress-based so it ignores speed bouncing against neighbours; a
+        // lone unit keeps closing the gap and arrives precisely as normal.
+        if (!isVeh && !isTruck && unit.path.length === 1 && d < 3.2) {
+            if (unit._lastGoalD != null && d > unit._lastGoalD - 0.05) {
+                unit._settleT = (unit._settleT || 0) + dt;
+                if (unit._settleT > 0.6) {
+                    unit.path.length = 0; unit.moving = false;
+                    unit._settleT = 0; unit._groupMoveActive = false;
+                }
+            } else {
+                unit._settleT = 0;
+            }
+            unit._lastGoalD = d;
+        } else {
+            unit._settleT = 0; unit._lastGoalD = null;
+        }
 
         while (unit.path.length && d < arrivalDist) {
             unit.path.shift();

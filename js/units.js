@@ -951,7 +951,10 @@ Game._loadUnitModel = (unit, mesh) => {
     // width (excludes wide hull fenders). pivot = centroid of the turret BODY
     // (verts above bodyYFrac) so the gun swings about the ring, not the model origin.
     const MODEL_TURRET_SPLIT = {
-        french_s35: { yFrac: 0.50, zFracCut: 0.80, bodyYFrac: 0.66 },
+        // Somua S35 has a TALL hull with a small cast turret on top; the old yFrac
+        // 0.50 swept the whole upper deck into the "turret" so the entire top span
+        // rotated. Lift the cut so only the turret proper (top ~third) traverses.
+        french_s35: { yFrac: 0.72, zFracCut: 0.62, bodyYFrac: 0.82 },
     };
     // Models whose own textures are broken/placeholder: repaint with a realistic
     // weathered paint job. `body` colour on hull/turret/gun, `running` (dark
