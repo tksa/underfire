@@ -82,8 +82,15 @@ Game.computeFormationTargets = (chosen, wx, wz) => {
 };
 
 Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false) => {
-    const chosen = unitList || Game.selectedPlayerUnits();
+    let chosen = unitList || Game.selectedPlayerUnits();
     if (!chosen.length) return;
+    // Supply / fuel trucks can't fight, so they IGNORE attack-move — they hold their
+    // ground and only obey a plain Move order. Drop them from an attack-move so the
+    // rest of the group advances and the trucks stay put.
+    if (mode === 'attack') {
+        chosen = chosen.filter(u => u.kind !== 'fuel' && u.kind !== 'supply');
+        if (!chosen.length) return;
+    }
     // Waypoint queuing (Ctrl/Cmd + move): append a leg to the existing route
     // instead of replacing it. Only sensible for plain moves on units that are
     // already routed somewhere; otherwise it behaves like a normal move.
