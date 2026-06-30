@@ -1,77 +1,77 @@
 {
- "version": "v0.8.0-dev",
- "build": "3ae6cfb",
- "generated": "2026-06-30",
+ "version": "v0.9.0",
+ "build": "17a3db8",
+ "generated": "2026-07-01",
  "commits": [
   {
-   "hash": "3ae6cfb",
+   "hash": "17a3db8",
+   "date": "2026-07-01",
+   "subject": "cap de-penetration (no teleport) + faster stuck give-up"
+  },
+  {
+   "hash": "3d6a461",
    "date": "2026-06-30",
-   "subject": "garrison buildings, Char B1 bis model, bigger houses, cleaner roof, water depth"
+   "subject": "attack-move HALTS trucks (not just excludes them)"
   },
   {
-   "hash": "f7ac7bd",
-   "date": "2026-06-29",
-   "subject": "refresh changelog"
+   "hash": "7ba5d5b",
+   "date": "2026-06-30",
+   "subject": "infantry slide AROUND a stopped tank instead of grinding its rear"
   },
   {
-   "hash": "dae1d1e",
-   "date": "2026-06-29",
-   "subject": "visible garrison fire, shadow-acne roofs, green cursors, red attack reticle"
+   "hash": "5639c40",
+   "date": "2026-06-30",
+   "subject": "infantry RUN out of a tank's way"
   },
   {
-   "hash": "d8ff285",
-   "date": "2026-06-29",
-   "subject": "units ordered into a building march straight in, ignore enemies"
+   "hash": "a80a16f",
+   "date": "2026-06-30",
+   "subject": "tanks crush through forests"
   },
   {
-   "hash": "cd66594",
-   "date": "2026-06-29",
-   "subject": "door+chevron enter cursor"
+   "hash": "5a05a1a",
+   "date": "2026-06-30",
+   "subject": "supply/fuel trucks ignore attack-move (they can't fight)"
   },
   {
-   "hash": "e8415b5",
-   "date": "2026-06-29",
-   "subject": "infantry occupy + fight from buildings"
+   "hash": "85e1c01",
+   "date": "2026-06-30",
+   "subject": "preview circles == actual per-unit destinations"
   },
   {
-   "hash": "a099ce2",
-   "date": "2026-06-29",
-   "subject": "release v0.8.0-dev"
+   "hash": "2de2464",
+   "date": "2026-06-30",
+   "subject": "vehicles form columns instead of weaving (RVO-style reciprocity)"
   },
   {
-   "hash": "7b7342f",
-   "date": "2026-06-29",
-   "subject": "ground fire + building collapse delay"
+   "hash": "8705ec2",
+   "date": "2026-06-30",
+   "subject": "stop stuck-tank judder (detour flicker) + idle \"swing out of the blue\""
   },
   {
-   "hash": "bbc07c9",
-   "date": "2026-06-29",
-   "subject": "terrain/weather dust modifiers + dust LOS block"
+   "hash": "b8a7e18",
+   "date": "2026-06-30",
+   "subject": "kill the unit jitter"
   },
   {
-   "hash": "1e0762d",
-   "date": "2026-06-29",
-   "subject": "vehicle destruction states + persistent wreck smoke"
+   "hash": "4007ba2",
+   "date": "2026-06-30",
+   "subject": "attack-move reaches the objective, formation settles, S35 turret"
   },
   {
-   "hash": "1cf16fe",
-   "date": "2026-06-29",
-   "subject": "realistic impact pass stages 1-2 (dust curve, terrain tint, HE/AP impacts)"
+   "hash": "c5b4f4a",
+   "date": "2026-06-30",
+   "subject": "opt-in group pace + foot troops yield to moving tanks"
   },
   {
-   "hash": "75f63f2",
-   "date": "2026-06-29",
-   "subject": "add EFFECTS.md"
+   "hash": "ab92ee8",
+   "date": "2026-06-30",
+   "subject": "tactical AI layer, idle postures, square tank collision, group movement"
   },
   {
-   "hash": "82d8da5",
-   "date": "2026-06-29",
-   "subject": "tougher buildings + bigger smoke + debug knobs"
-  },
-  {
-   "hash": "fa4be06",
-   "date": "2026-06-29",
-   "subject": "refresh changelog for deploy"
+   "hash": "45b6021",
+   "date": "2026-06-30",
+   "subject": "refresh changelog for latest updates"
   }
  ]
 }

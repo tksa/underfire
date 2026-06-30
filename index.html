@@ -1475,15 +1475,17 @@
     // data/changelog.json is generated from the git commit log at deploy time
     // (scripts/gen-changelog.mjs) and fetched here — no build step. Falls back to
     // a short built-in list if it can't be loaded.
-    const UNDER_VERSION = 'v0.8.0-dev';
+    const UNDER_VERSION = 'v0.9.0';
     const vEl = document.getElementById('menuVersion');
     const upEl = document.getElementById('menuUpdates');
     if (vEl) vEl.textContent = UNDER_VERSION;
 
     const FALLBACK_NOTES = [
-      'Full 614-unit roster (data/units.csv) with per-unit year for era gating.',
-      'Deploy/limber guns, morale + chain of command, mines, sandbags, transport & towing.',
-      'Smarter enemy infantry (break for cover/armor), retreat order, per-unit module refactor.',
+      'Tactical AI layer: idle postures (ready → at ease → rest), social "chatting" idle, attention/at-ease/guard orders.',
+      'Movement overhaul: smooth collision (no jitter/skid/weaving), tanks form columns, crush through forests, stuck units re-route.',
+      'Formation: each unit goes to its own circle, armour spread evenly; size-based right of way; infantry run clear of tanks.',
+      'New French vehicles: Somua S35, Hotchkiss H35, Renault R35, Panhard 178, plus AHN3 supply & Laffly fuel trucks.',
+      'Natural animations (eased pose transitions, breathing); reverse-into-spot; trucks hold on attack-move.',
     ];
     const renderUpdates = (version, date, notes) => {
       if (!upEl) return;

@@ -832,8 +832,11 @@ Game.uMod.move = (unit, ctx) => {
                 unit._stuckT = 0;
                 unit._stuckReplans = (unit._stuckReplans || 0) + 1;
                 if (unit._stuckReplans > 2) {
-                    // Tried a couple of fresh routes and still wedged (usually crowded
-                    // out at a packed destination): settle here rather than grind on.
+                    // Tried a couple of fresh routes and still wedged (usually crowded out
+                    // at a packed objective, where it's already standing): settle here
+                    // quickly. (Re-routing it back to the objective centre was tried and
+                    // backfired — it just piled the unit back into the crowd and doubled
+                    // the stuck time.)
                     unit.path = []; unit.moving = false; unit._stuckReplans = 0;
                 } else {
                     const goal = unit.path[unit.path.length - 1];
