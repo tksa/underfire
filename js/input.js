@@ -84,10 +84,16 @@ Game.computeFormationTargets = (chosen, wx, wz) => {
 Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false) => {
     let chosen = unitList || Game.selectedPlayerUnits();
     if (!chosen.length) return;
-    // Supply / fuel trucks can't fight, so they IGNORE attack-move — they hold their
-    // ground and only obey a plain Move order. Drop them from an attack-move so the
-    // rest of the group advances and the trucks stay put.
+    // Supply / fuel trucks can't fight, so an attack-move STOPS them where they are
+    // (and cancels any move they were still finishing) — they only obey plain Move
+    // orders. Halt them, then drop them so the rest of the group advances without them.
     if (mode === 'attack') {
+        for (const u of chosen) {
+            if (u.kind === 'fuel' || u.kind === 'supply') {
+                u.path = []; u.moving = false; u.orderMode = 'hold';
+                u._reverseMove = false; u._groupMoveActive = false;
+            }
+        }
         chosen = chosen.filter(u => u.kind !== 'fuel' && u.kind !== 'supply');
         if (!chosen.length) return;
     }
