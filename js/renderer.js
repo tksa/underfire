@@ -11,6 +11,7 @@ Game.syncUnitMeshes = (dt) => {
     const THREE = Game.THREE;
 
     if (Game._updatePathLines) Game._updatePathLines();
+    if (Game.recordMoveFrame) Game.recordMoveFrame();
 
     Game.units.forEach(unit => {
         if (!unit.mesh) return;

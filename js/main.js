@@ -139,6 +139,67 @@ Game._tankYield = (unit) => {
     return factor;
 };
 
+// ── Movement recorder (debug) ───────────────────────────────────────────────
+// Records every FRIENDLY unit's position/heading/speed/state each frame so movement
+// can be replayed/analysed. Toggle from the debug panel ("Record unit movement") or
+// call Game.startMoveRec() / Game.stopMoveRec(). Stopping prints a per-unit jitter
+// summary (heading + speed reversals, path length vs net travel = "wiggle") to the
+// console and downloads the full sample log as JSON.
+Game._moveRec = null;
+Game.startMoveRec = () => {
+    Game._moveRec = [];
+    Game._moveRecT0 = Game.gameClock || 0;
+    if (Game.pushMessage) Game.pushMessage('Recording unit movement…', 1.5);
+};
+Game.recordMoveFrame = () => {
+    if (!Game._moveRec) return;
+    const t = +(((Game.gameClock || 0) - Game._moveRecT0)).toFixed(3);
+    for (const u of Game.units) {
+        if (!u.alive || u.team !== Game.TEAM.FRENCH) continue;   // all friendly units
+        Game._moveRec.push({
+            t, id: u.id, kind: u.kind, cls: u.class, x: +u.x.toFixed(3), z: +u.z.toFixed(3),
+            a: +(u.angle || 0).toFixed(3), spd: +(u.currentSpeed || 0).toFixed(2),
+            stop: +(u.stopTimer || 0).toFixed(2), det: u._detour ? 1 : 0, rev: u._reversing ? 1 : 0,
+            mv: u.moving ? 1 : 0,
+        });
+    }
+    if (Game._moveRec.length > 400000) Game._moveRec.splice(0, 8000);
+};
+Game.stopMoveRec = () => {
+    if (!Game._moveRec) { if (Game.pushMessage) Game.pushMessage('Not recording.', 1.2); return null; }
+    const data = Game._moveRec; Game._moveRec = null;
+    const byId = {};
+    data.forEach(s => { (byId[s.id] = byId[s.id] || []).push(s); });
+    const summary = Object.keys(byId).map(id => {
+        const s = byId[id];
+        let headRev = 0, spdRev = 0, pathLen = 0, lastA = 0, lastSd = 0, stopFrames = 0;
+        for (let i = 1; i < s.length; i++) {
+            pathLen += Math.hypot(s[i].x - s[i - 1].x, s[i].z - s[i - 1].z);
+            const da = Game.angleDiff(s[i - 1].a, s[i].a);
+            if (Math.abs(da) > 0.01) { if (lastA !== 0 && Math.sign(da) !== Math.sign(lastA)) headRev++; lastA = da; }
+            const sd = Math.sign(s[i].spd - s[i - 1].spd);
+            if (sd !== 0) { if (lastSd !== 0 && sd !== lastSd) spdRev++; lastSd = sd; }
+            if (s[i].spd < 0.05) stopFrames++;
+        }
+        const net = s.length ? Math.hypot(s[s.length - 1].x - s[0].x, s[s.length - 1].z - s[0].z) : 0;
+        return {
+            id: +id, kind: s[0].kind, frames: s.length, headingReversals: headRev,
+            speedReversals: spdRev, stopFrames, pathLen: +pathLen.toFixed(1),
+            net: +net.toFixed(1), wiggle: +(pathLen / (net || 1)).toFixed(2),
+        };
+    });
+    console.log('=== TANK MOVEMENT SUMMARY (jitter = many reversals / high wiggle) ===');
+    if (console.table) console.table(summary); else console.log(JSON.stringify(summary, null, 1));
+    try {
+        const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = 'tank_movement.json'; a.click();
+    } catch (e) { /* headless: no DOM download */ }
+    if (Game.pushMessage) Game.pushMessage(`Recording stopped (${data.length} samples) — summary in console.`, 3.0);
+    Game._moveRecSummary = summary;
+    return summary;
+};
+
 Game.applySeparation = (unit, dt) => {
     let sepX = 0, sepZ = 0;
     const isVeh = Game.isTank(unit.kind);
@@ -247,21 +308,23 @@ Game.applySeparation = (unit, dt) => {
             // Tank vs tank: a tank can NOT drive through another. A STATIONARY tank
             // holds its ground (immovable) while the MOVER de-overlaps and routes
             // around it — so a moving tank never shoves a parked friendly aside.
-            // De-overlap off the other hull's RECTANGULAR box (nearest face), not a
-            // circle, so hulls sit flush alongside instead of bouncing on round rings.
+            // RADIAL (circular) de-overlap here: the oriented-box min-translation push
+            // flips between the hull's long/short face as two tanks cross the box
+            // corner, and that flip-flop was the jitter. The radial push is smooth.
+            // (Infantry still de-penetrate off the square hull box — that's where the
+            // rectangular footprint is visible and it's flicker-free for a point.)
             const iMoving = (unit.currentSpeed || 0) > 0.3 || (unit.path && unit.path.length > 0);
             const otherMoving = (other.currentSpeed || 0) > 0.3 || (other.path && other.path.length > 0);
-            const boxPush = Game._tankBoxPush(unit.x, unit.z, other, unit.size * radMult, Game.TANK_SEP_GAP ?? 0.25);
-            if (boxPush && (iMoving || !otherMoving)) {
-                sepX += boxPush.x * (Game.TANK_SEP_STRENGTH || 4.0);
-                sepZ += boxPush.z * (Game.TANK_SEP_STRENGTH || 4.0);
+            if (iMoving || !otherMoving) {
+                sepX += nx * strength;
+                sepZ += nz * strength;
             }
             // Yield (brief stop) only if the OTHER hull is ahead AND has priority —
             // a stationary tank, or the lower-id one among two movers. This breaks
             // the symmetry so two tanks meeting never both freeze and lock together;
             // exactly one eases around while the other proceeds.
             const otherAhead = (-nx) * fwdX + (-nz) * fwdZ > 0.25;
-            if (boxPush && otherAhead && (!otherMoving || other.id < unit.id)) blockedAhead = true;
+            if (otherAhead && (!otherMoving || other.id < unit.id)) blockedAhead = true;
         } else if (isVeh && !otherVeh) {
             // Tank vs infantry: a tank is immovable by men (no push on the tank).
         } else {
@@ -365,16 +428,40 @@ Game._vehicleAvoid = (unit) => {
 
     const blockMoving = (block.currentSpeed || 0) > 0.3 || (block.path && block.path.length > 0);
 
-    // FOOT TROOPS yield to a MOVING FRIENDLY tank: stop and let it pass rather than
-    // weaving around a hull that's itself moving — that weave was the approach-stop-
-    // creep jitter. The stop is held briefly (refreshed every frame the tank is in
-    // our corridor) so it stays put smoothly until the tank clears, then resumes.
-    // (Enemy moving tanks are handled by the scatter/crush path, not a polite wait.)
+    // FOOT TROOPS yield to a MOVING FRIENDLY tank CROSSING their path: stop and let
+    // it pass rather than weaving around a moving hull (that weave was the approach-
+    // stop-creep jitter). Held briefly so it stays put until the tank clears.
+    // IMPORTANT: only for a tank crossing our lane — NOT one we're moving along WITH
+    // (following/escorting). Stopping for a tank we're advancing behind made the
+    // infantry bunch up and "hide" behind it instead of joining the attack.
     if (!vehSized && blockMoving && (block.currentSpeed || 0) > 0.3 && block.team === unit.team) {
-        if (unit._detour && unit.path[0] === unit._detour) unit.path.shift();
-        unit._detour = null;
-        unit.stopTimer = Math.max(unit.stopTimer || 0, 0.4);   // wait for the tank
-        return;
+        const tfx = Math.cos(block.angle), tfz = Math.sin(block.angle);
+        const following = (hx * tfx + hz * tfz) > 0.45;   // tank heading ~ ours = escorting
+        if (!following) {
+            if (unit._detour && unit.path[0] === unit._detour) unit.path.shift();
+            unit._detour = null;
+            unit.stopTimer = Math.max(unit.stopTimer || 0, 0.4);   // wait for the crossing tank
+            return;
+        }
+    }
+
+    // INFANTRY DON'T WEAVE DETOURS. The recorder showed foot troops carrying an active
+    // detour 30-55% of the time, re-picking the side/target every frame as tanks
+    // shuffled — that constant re-aim was the bulk of the infantry jitter (hundreds of
+    // heading reversals, wiggle up to 5x). The collide-and-slide de-penetration already
+    // routes a man smoothly around a hull, so foot troops need no side-step waypoint;
+    // they just walk their line and graze past. Only vehicles get a detour.
+    if (!vehSized) { if (unit._detour && unit.path[0] === unit._detour) unit.path.shift(); unit._detour = null; return; }
+
+    // HOLD the detour steady: while still avoiding the SAME tank, keep the existing
+    // side-step waypoint and only re-aim it a few times a second. Recomputing the
+    // target every frame (it depends on the unit's own heading) created a feedback
+    // loop — steer at waypoint -> heading shifts -> waypoint moves -> steer again —
+    // i.e. the tank weave/jitter. A steady waypoint gives a steady heading.
+    const nowT = Game.gameClock || 0;
+    if (unit._detour && unit._detour.forId === block.id && unit.path[0] === unit._detour
+        && (nowT - (unit._detour.t || 0)) < 0.35) {
+        return;   // keep steering to the current (stable) detour point
     }
 
     // Reuse the chosen side while still avoiding the same tank; pick afresh otherwise.
@@ -422,9 +509,9 @@ Game._vehicleAvoid = (unit) => {
     }
 
     if (unit._detour && unit.path[0] === unit._detour) {
-        unit._detour.x = gx; unit._detour.z = gz; unit._detour.forId = block.id; unit._detour.side = side;
+        unit._detour.x = gx; unit._detour.z = gz; unit._detour.forId = block.id; unit._detour.side = side; unit._detour.t = nowT;
     } else {
-        unit._detour = { x: gx, z: gz, forId: block.id, side, _detour: true };
+        unit._detour = { x: gx, z: gz, forId: block.id, side, t: nowT, _detour: true };
         unit.path.unshift(unit._detour);
     }
 };
@@ -437,6 +524,7 @@ Game._tankControlDefs = () => [
     { group: 'Tanks', key: 'tankBoxWid', label: 'Hull box width x (size)', min: 0.5, max: 2, step: 0.05, apply: v => { Game.TANK_BOX_WID = v; } },
     { group: 'Tanks', key: 'tankRings', label: 'Show collision box (0/1)', min: 0, max: 1, step: 1, apply: v => { Game._showTankRings = v >= 1; } },
     { group: 'Tanks', key: 'showPaths', label: 'Show movement paths (0/1)', min: 0, max: 1, step: 1, apply: v => { Game._showPaths = v >= 1; } },
+    { group: 'Tanks', key: 'recMovement', label: 'Record unit movement (0/1)', min: 0, max: 1, step: 1, apply: v => { if (v >= 1) Game.startMoveRec(); else Game.stopMoveRec(); } },
     { group: 'Trucks', key: 'truckMaxSteer', label: 'Max steer (rad)', min: 0.2, max: 0.9, step: 0.02, apply: v => { Game.TRUCK_MAX_STEER = v; } },
     { group: 'Trucks', key: 'truckWheelbase', label: 'Wheelbase x size (turn radius)', min: 1.5, max: 6, step: 0.1, apply: v => { Game.TRUCK_WHEELBASE = v; } },
     { group: 'Trucks', key: 'truckAccel', label: 'Acceleration', min: 0.2, max: 2, step: 0.05, apply: v => { Game.TRUCK_ACCEL = v; } },

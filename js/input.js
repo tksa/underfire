@@ -21,7 +21,20 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false) => {
     cx /= chosen.length; cz /= chosen.length;
     const angle = Math.atan2(wz - cz, wx - cx);
 
-    const offsets = Game.formationOffsets(chosen.length, 2.5);
+    // Spacing must clear the biggest footprint in the group, or vehicle slots end up
+    // closer than the hulls are long — the tanks then overlap and shove each other
+    // forever (the grouped-tank jitter). Scale it up when armor/trucks are present.
+    let spacing = 2.5;
+    for (const u of chosen) {
+        if (Game.isTank(u.kind)) {
+            const len = (u.size || 1) * (Game.TANK_BOX_LEN || 1.5) * 2;   // full hull length
+            spacing = Math.max(spacing, len * 0.85 + 0.8);
+        } else if (u.kind === 'fuel' || u.kind === 'supply') {
+            spacing = Math.max(spacing, (u.size || 1) * 2.4);
+        }
+    }
+    spacing = Math.min(spacing, 5.0);
+    const offsets = Game.formationOffsets(chosen.length, spacing);
 
     // ── Combined-movement controller: role-aware slot assignment + group speed ──
     // Rank each formation slot by how far FORWARD it sits along the line of march,
@@ -630,10 +643,18 @@ Game.handleMouseSelection = () => {
         if (!Game.keys['ShiftLeft'] && !Game.keys['ShiftRight']) Game.selection.clear();
         Game.units.forEach(unit => {
             if (!unit.alive || unit.team !== Game.TEAM.FRENCH) return;
-            const sp = Game.worldToScreen(unit.x, unit.z);
-            if (sp.x >= sx && sp.x <= ex && sp.y >= sy && sp.y <= ey) {
-                Game.selection.add(unit.id);
-            }
+            // Catch a unit when the box touches its BODY, not only its ground anchor.
+            // The model is drawn above its feet, so the old feet-point test forced you
+            // to drag over the ground under each man. Project the body centre AND the
+            // feet, and inflate the box by the unit's on-screen radius so any overlap
+            // with the visible model selects it.
+            const bodyY = (unit.y || 0) + (Game.isTank(unit.kind) ? (unit.size || 0.8) * 0.5 : (unit.size || 0.5) * 1.0);
+            const body = Game.worldToScreen(unit.x, unit.z, bodyY);
+            const feet = Game.worldToScreen(unit.x, unit.z, (unit.y || 0));
+            const edge = Game.worldToScreen(unit.x + (unit.size || 0.5), unit.z, bodyY);
+            const rad = Math.max(9, Math.hypot(edge.x - body.x, edge.y - body.y) + 5);
+            const inBox = (p) => p.x >= sx - rad && p.x <= ex + rad && p.y >= sy - rad && p.y <= ey + rad;
+            if (inBox(body) || inBox(feet)) Game.selection.add(unit.id);
         });
     }
 

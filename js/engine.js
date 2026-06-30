@@ -295,9 +295,9 @@ Game.unitAtScreen = (screenX, screenY) => {
 /**
  * Project a world position to screen pixel coordinates.
  */
-Game.worldToScreen = (x, z) => {
+Game.worldToScreen = (x, z, y = 0) => {
     const THREE = Game.THREE;
-    const vec = new THREE.Vector3(x, 0, z);
+    const vec = new THREE.Vector3(x, y, z);
     vec.project(Game.camera);
     return {
         x: (vec.x * 0.5 + 0.5) * Game.viewW,

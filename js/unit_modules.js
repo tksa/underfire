@@ -430,13 +430,15 @@ Game.uMod.move = (unit, ctx) => {
 
         const arrivalDist = (isVeh || isTruck) ? 1.5 : 0.4;
 
-        // SETTLE WHEN CROWDED: a foot soldier elbowed out of his exact formation slot
-        // by friendlies can't reach the tight 0.4 arrival radius and would shuffle on
-        // the spot forever (the clump-and-circle look). On his final leg, near the
-        // slot, if he STOPS CLOSING the distance for a moment (blocked), call it
+        // SETTLE WHEN CROWDED: a unit elbowed out of its exact formation slot by
+        // friendlies can't reach the tight arrival radius and would shuffle on the
+        // spot forever (the clump / grouped-tank jitter). On its final leg, near the
+        // slot, if it STOPS CLOSING the distance for a moment (blocked), call it
         // arrived. Progress-based so it ignores speed bouncing against neighbours; a
-        // lone unit keeps closing the gap and arrives precisely as normal.
-        if (!isVeh && !isTruck && unit.path.length === 1 && d < 3.2) {
+        // lone unit keeps closing the gap and arrives precisely as normal. Vehicles
+        // get a wider settle radius (bigger footprint, never pack as tight).
+        const settleNear = (isVeh || isTruck) ? 4.0 : 3.2;
+        if (unit.path.length === 1 && d < settleNear) {
             if (unit._lastGoalD != null && d > unit._lastGoalD - 0.05) {
                 unit._settleT = (unit._settleT || 0) + dt;
                 if (unit._settleT > 0.6) {
