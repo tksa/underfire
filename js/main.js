@@ -318,7 +318,14 @@ Game.applySeparation = (unit, dt) => {
             const enemyRolling = tankRolling && other.team !== unit.team;
             const push = Game._tankBoxPush(unit.x, unit.z, other, unit.size * 0.7, 0.12);
             if (push) {
-                if (!enemyRolling) { unit.x += push.x; unit.z += push.z; }
+                if (!enemyRolling) {
+                    // Resolve over a few frames, not in one pop: a deep overlap (a man
+                    // shoved into a hull by a crowd) would otherwise jump him >1u in a
+                    // single frame, which reads as a teleport. Cap the per-frame correction.
+                    const pm = Math.hypot(push.x, push.z), cap = 0.35;
+                    const k = pm > cap ? cap / pm : 1;
+                    unit.x += push.x * k; unit.z += push.z * k;
+                }
                 if (tankRolling) {   // scramble toward a flank to clear the lane
                     const fX = Math.cos(other.angle), fZ = Math.sin(other.angle);
                     let pX = -fZ, pZ = fX;

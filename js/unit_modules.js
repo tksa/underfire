@@ -828,10 +828,12 @@ Game.uMod.move = (unit, ctx) => {
         const moved = Math.hypot(unit.x - prevX, unit.z - prevZ);
         if (moved < 0.03) {
             unit._stuckT = (unit._stuckT || 0) + dt;
-            if (unit._stuckT > 1.8) {
+            if (unit._stuckT > 1.3) {
                 unit._stuckT = 0;
                 unit._stuckReplans = (unit._stuckReplans || 0) + 1;
-                if (unit._stuckReplans > 4) {
+                if (unit._stuckReplans > 2) {
+                    // Tried a couple of fresh routes and still wedged (usually crowded
+                    // out at a packed destination): settle here rather than grind on.
                     unit.path = []; unit.moving = false; unit._stuckReplans = 0;
                 } else {
                     const goal = unit.path[unit.path.length - 1];
