@@ -371,9 +371,12 @@ Game.applySeparation = (unit, dt) => {
     if (isVeh) {
         // De-overlap directly apart (capped). The old code projected separation onto
         // the forward axis only, which let a tank bulldoze a hull in front of it.
+        // The cap is kept LOW so a de-overlap reads as a gentle nudge, not a sideways
+        // SKID — with the column-following + spread-slots keeping hulls from packing,
+        // big de-overlaps are rare and a hard shove just looked like the tank sliding.
         const sepMag = Math.hypot(sepX, sepZ);
         if (sepMag > 0.0001) {
-            const m = Math.min(sepMag, 6.0);
+            const m = Math.min(sepMag, 2.8);
             unit.x += (sepX / sepMag) * m * dt;
             unit.z += (sepZ / sepMag) * m * dt;
         }

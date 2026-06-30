@@ -808,10 +808,43 @@ Game.uMod.move = (unit, ctx) => {
     unit.z = Game.clamp(unit.z, 0.5, Game.WORLD_H - 0.5);
 
     const tileNow = Game.getTileAtWorld(unit.x, unit.z);
-    if (tileNow && (tileNow.blocked || (isVeh && tileNow.vehicleBlocked))) {
+    // Block movement onto solid terrain (walls/houses/water) and impassable vehicle
+    // terrain — EXCEPT dense forest, which tanks crush through (so they don't bounce
+    // off the tree line they were routed into).
+    if (tileNow && (tileNow.blocked
+        || (isVeh && tileNow.vehicleBlocked && tileNow.type !== 'dense_forest'))) {
         unit.x = prevX;
         unit.z = prevZ;
         unit.currentSpeed = 0;
+    }
+
+    // STUCK -> REPLAN: a unit with a live path that has made no real headway for a
+    // while (wedged on terrain/units) throws away the stale route and plots a fresh
+    // one to its destination ("stop resisting, here's a new path"). After a few failed
+    // replans it gives up so it isn't grinding forever. Intentional waits (stop timer,
+    // order delay, yielding to a crossing unit -> maxSpeed 0) don't count as stuck.
+    if (unit.path && unit.path.length && maxSpeed > 0
+        && (unit.stopTimer || 0) <= 0 && (unit.orderDelay || 0) <= 0 && !unit._reverseMove) {
+        const moved = Math.hypot(unit.x - prevX, unit.z - prevZ);
+        if (moved < 0.03) {
+            unit._stuckT = (unit._stuckT || 0) + dt;
+            if (unit._stuckT > 1.8) {
+                unit._stuckT = 0;
+                unit._stuckReplans = (unit._stuckReplans || 0) + 1;
+                if (unit._stuckReplans > 4) {
+                    unit.path = []; unit.moving = false; unit._stuckReplans = 0;
+                } else {
+                    const goal = unit.path[unit.path.length - 1];
+                    unit._detour = null;
+                    unit.path = Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
+                    unit.moving = unit.path.length > 0;
+                }
+            }
+        } else {
+            unit._stuckT = 0; unit._stuckReplans = 0;
+        }
+    } else {
+        unit._stuckT = 0;
     }
 
     if (isVeh && Game.getVehicleHeight) {

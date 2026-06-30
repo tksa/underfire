@@ -10,11 +10,18 @@ Game.tileCost = (unit, tx, ty) => {
     const tile = Game.getTile(tx, ty);
     if (!tile || tile.blocked) return Infinity;
     const isVeh = Game.isTank(unit.kind);
-    if (isVeh && tile.vehicleBlocked) return Infinity;
-    let cost = tile.move;
-    if (isVeh && (tile.type === 'forest' || tile.type === 'hedge')) cost += 0.8;
-    if (isVeh && tile.type === 'mud') cost += 0.9;
-    return cost;
+    if (isVeh) {
+        // Tanks CRUSH through dense forest (clearing trees) rather than route around
+        // it — a low cost so A* takes the direct line through the woods, and the
+        // foliage knock-down flattens the saplings as the hull passes.
+        if (tile.type === 'dense_forest') return 1.8;
+        if (tile.vehicleBlocked) return Infinity;     // any genuinely impassable veh terrain
+        let cost = tile.move;
+        if (tile.type === 'forest' || tile.type === 'hedge') cost += 0.8;
+        if (tile.type === 'mud') cost += 0.9;
+        return cost;
+    }
+    return tile.move;
 };
 
 Game.findPath = (unit, startX, startZ, endX, endZ) => {
