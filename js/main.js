@@ -285,9 +285,16 @@ Game.applySeparation = (unit, dt) => {
                 }
                 const dir = unit._bailSide;
                 const urgency = 1 - Math.max(0, ahead) / lookAhead;          // closer = stronger
-                const push = (halfWidth - Math.abs(lateral) + 0.6) * (6 + urgency * 10);
-                sepX += (-fZ * dir) * push;
-                sepZ += (fX * dir) * push;
+                const push = (halfWidth - Math.abs(lateral) + 0.6) * (5 + urgency * 7);
+                const exX = -fZ * dir, exZ = fX * dir;                       // out of the lane
+                sepX += exX * push;
+                sepZ += exZ * push;
+                // RUN clear, don't slide: face the escape direction and break into a run
+                // so it reads as a man scrambling out of the way rather than bouncing
+                // sideways. (Capped to run speed below, not a sideways dart.)
+                unit.angle = Math.atan2(exZ, exX);
+                unit.turretAngle = unit.angle;
+                if (unit.stance !== 'prone' && unit.stance !== 'crouch') { unit.stance = 'run'; unit._autoStance = true; }
             } else if (unit._bailFor === other.id && (ahead <= -other.size || Math.abs(lateral) >= halfWidth)) {
                 unit._bailFor = null;                          // cleared the lane — release
             }
@@ -358,7 +365,13 @@ Game.applySeparation = (unit, dt) => {
             // (that stop/go behind a leader was the "repeat movements" stutter).
             const otherAhead = (-nx) * fwdX + (-nz) * fwdZ > 0.25;
             const following = otherMoving && (Math.cos(other.angle) * fwdX + Math.sin(other.angle) * fwdZ) > 0.6;
-            if (otherAhead && !following && (!otherMoving || other.id < unit.id)) blockedAhead = true;
+            // RIGHT OF WAY by SIZE: yield (stop) to a stationary hull, or to a LARGER
+            // moving one (a B1 outranks an H35). Same-size ties break by id so two equals
+            // never both freeze. Bigger tanks hold course and lead through chokepoints /
+            // forests (clearing the way); smaller ones give way.
+            const yieldToOther = !otherMoving || other.size > unit.size + 0.01
+                || (Math.abs(other.size - unit.size) <= 0.01 && other.id < unit.id);
+            if (otherAhead && !following && yieldToOther) blockedAhead = true;
         } else if (isVeh && !otherVeh) {
             // Tank vs infantry: a tank is immovable by men (no push on the tank).
         } else {
@@ -383,9 +396,10 @@ Game.applySeparation = (unit, dt) => {
         // Yield to a tank sitting in our path: pause rather than grind into it.
         if (blockedAhead) unit.stopTimer = Math.max(unit.stopTimer || 0, 0.2);
     } else {
-        // Infantry: push in any direction
+        // Infantry: push in any direction, but capped to a RUN speed so getting out of
+        // a tank's way looks like scrambling clear, not a sideways teleport-bounce.
         const sepMag = Math.hypot(sepX, sepZ);
-        const maxSep = 8.0;
+        const maxSep = 4.5;
         if (sepMag > maxSep) {
             sepX = (sepX / sepMag) * maxSep;
             sepZ = (sepZ / sepMag) * maxSep;
@@ -454,7 +468,10 @@ Game._vehicleAvoid = (unit) => {
         // so they don't mirror each other. Trucks and foot troops ALWAYS go round
         // a tank (a tank has right of way over them).
         const oMoving = (o.currentSpeed || 0) > 0.3 || (o.path && o.path.length > 0);
-        if (selfIsTank && oMoving && o.id < unit.id) continue;
+        // Right of way by SIZE: hold course past a SMALLER moving tank (it gives way to
+        // us); only swerve around a LARGER one (equal size -> lower id holds course).
+        if (selfIsTank && oMoving && (o.size < unit.size - 0.01
+            || (Math.abs(o.size - unit.size) <= 0.01 && o.id < unit.id))) continue;
         // Don't weave around a tank we're FOLLOWING (moving roughly our heading) — the
         // car-following slowdown forms a column behind it instead. Only stopped or
         // crossing hulls are real obstacles to detour around.
