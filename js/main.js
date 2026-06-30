@@ -112,6 +112,36 @@ Game._tankBoxPush = (ux, uz, tank, r, margin) => {
  * yield to a man standing in the way (make-way shoves him aside — yielding there
  * would freeze the tank forever) nor to escorts moving the same way as the tank.
  */
+/**
+ * Car-following speed factor for a vehicle (1 = full speed, 0 = stop) so vehicles
+ * moving the SAME way form a smooth COLUMN behind a leader instead of weaving around
+ * each other (the grouped-tank "everyone detours around everyone" churn). Slows as it
+ * closes on the rear of a same-team vehicle ahead that's moving roughly our heading;
+ * does NOT trigger on stopped/crossing hulls (those are detoured around as before).
+ */
+Game._vehicleFollow = (unit) => {
+    const hx = Math.cos(unit.angle), hz = Math.sin(unit.angle);
+    const len = (unit.size || 1) * (Game.TANK_BOX_LEN || 1.5);
+    let factor = 1;
+    for (const o of Game.units) {
+        if (!o.alive || o.id === unit.id || o.team !== unit.team) continue;
+        if (!(Game.isTank(o.kind) || o.kind === 'fuel' || o.kind === 'supply')) continue;
+        if ((o.currentSpeed || 0) < 0.25) continue;            // stopped -> detour around it, don't follow
+        const rx = o.x - unit.x, rz = o.z - unit.z;
+        const ahead = rx * hx + rz * hz;
+        if (ahead <= 0) continue;
+        const lateral = Math.abs(rx * -hz + rz * hx);
+        const lane = (unit.size || 1) * (Game.TANK_BOX_WID || 1.0) + 0.6;
+        if (lateral > lane) continue;                          // not directly in front
+        const ofx = Math.cos(o.angle), ofz = Math.sin(o.angle);
+        if (ofx * hx + ofz * hz < 0.5) continue;               // not moving our way -> not a leader
+        const minGap = len + (o.size || 1) * (Game.TANK_BOX_LEN || 1.5) + 0.4;  // bumper-to-bumper
+        const slowGap = minGap + 4.0;                          // start easing off here
+        factor = Math.min(factor, Game.clamp((ahead - minGap) / (slowGap - minGap), 0, 1));
+    }
+    return factor;
+};
+
 Game._tankYield = (unit) => {
     const hx = Math.cos(unit.angle), hz = Math.sin(unit.angle);
     const lookLen = unit.size * (Game.TANK_BOX_LEN || 1.5) + 3.2;   // just past the nose
@@ -322,9 +352,13 @@ Game.applySeparation = (unit, dt) => {
             // Yield (brief stop) only if the OTHER hull is ahead AND has priority —
             // a stationary tank, or the lower-id one among two movers. This breaks
             // the symmetry so two tanks meeting never both freeze and lock together;
-            // exactly one eases around while the other proceeds.
+            // exactly one eases around while the other proceeds. BUT if the other hull
+            // is moving roughly our own heading, we're following it in column — the
+            // car-following slowdown handles the spacing smoothly, so don't hard-stop
+            // (that stop/go behind a leader was the "repeat movements" stutter).
             const otherAhead = (-nx) * fwdX + (-nz) * fwdZ > 0.25;
-            if (otherAhead && (!otherMoving || other.id < unit.id)) blockedAhead = true;
+            const following = otherMoving && (Math.cos(other.angle) * fwdX + Math.sin(other.angle) * fwdZ) > 0.6;
+            if (otherAhead && !following && (!otherMoving || other.id < unit.id)) blockedAhead = true;
         } else if (isVeh && !otherVeh) {
             // Tank vs infantry: a tank is immovable by men (no push on the tank).
         } else {
@@ -418,6 +452,13 @@ Game._vehicleAvoid = (unit) => {
         // a tank (a tank has right of way over them).
         const oMoving = (o.currentSpeed || 0) > 0.3 || (o.path && o.path.length > 0);
         if (selfIsTank && oMoving && o.id < unit.id) continue;
+        // Don't weave around a tank we're FOLLOWING (moving roughly our heading) — the
+        // car-following slowdown forms a column behind it instead. Only stopped or
+        // crossing hulls are real obstacles to detour around.
+        if ((o.currentSpeed || 0) > 0.3) {
+            const ofx = Math.cos(o.angle), ofz = Math.sin(o.angle);
+            if (ofx * hx + ofz * hz > 0.6) continue;
+        }
         if (ahead < blockD) { blockD = ahead; block = o; }
     }
 

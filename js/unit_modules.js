@@ -415,6 +415,10 @@ Game.uMod.move = (unit, ctx) => {
     // instead of grinding through them). Standing men are scattered by make-way.
     if (isVeh && maxSpeed > 0 && Game._tankYield) maxSpeed *= Game._tankYield(unit);
 
+    // Car-following: vehicles moving the same way ease off behind a leader and form a
+    // COLUMN instead of weaving around each other (stops the grouped-tank churn).
+    if ((isVeh || isTruck) && maxSpeed > 0 && Game._vehicleFollow) maxSpeed *= Game._vehicleFollow(unit);
+
     // Insert/refresh a side-step waypoint to route around any tank blocking the
     // lane ahead (dynamic obstacle avoidance) before we read the next waypoint.
     // Runs for tanks, trucks and infantry so foot troops walk AROUND a hull
