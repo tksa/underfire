@@ -22,9 +22,15 @@ package-lock.json
 .env
 .env.local
 
+# Private deploy playbook (contains the production server address — never commit)
+deploy.md
+
 # Meshy working files (prompts/reference; not part of the shipped game)
 meshy/
 
 # Third-party Blender MCP addon (install in Blender; get it from
 # github.com/ahujasid/blender-mcp). Not bundled in this repo.
 tools/blender_mcp_addon.py
+
+# Temp asset staging (model optimization/preview; never commit)
+.asset-tmp/

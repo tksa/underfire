@@ -902,7 +902,13 @@ Game._loadUnitModel = (unit, mesh) => {
     const teamKind = `${unit.team}_${unit.kind}`;
     Game._modelLoadFailed = Game._modelLoadFailed || new Set();
     if (Game._modelLoadFailed.has(teamKind)) return;
-    const paths = [`models/${teamKind}.glb`, `models/${unit.kind}.glb`];
+    let paths = [`models/${teamKind}.glb`, `models/${unit.kind}.glb`];
+    // Foot infantry share one skinned soldier model (per-faction skin + named
+    // sub-clips split from its baked animation). A team/kind-specific GLB still
+    // wins if present; otherwise every rifleman falls back to the soldier.
+    if (Game.USE_SOLDIER_MODEL && !isVeh && !isSup && unit.class === 'infantry') {
+        paths = [`models/${teamKind}.glb`, Game.SOLDIER_MODEL_PATH || 'models/soldier.glb'];
+    }
 
     // Per-model placement corrections, kept as live Game.* globals so the debug
     // panel ("Selected Model" group) can tune them and the copy-config can dump
@@ -995,7 +1001,15 @@ Game._loadUnitModel = (unit, mesh) => {
             const nb = new THREE.Box3().setFromObject(model);
             const nativeLong = Math.max(nb.max.x - nb.min.x, nb.max.z - nb.min.z) || 1;
             const targetLong = isVeh ? unit.size * 2.6 : (isSup ? unit.size * 2.0 : unit.size * 1.9);
-            const sizeScale = (targetLong / nativeLong) * (MODEL_SCALE[teamKind] || 1);
+            let sizeScale = (targetLong / nativeLong) * (MODEL_SCALE[teamKind] || 1);
+            // The soldier is a person: scale to a target HEIGHT, not the horizontal
+            // footprint (a standing man is narrow, so footprint-fit would shrink him).
+            if (Game.isSoldierPath && Game.isSoldierPath(paths[idx])) {
+                const nativeTall = (nb.max.y - nb.min.y) || 1;
+                sizeScale = (Game.SOLDIER_HEIGHT || 2.45) / nativeTall;
+                mesh.userData.soldierNativeTall = nativeTall;   // for live scale tuning
+                mesh.userData.soldierBaseScale = sizeScale;
+            }
             model.scale.set(sizeScale, sizeScale, sizeScale);
 
             // ── 2. Strip embedded lights and cameras ──
@@ -1318,10 +1332,26 @@ Game._loadUnitModel = (unit, mesh) => {
                 }
             });
 
+            // ── 8b. Soldier model: per-faction skin + capture rest leg pose ──
+            if (Game.isSoldierPath && Game.isSoldierPath(paths[idx])) {
+                if (Game.applySoldierSkin) Game.applySoldierSkin(model, unit.team);
+                // Grab the bind-pose leg rotations NOW (before any clip poses them) so
+                // the procedural walk drives absolute angles from a clean rest stance.
+                const legNames = ['hip_left_06', 'knee_left_07', 'hip_right_02', 'knee_right_03', 'torso_010'];
+                const rest = {};
+                model.traverse(o => { if (legNames.includes(o.name)) rest[o.name] = { x: o.rotation.x, y: o.rotation.y, z: o.rotation.z }; });
+                mesh.userData.soldierLegRest = rest;
+            }
+
             // ── 9. Setup Animation Mixer + actions, play a default clip ──
             mesh.userData.mixer = new THREE.AnimationMixer(model);
-            const clips = (model.animations && model.animations.length) ? model.animations
+            let clips = (model.animations && model.animations.length) ? model.animations
                 : (modelWrapper.animations || []);
+            // Soldier ships one baked "Take 001" clip — split into named sub-clips
+            // (idle/walk/run/fire_stand/...) that Game._chooseClip drives by name.
+            if (Game.isSoldierPath && Game.isSoldierPath(paths[idx]) && Game.splitSoldierAnim) {
+                clips = Game.splitSoldierAnim(clips);
+            }
             if (clips.length) {
                 mesh.userData.animations = clips;
                 mesh.userData.actions = {};
@@ -1334,6 +1364,17 @@ Game._loadUnitModel = (unit, mesh) => {
             // ── 10. Add wrapper to unit mesh group ──
             mesh.add(modelWrapper);
             mesh.userData.modelWrapper = modelWrapper;
+            // Soldier model: tag + remember its base orientation/height so the
+            // debug tuning panel (Game._soldierControlDefs) can offset them live.
+            if (Game.isSoldierPath && Game.isSoldierPath(paths[idx])) {
+                mesh.userData.isSoldier = true;
+                mesh.userData.soldierModel = model;
+                mesh.userData.soldierBaseYaw = modelWrapper.rotation.y;
+                mesh.userData.soldierBaseY = modelWrapper.position.y;
+                mesh.userData.soldierBaseModelX = model.position.x;
+                mesh.userData.soldierBaseModelZ = model.position.z;
+                if (Game.applySoldierTransforms) Game.applySoldierTransforms(unit);
+            }
             console.log(`Loaded model: ${paths[idx]} for ${unit.label}`);
         }).catch(() => {
             tryLoad(idx + 1); // try next path

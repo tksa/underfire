@@ -51,6 +51,11 @@ Game.syncUnitMeshes = (dt) => {
                         Game.cameraShake = Math.max(Game.cameraShake || 0, 12);
                         if (Game.Audio && Game.Audio.explosion) Game.Audio.explosion(unit.x, unit.z);
                     }
+                } else if (unit.mesh.userData.isSoldier && Game.playSoldierDeath) {
+                    // Skinned soldier: play a random death animation (holds the last
+                    // frame) instead of the rigid fall-over.
+                    unit.isDeadBody = true;
+                    Game.playSoldierDeath(unit);
                 } else {
                     unit.isDeadBody = true;
                     unit.mesh.rotation.z = Math.PI / 2;        // fall over
@@ -433,8 +438,12 @@ Game.updateTracks3D = (dt) => {
  * whatever clips the loaded model actually provides.
  */
 Game._chooseClip = (unit) => {
-    const names = unit.mesh && unit.mesh.userData && unit.mesh.userData.clipNames;
+    const ud = unit.mesh && unit.mesh.userData;
+    const names = ud && ud.clipNames;
     if (!names || !names.length) return null;
+    // Debug: force one clip on all soldiers (skip '_raw' — handled by the scrub override).
+    if (ud.isSoldier && Game.SOLDIER_FORCE_CLIP && Game.SOLDIER_FORCE_CLIP !== '_raw'
+        && names.includes(Game.SOLDIER_FORCE_CLIP)) return Game.SOLDIER_FORCE_CLIP;
     const pick = (list) => list.find(n => names.includes(n));
     const st = unit.stance || 'stand';
     if (unit.moving) return pick(['walk', 'run', 'push', 'move', 'crawl']) || names[0];
@@ -464,11 +473,17 @@ Game._playClip = (unit, name, fade = 0.25) => {
 Game._updateModelAnimation = (unit, dt) => {
     const ud = unit.mesh && unit.mesh.userData;
     if (!ud || !ud.mixer) return;
+    // Soldier debug override (e.g. RAW-timeline scrub) fully handles the frame.
+    if (ud.isSoldier && Game._soldierAnimOverride && Game._soldierAnimOverride(unit, dt)) return;
     if (ud.actions) {
         const want = Game._chooseClip(unit);
-        if (want) Game._playClip(unit, want);
+        if (want) Game._playClip(unit, want, ud.isSoldier ? (Game.SOLDIER_POSTURE_FADE || 0.3) : 0.25);
     }
+    if (ud.isSoldier && Game._soldierTimeScale) Game._soldierTimeScale(unit);
     ud.mixer.update(dt);
+    // Procedural walk legs (the baked clip has no stride) — override the clip's
+    // static legs AFTER the mixer writes them.
+    if (ud.isSoldier && Game._soldierProceduralLegs) Game._soldierProceduralLegs(unit, dt);
 };
 
 Game._getSmokeTex = () => {

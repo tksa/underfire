@@ -1475,17 +1475,17 @@
     // data/changelog.json is generated from the git commit log at deploy time
     // (scripts/gen-changelog.mjs) and fetched here — no build step. Falls back to
     // a short built-in list if it can't be loaded.
-    const UNDER_VERSION = 'v0.9.0';
+    const UNDER_VERSION = 'v0.10.0';
     const vEl = document.getElementById('menuVersion');
     const upEl = document.getElementById('menuUpdates');
     if (vEl) vEl.textContent = UNDER_VERSION;
 
     const FALLBACK_NOTES = [
-      'Tactical AI layer: idle postures (ready → at ease → rest), social "chatting" idle, attention/at-ease/guard orders.',
+      'New skinned 3D soldier model for infantry, with per-faction skins and smooth crossfaded animations.',
+      'Soldier animations: idle/stand, walk & run (procedural gait + forward lean), fire (standing & prone), crouch, sit, grenade, and multiple random death animations.',
+      'Live infantry tuning panel (press `): pose axis/tilt, height, ring-centering, per-clip ranges, and one-click animation preview.',
       'Movement overhaul: smooth collision (no jitter/skid/weaving), tanks form columns, crush through forests, stuck units re-route.',
-      'Formation: each unit goes to its own circle, armour spread evenly; size-based right of way; infantry run clear of tanks.',
       'New French vehicles: Somua S35, Hotchkiss H35, Renault R35, Panhard 178, plus AHN3 supply & Laffly fuel trucks.',
-      'Natural animations (eased pose transitions, breathing); reverse-into-spot; trucks hold on attack-move.',
     ];
     const renderUpdates = (version, date, notes) => {
       if (!upEl) return;
@@ -1536,7 +1536,8 @@
       var classic = [
         'config', 'i18n', 'utils', 'engine', 'weapons', 'terrain', 'units',
         'pathfinding', 'combat', 'ai', 'camera', 'input', 'renderer', 'audio',
-        'mission', 'neural_export', 'unit_modules', 'ai_tactics', 'valor', 'buildings', 'garrison_ui'
+        'mission', 'neural_export', 'unit_modules', 'ai_tactics', 'valor', 'buildings', 'garrison_ui',
+        'soldier_model'
       ];
       classic.forEach(function (f) {
         document.write('<script src="js/' + f + '.js?v=' + v + '"><\/script>');

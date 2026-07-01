@@ -400,6 +400,7 @@ Game.setupPostFX = () => {
             }
         }
         Game.buildPostFXDebugUI();
+        if (Game.buildSoldierAnimUI) Game.buildSoldierAnimUI();
         return true;
     } catch (e) {
         console.warn('PostFX setup failed, falling back to direct render:', e);
@@ -541,6 +542,7 @@ Game._postfxControlDefs = () => {
         ...(Game._buildingControlDefs ? Game._buildingControlDefs() : []),
         ...(Game._tankControlDefs ? Game._tankControlDefs() : []),
         ...(Game._modelControlDefs ? Game._modelControlDefs() : []),
+        ...(Game._soldierControlDefs ? Game._soldierControlDefs() : []),
     ];
 };
 
@@ -566,6 +568,7 @@ Game.postfxValuesText = () => {
         '}',
         '',
         Game._modelValuesText ? Game._modelValuesText() : '',
+        Game._soldierValuesText ? Game._soldierValuesText() : '',
     ].join('\n');
 };
 

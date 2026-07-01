@@ -1,8 +1,13 @@
 {
- "version": "v0.9.0",
- "build": "17a3db8",
+ "version": "v0.10.0",
+ "build": "e616ca2",
  "generated": "2026-07-01",
  "commits": [
+  {
+   "hash": "e616ca2",
+   "date": "2026-07-01",
+   "subject": "release: v0.9.0"
+  },
   {
    "hash": "17a3db8",
    "date": "2026-07-01",
@@ -67,11 +72,6 @@
    "hash": "ab92ee8",
    "date": "2026-06-30",
    "subject": "tactical AI layer, idle postures, square tank collision, group movement"
-  },
-  {
-   "hash": "45b6021",
-   "date": "2026-06-30",
-   "subject": "refresh changelog for latest updates"
   }
  ]
 }

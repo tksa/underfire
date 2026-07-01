@@ -49,6 +49,11 @@ The **Renault AHN3 supply truck** (`models/french_supply.glb`) and the
 **Laffly fuel truck** (`models/french_fuel.glb`) are original models created for
 Under Fire by the project, released as **CC0 / public domain**.
 
+The skinned **WWI/WWII soldier** (`models/soldier.glb`, used for all foot
+infantry) is a Sketchfab model ("German WWI Soldier"). **TODO: confirm author +
+exact licence/source URL before public release.** Textures downscaled to 512 and
+recompressed for web; geometry/rig unchanged.
+
 ## Textures (OpenGameArt.org, CC0)
 - **Dirty Grass Seamless** (ground detail normal + AO) — used as terrain detail maps.
   Source: "4K Seamless Grass Dirt Ground Texture with all Shader Maps", CC0.
