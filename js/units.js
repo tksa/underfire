@@ -1334,12 +1334,20 @@ Game._loadUnitModel = (unit, mesh) => {
 
             // ── 8b. Soldier model: per-faction skin + capture rest leg pose ──
             if (Game.isSoldierPath && Game.isSoldierPath(paths[idx])) {
-                if (Game.applySoldierSkin) Game.applySoldierSkin(model, unit.team);
+                if (Game.applySoldierSkin) Game.applySoldierSkin(model, unit.team, unit.kind);
                 // Grab the bind-pose leg rotations NOW (before any clip poses them) so
                 // the procedural walk drives absolute angles from a clean rest stance.
                 const legNames = ['hip_left_06', 'knee_left_07', 'hip_right_02', 'knee_right_03', 'torso_010'];
                 const rest = {};
-                model.traverse(o => { if (legNames.includes(o.name)) rest[o.name] = { x: o.rotation.x, y: o.rotation.y, z: o.rotation.z }; });
+                model.traverse(o => {
+                    if (!legNames.includes(o.name)) return;
+                    rest[o.name] = { x: o.rotation.x, y: o.rotation.y, z: o.rotation.z };
+                    // hip rest POSITIONS too, so the gait can narrow the stance (shift
+                    // legs inward toward the centreline) without any hip rotation/twist.
+                    if (o.name === 'hip_left_06' || o.name === 'hip_right_02') {
+                        rest[o.name + '_pos'] = { x: o.position.x, y: o.position.y, z: o.position.z };
+                    }
+                });
                 mesh.userData.soldierLegRest = rest;
             }
 

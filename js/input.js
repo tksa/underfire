@@ -632,7 +632,11 @@ Game.handleMouseSelection = () => {
             for (const unit of Game.units) {
                 if (!unit.alive || unit.team !== Game.TEAM.FRENCH) continue;
                 const d = Game.distSq(groundPt.x, groundPt.z, unit.x, unit.z);
-                const pickRange = Math.max((unit.size + 0.8) * (unit.size + 0.8), 3.0);
+                // Tighter pick so clicking BETWEEN clustered soldiers deselects
+                // (was ~1.7u, which re-grabbed a neighbour in dense formations).
+                // Clicking on/near a unit still selects; the screen-space pass below
+                // catches clicks on the visible model.
+                const pickRange = Math.max((unit.size + 0.35) * (unit.size + 0.35), 1.3);
                 if (d < pickRange && d < bestDist) {
                     bestDist = d;
                     picked = unit;

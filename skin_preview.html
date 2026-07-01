@@ -1,0 +1,183 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Under Fire — Soldier Skin Preview</title>
+<style>
+  html,body{margin:0;height:100%;background:#3a3f36;font-family:system-ui,sans-serif;color:#e7ece3;overflow:hidden}
+  #c{display:block;width:100vw;height:100vh}
+  #panel{position:fixed;top:12px;left:12px;width:270px;background:rgba(20,24,20,.86);border:1px solid #4a5244;
+    border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.5;backdrop-filter:blur(4px)}
+  #panel h1{font-size:14px;margin:0 0 8px;letter-spacing:.5px;color:#bcd3a8}
+  #panel .row{margin:7px 0}
+  #panel label{display:block;color:#9fb08f;font-size:11px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px}
+  button,select{background:#2c332a;color:#e7ece3;border:1px solid #4a5244;border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer}
+  button:hover{background:#3a4335}
+  button.active{background:#4a6b3a;border-color:#6b8f52}
+  input[type=range]{width:100%}
+  input[type=file]{font-size:11px;width:100%}
+  .btns{display:flex;flex-wrap:wrap;gap:4px}
+  #info{color:#8a9a7c;font-size:11px;margin-top:8px;word-break:break-word}
+  .hint{color:#7d8a70;font-size:11px}
+</style>
+<script type="importmap">
+{ "imports": { "three": "/vendor/three-0.180.0.module.min.js", "three/addons/": "/vendor/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <h1>SOLDIER SKIN PREVIEW</h1>
+
+  <div class="row">
+    <label>Upload texture (PNG/JPG)</label>
+    <input type="file" id="fileIn" accept="image/*">
+  </div>
+  <div class="row">
+    <label>Apply to</label>
+    <div class="btns">
+      <button id="tgtBody" class="active" data-t="body">Body / uniform</button>
+      <button id="tgtGun" data-t="gun">Gun</button>
+    </div>
+  </div>
+  <div class="row">
+    <button id="resetTex">Reset to original</button>
+  </div>
+
+  <div class="row">
+    <label>Animation</label>
+    <div class="btns">
+      <button id="playBtn" class="active">⏸ Pause</button>
+      <button id="turnBtn">↻ Turntable</button>
+    </div>
+  </div>
+  <div class="row">
+    <label>Scrub / speed</label>
+    <input type="range" id="scrub" min="0" max="1" step="0.001" value="0">
+    <input type="range" id="speed" min="0" max="2" step="0.05" value="0.5">
+  </div>
+  <div class="row hint">Drag = rotate · wheel = zoom · right-drag = pan</div>
+  <div id="info">loading…</div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x3a3f36);
+
+const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.01, 100);
+// lighting matched to the game (hemisphere + key directional)
+scene.add(new THREE.HemisphereLight(0xffffff, 0x556644, 1.4));
+const key = new THREE.DirectionalLight(0xffffff, 1.7); key.position.set(3, 6, 4); scene.add(key);
+const rim = new THREE.DirectionalLight(0xbcd0ff, 0.5); rim.position.set(-4, 3, -5); scene.add(rim);
+// ground
+const ground = new THREE.Mesh(new THREE.CircleGeometry(6, 48), new THREE.MeshStandardMaterial({ color: 0x51573f, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = 0; scene.add(ground);
+
+const pivot = new THREE.Group(); scene.add(pivot);   // model spins in here
+let model = null, mixer = null, action = null, clip = null;
+let bodyMats = [], gunMats = [], origBodyMap = null, origGunMap = null;
+const info = document.getElementById('info');
+
+const isGunNode = (o) => /lambert1|mauser|k98|k_98/i.test((o.material?.name || '') + ' ' + (o.name || ''));
+
+new GLTFLoader().load('/models/soldier.glb', (gltf) => {
+  model = gltf.scene;
+  model.traverse(o => {
+    if (!o.isMesh || !o.material) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    mats.forEach(m => {
+      // same fix the game applies: cloth, not metal (source ships metallic=1 -> black)
+      if (isGunNode(o)) { m.metalness = 0.3; m.roughness = 0.6; gunMats.push(m); if (!origGunMap) origGunMap = m.map; }
+      else { m.metalness = 0.0; m.roughness = 0.9; bodyMats.push(m); if (!origBodyMap) origBodyMap = m.map; }
+      m.metalnessMap = null; if ('clearcoat' in m) m.clearcoat = 0; m.needsUpdate = true;
+    });
+  });
+  pivot.add(model);
+
+  // frame it
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+  model.position.y -= box.min.y;                 // feet on ground
+  const h = size.y;
+  orbit.target.set(0, h * 0.5, 0);
+  orbit.dist = h * 2.2; applyCam();
+
+  if (gltf.animations?.length) {
+    clip = gltf.animations[0]; mixer = new THREE.AnimationMixer(model);
+    action = mixer.clipAction(clip); action.play();
+  }
+  info.textContent = `soldier.glb loaded · body ${bodyMats.length} mat, gun ${gunMats.length} mat`;
+}, undefined, (e) => { info.textContent = 'load error: ' + (e?.message || e); });
+
+// ── simple orbit (no addon) ──
+const orbit = { az: 0.6, el: 0.25, dist: 4, target: new THREE.Vector3(0, 1, 0) };
+function applyCam() {
+  const { az, el, dist, target } = orbit;
+  camera.position.set(
+    target.x + dist * Math.cos(el) * Math.sin(az),
+    target.y + dist * Math.sin(el),
+    target.z + dist * Math.cos(el) * Math.cos(az));
+  camera.lookAt(target);
+}
+let drag = null;
+canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, b: e.button }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointerup', () => drag = null);
+canvas.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+  if (drag.b === 2) { orbit.target.x -= dx * 0.005; orbit.target.y += dy * 0.005; }
+  else { orbit.az -= dx * 0.01; orbit.el = Math.max(-1.4, Math.min(1.4, orbit.el + dy * 0.01)); }
+  applyCam();
+});
+canvas.addEventListener('wheel', e => { e.preventDefault(); orbit.dist = Math.max(0.5, Math.min(30, orbit.dist * (1 + Math.sign(e.deltaY) * 0.1))); applyCam(); }, { passive: false });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// ── controls ──
+let target = 'body', playing = true, turntable = false, speed = 0.5;
+const setTargetBtn = (t) => { target = t; document.getElementById('tgtBody').classList.toggle('active', t === 'body'); document.getElementById('tgtGun').classList.toggle('active', t === 'gun'); };
+document.getElementById('tgtBody').onclick = () => setTargetBtn('body');
+document.getElementById('tgtGun').onclick = () => setTargetBtn('gun');
+
+function applyTexture(url, label) {
+  const tex = new THREE.TextureLoader().load(url, (t) => { info.textContent = `${label} · ${t.image.width}×${t.image.height} → ${target}`; });
+  tex.flipY = false; tex.colorSpace = THREE.SRGBColorSpace;
+  (target === 'gun' ? gunMats : bodyMats).forEach(m => { m.map = tex; if (m.color) m.color.setHex(0xffffff); m.needsUpdate = true; });
+}
+document.getElementById('fileIn').onchange = (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  applyTexture(URL.createObjectURL(f), f.name);
+};
+document.getElementById('resetTex').onclick = () => {
+  bodyMats.forEach(m => { m.map = origBodyMap; m.needsUpdate = true; });
+  gunMats.forEach(m => { m.map = origGunMap; m.needsUpdate = true; });
+  info.textContent = 'reset to original textures';
+};
+const playBtn = document.getElementById('playBtn');
+playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? '⏸ Pause' : '▶ Play'; playBtn.classList.toggle('active', playing); };
+const turnBtn = document.getElementById('turnBtn');
+turnBtn.onclick = () => { turntable = !turntable; turnBtn.classList.toggle('active', turntable); };
+document.getElementById('speed').oninput = (e) => speed = parseFloat(e.target.value);
+const scrub = document.getElementById('scrub');
+scrub.oninput = (e) => { if (action && clip) { playing = false; playBtn.textContent = '▶ Play'; playBtn.classList.remove('active'); action.time = parseFloat(e.target.value) * clip.duration; mixer.update(0); } };
+
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+
+let last = performance.now();
+function loop(now) {
+  const dt = (now - last) / 1000; last = now;
+  if (mixer && playing) { mixer.update(dt * speed); if (clip) scrub.value = (action.time % clip.duration) / clip.duration; }
+  if (turntable) { pivot.rotation.y += dt * 0.5; }
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

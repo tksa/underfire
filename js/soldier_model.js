@@ -122,18 +122,75 @@ Game.setSoldierClip = (name, a, b) => {
 // bleu-horizon tint. Materials are cloned per unit so a faction tint never bleeds
 // into clones that share the cached source material. (A painted French texture
 // can replace the tint later — swap m.map instead of m.color.)
-Game.SOLDIER_SKIN = {
-    german: 0xffffff,          // as-authored
-    french: 0x93a3b4,          // bleu horizon-ish multiply over the base texture
+// Painted per-faction/role body skins. Key = `${teamAbbr}_${role}`; a missing key
+// falls back to `${teamAbbr}_rifle`, then to a plain tint over the model's own
+// (German) texture. Add entries as you paint more (fr_smg, fr_mg, de_rifle, ...).
+// Textures can be small — soldiers render tiny; these are 512.
+Game.SOLDIER_SKINS = {
+    fr_rifle: 'textures/fr_skin_infantry_rifle.png',
 };
-Game.applySoldierSkin = (model, team) => {
-    const tint = (team in Game.SOLDIER_SKIN) ? Game.SOLDIER_SKIN[team] : 0xffffff;
+Game.SOLDIER_TEAM_ABBR = { french: 'fr', german: 'de' };
+Game.SOLDIER_KIND_ROLE = { fusilier: 'rifle', dragoon: 'rifle', grenadier: 'rifle', smg: 'smg', sturmtrupp: 'smg', fm24: 'mg', mg34: 'mg', sniper: 'sniper' };
+Game.SOLDIER_SKIN_TINT = { german: 0xffffff, french: 0x93a3b4 };   // fallback tint when no painted skin exists
+
+// Body/gun material tuning (live-tunable in the debug panel). brightness adds
+// self-illumination from the base texture to lift the shadows (the source model
+// otherwise renders dark). metalness/roughness make it read as cloth.
+Game.SOLDIER_MAT = { metalness: 0.08, roughness: 0.46, brightness: 0, gunMetal: 0.3, gunRough: 0.6 };
+
+// Apply the material tuning to one cloned material (body or gun).
+Game._soldierMatTune = (c, isGun) => {
+    const M = Game.SOLDIER_MAT;
+    c.metalness = isGun ? M.gunMetal : M.metalness;
+    c.roughness = isGun ? M.gunRough : M.roughness;
+    c.metalnessMap = null;               // source metalness map made them near-black
+    if ('clearcoat' in c) c.clearcoat = 0;
+    if (c.map) { c.emissiveMap = c.map; if (c.emissive) c.emissive.setHex(0xffffff); }
+    if ('emissiveIntensity' in c) c.emissiveIntensity = M.brightness;  // lift shadows
+    if (c.map) c.map.colorSpace = Game.THREE.SRGBColorSpace;
+    c.needsUpdate = true;
+};
+
+// Re-apply material tuning live to every soldier already on the field.
+Game.applySoldierMaterialParams = () => {
+    for (const u of Game.units) {
+        const ud = u.mesh && u.mesh.userData;
+        if (!ud || !ud.isSoldier || !ud.soldierModel) continue;
+        ud.soldierModel.traverse(o => {
+            if (!o.isMesh || !o.material) return;
+            const isGun = /lambert1|mauser|k98|k_98/i.test((o.material.name || '') + ' ' + (o.name || ''));
+            (Array.isArray(o.material) ? o.material : [o.material]).forEach(c => Game._soldierMatTune(c, isGun));
+        });
+    }
+};
+
+Game._soldierSkinTex = (url) => {
+    Game._soldierTexCache = Game._soldierTexCache || {};
+    if (!Game._soldierTexCache[url]) {
+        const t = new Game.THREE.TextureLoader().load(url);
+        t.flipY = false;                         // glTF UV convention (matches the extracted skin)
+        t.colorSpace = Game.THREE.SRGBColorSpace;
+        Game._soldierTexCache[url] = t;
+    }
+    return Game._soldierTexCache[url];
+};
+
+Game.applySoldierSkin = (model, team, kind) => {
+    const abbr = Game.SOLDIER_TEAM_ABBR[team] || team;
+    const role = Game.SOLDIER_KIND_ROLE[kind] || 'rifle';
+    const url = Game.SOLDIER_SKINS[abbr + '_' + role] || Game.SOLDIER_SKINS[abbr + '_rifle'];
+    const tex = url ? Game._soldierSkinTex(url) : null;
+    const tint = (team in Game.SOLDIER_SKIN_TINT) ? Game.SOLDIER_SKIN_TINT[team] : 0xffffff;
     model.traverse(o => {
         if (!o.isMesh || !o.material) return;
         const isGun = /lambert1|mauser|k98|k_98/i.test((o.material.name || '') + ' ' + (o.name || ''));
         const mats = (Array.isArray(o.material) ? o.material : [o.material]).map(m => {
-            const c = m.clone();          // own material per unit -> tint won't leak to shared source
-            if (!isGun && c.color) c.color.setHex(tint);
+            const c = m.clone();          // own material per unit -> no leak to the shared source
+            if (!isGun) {
+                if (tex) { c.map = tex; if (c.color) c.color.setHex(0xffffff); }
+                else if (c.color) c.color.setHex(tint);   // no painted skin -> tint the German base
+            }
+            Game._soldierMatTune(c, isGun);   // metalness/roughness/brightness (fixes the dark look)
             return c;
         });
         o.material = Array.isArray(o.material) ? mats : mats[0];
@@ -328,6 +385,7 @@ Game.SOLDIER_GAIT_FREQ = 1.4;   // cadence (scaled by speed, clamped)
 Game.SOLDIER_GAIT_KNEE = 1.14;  // knee flexion during swing (sign flips fold direction) — tuned
 Game.SOLDIER_GAIT_AXIS = 'x';   // 'x' | 'y' | 'z' — swing axis (depends on the rig)
 Game.SOLDIER_RUN_LEAN  = 0.35;  // torso forward pitch at full speed (radians; sign = lean direction)
+Game.SOLDIER_STANCE_NARROW = 0.35;    // 0 = original spread, 1 = feet at centreline (parallel inward shift)
 const _GAIT_AXES = ['x', 'y', 'z'];
 
 Game._soldierLegBones = (unit) => {
@@ -366,6 +424,13 @@ Game._soldierProceduralLegs = (unit, dt) => {
     const ax = Game.SOLDIER_GAIT_AXIS || 'x';
     const amp = (Game.SOLDIER_GAIT_AMP || 0.5);
     const knee = (Game.SOLDIER_GAIT_KNEE || 0.7);
+    // Stance narrow: shift each hip toward the midpoint of the two hips (pure
+    // translation, no rotation), so the FEET move closer together with no twist.
+    // Lerping toward the shared midpoint only affects the axis the hips differ on
+    // (the lateral one), so it's axis-agnostic.
+    const narrow = Game.SOLDIER_STANCE_NARROW || 0;
+    const pL = rest.hip_left_06_pos, pR = rest.hip_right_02_pos;
+    const mid = (pL && pR) ? { x: (pL.x + pR.x) / 2, y: (pL.y + pR.y) / 2, z: (pL.z + pR.z) / 2 } : null;
     const leg = (hip, kn, hipName, knName, phase) => {
         const hipSwing = amp * Math.sin(phase);
         const kneeBend = knee * Math.max(0, Math.sin(phase + Math.PI * 0.5)); // flex during swing
@@ -375,6 +440,12 @@ Game._soldierProceduralLegs = (unit, dt) => {
             hip.rotation.y = Game.lerp(hip.rotation.y, r.y, bl);
             hip.rotation.z = Game.lerp(hip.rotation.z, r.z, bl);
             hip.rotation[ax] = r[ax] + hipSwing * bl;
+            const rp = rest[hipName + '_pos'];
+            if (narrow && mid && rp) {
+                hip.position.x = Game.lerp(rp.x, mid.x, narrow * bl);
+                hip.position.y = Game.lerp(rp.y, mid.y, narrow * bl);
+                hip.position.z = Game.lerp(rp.z, mid.z, narrow * bl);
+            }
         }
         if (kn && rest[knName]) {
             const r = rest[knName];
@@ -434,6 +505,11 @@ Game._soldierControlDefs = () => {
         { group: 'Soldier Walk (procedural)', key: 'solGaitKnee', label: 'Knee bend (+/- flips fold)', min: -1.6, max: 1.6, step: 0.02, apply: v => { Game.SOLDIER_GAIT_KNEE = v; } },
         { group: 'Soldier Walk (procedural)', key: 'solGaitFreq', label: 'Cadence', min: 0.4, max: 4, step: 0.05, apply: v => { Game.SOLDIER_GAIT_FREQ = v; } },
         { group: 'Soldier Walk (procedural)', key: 'solRunLean', label: 'Run lean fwd (+/-)', min: -1.0, max: 1.0, step: 0.02, apply: v => { Game.SOLDIER_RUN_LEAN = v; } },
+        { group: 'Soldier Walk (procedural)', key: 'solNarrow', label: 'Feet together (stance)', min: 0, max: 1, step: 0.02, apply: v => { Game.SOLDIER_STANCE_NARROW = v; } },
+
+        { group: 'Soldier Material', key: 'solBright', label: 'Brightness (lift shadows)', min: 0, max: 0.7, step: 0.02, apply: v => { Game.SOLDIER_MAT.brightness = v; Game.applySoldierMaterialParams(); } },
+        { group: 'Soldier Material', key: 'solMetal', label: 'Metalness', min: 0, max: 1, step: 0.02, apply: v => { Game.SOLDIER_MAT.metalness = v; Game.applySoldierMaterialParams(); } },
+        { group: 'Soldier Material', key: 'solRough', label: 'Roughness', min: 0, max: 1, step: 0.02, apply: v => { Game.SOLDIER_MAT.roughness = v; Game.applySoldierMaterialParams(); } },
 
         ...range('fire_stand'), ...range('walk'), ...range('run'), ...range('grenade'), ...range('fire_prone'),
         ...range('death'), ...range('death2'), ...range('death3'),
@@ -488,7 +564,8 @@ Game._soldierValuesText = () => {
         `SOLDIER_HEIGHT = ${f(Game.SOLDIER_HEIGHT)}; SOLDIER_Y_TRIM = ${f(Game.SOLDIER_Y_TRIM)}; SOLDIER_OFFSET_X = ${f(Game.SOLDIER_OFFSET_X)}; SOLDIER_OFFSET_Z = ${f(Game.SOLDIER_OFFSET_Z)};`,
         `SOLDIER_WALK_TIMESCALE = ${f(Game.SOLDIER_WALK_TIMESCALE)}; SOLDIER_RUN_TIMESCALE = ${f(Game.SOLDIER_RUN_TIMESCALE)}; SOLDIER_MOVE_SYNC = ${Game.SOLDIER_MOVE_SYNC ? 1 : 0};`,
         `SOLDIER_IDLE_FREEZE = ${f(Game.SOLDIER_IDLE_FREEZE)}; SOLDIER_CROUCH_FREEZE = ${f(Game.SOLDIER_CROUCH_FREEZE)}; SOLDIER_SIT_FREEZE = ${f(Game.SOLDIER_SIT_FREEZE)}; SOLDIER_POSTURE_FADE = ${f(Game.SOLDIER_POSTURE_FADE)};`,
-        `SOLDIER_PROC_GAIT = ${Game.SOLDIER_PROC_GAIT ? 1 : 0}; SOLDIER_GAIT_AMP = ${f(Game.SOLDIER_GAIT_AMP)}; SOLDIER_GAIT_KNEE = ${f(Game.SOLDIER_GAIT_KNEE)}; SOLDIER_GAIT_FREQ = ${f(Game.SOLDIER_GAIT_FREQ)}; SOLDIER_GAIT_AXIS = '${Game.SOLDIER_GAIT_AXIS}'; SOLDIER_RUN_LEAN = ${f(Game.SOLDIER_RUN_LEAN)};`,
+        `SOLDIER_PROC_GAIT = ${Game.SOLDIER_PROC_GAIT ? 1 : 0}; SOLDIER_GAIT_AMP = ${f(Game.SOLDIER_GAIT_AMP)}; SOLDIER_GAIT_KNEE = ${f(Game.SOLDIER_GAIT_KNEE)}; SOLDIER_GAIT_FREQ = ${f(Game.SOLDIER_GAIT_FREQ)}; SOLDIER_GAIT_AXIS = '${Game.SOLDIER_GAIT_AXIS}'; SOLDIER_RUN_LEAN = ${f(Game.SOLDIER_RUN_LEAN)}; SOLDIER_STANCE_NARROW = ${f(Game.SOLDIER_STANCE_NARROW)};`,
+        `SOLDIER_MAT = { metalness: ${f(Game.SOLDIER_MAT.metalness)}, roughness: ${f(Game.SOLDIER_MAT.roughness)}, brightness: ${f(Game.SOLDIER_MAT.brightness)}, gunMetal: ${f(Game.SOLDIER_MAT.gunMetal)}, gunRough: ${f(Game.SOLDIER_MAT.gunRough)} };`,
         `SOLDIER_CLIP_RANGES = { ${rng} }`,
     ].join('\n');
 };
