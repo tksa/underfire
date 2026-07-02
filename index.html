@@ -1475,16 +1475,16 @@
     // data/changelog.json is generated from the git commit log at deploy time
     // (scripts/gen-changelog.mjs) and fetched here — no build step. Falls back to
     // a short built-in list if it can't be loaded.
-    const UNDER_VERSION = 'v0.10.0';
+    const UNDER_VERSION = 'v0.10.1';
     const vEl = document.getElementById('menuVersion');
     const upEl = document.getElementById('menuUpdates');
     if (vEl) vEl.textContent = UNDER_VERSION;
 
     const FALLBACK_NOTES = [
+      'Terrain overhaul: roads now render as smooth corridors that follow diagonals naturally (no more staircased square tiles).',
+      'Gravel road texture with tyre tracks that run along the road direction, plus a grass fringe softening the road edges.',
+      'Softer "melting point" seams where terrain types meet, more shrub/bush variety, and subtle natural ditches and rises across the map.',
       'New skinned 3D soldier model for infantry, with per-faction skins and smooth crossfaded animations.',
-      'Soldier animations: idle/stand, walk & run (procedural gait + forward lean), fire (standing & prone), crouch, sit, grenade, and multiple random death animations.',
-      'Live infantry tuning panel (press `): pose axis/tilt, height, ring-centering, per-clip ranges, and one-click animation preview.',
-      'Movement overhaul: smooth collision (no jitter/skid/weaving), tanks form columns, crush through forests, stuck units re-route.',
       'New French vehicles: Somua S35, Hotchkiss H35, Renault R35, Panhard 178, plus AHN3 supply & Laffly fuel trucks.',
     ];
     const renderUpdates = (version, date, notes) => {

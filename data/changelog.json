@@ -1,8 +1,23 @@
 {
- "version": "v0.10.0",
- "build": "e616ca2",
- "generated": "2026-07-01",
+ "version": "v0.10.1",
+ "build": "6c945b2",
+ "generated": "2026-07-02",
  "commits": [
+  {
+   "hash": "6c945b2",
+   "date": "2026-07-02",
+   "subject": "smooth road corridors, gravel texture + tracks, seams, shrubs, heightmap"
+  },
+  {
+   "hash": "81b7785",
+   "date": "2026-07-02",
+   "subject": "fix dark materials, add French skin + material/leg tuning controls"
+  },
+  {
+   "hash": "80c3a37",
+   "date": "2026-07-01",
+   "subject": "skinned 3D soldier model with animations + live tuning panel"
+  },
   {
    "hash": "e616ca2",
    "date": "2026-07-01",
@@ -57,21 +72,6 @@
    "hash": "b8a7e18",
    "date": "2026-06-30",
    "subject": "kill the unit jitter"
-  },
-  {
-   "hash": "4007ba2",
-   "date": "2026-06-30",
-   "subject": "attack-move reaches the objective, formation settles, S35 turret"
-  },
-  {
-   "hash": "c5b4f4a",
-   "date": "2026-06-30",
-   "subject": "opt-in group pace + foot troops yield to moving tanks"
-  },
-  {
-   "hash": "ab92ee8",
-   "date": "2026-06-30",
-   "subject": "tactical AI layer, idle postures, square tank collision, group movement"
   }
  ]
 }

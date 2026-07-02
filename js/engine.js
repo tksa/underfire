@@ -543,6 +543,7 @@ Game._postfxControlDefs = () => {
         ...(Game._tankControlDefs ? Game._tankControlDefs() : []),
         ...(Game._modelControlDefs ? Game._modelControlDefs() : []),
         ...(Game._soldierControlDefs ? Game._soldierControlDefs() : []),
+        ...(Game._terrainControlDefs ? Game._terrainControlDefs() : []),
     ];
 };
 
