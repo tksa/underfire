@@ -23,9 +23,13 @@ Game.updateCamera = (dt) => {
         if (Game.mouse.screenY > Game.viewH - edge) dz += 1;
     }
 
+    // The view is yawed (see below), so rotate pan input into screen space:
+    // screen-left stays screen-left regardless of the camera yaw.
+    const camYawR = (Game.camYawDeg != null ? Game.camYawDeg : 23) * Math.PI / 180;
+    const yawC = Math.cos(camYawR), yawS = Math.sin(camYawR);
     const speed = 30;
-    Game.cam.x += dx * speed * dt;
-    Game.cam.z += dz * speed * dt;
+    Game.cam.x += (dx * yawC + dz * yawS) * speed * dt;
+    Game.cam.z += (-dx * yawS + dz * yawC) * speed * dt;
 
     // Keyboard zoom: + zooms in (smaller frustum), - zooms out. Hold to zoom smoothly.
     const zoomSpeed = 26;
@@ -64,10 +68,12 @@ Game.updateCamera = (dt) => {
         Game.cameraShake = Math.max(0, Game.cameraShake - dt * 24);
     }
 
+    // Yaw the viewpoint ~23° to the right (Game.camYawDeg) so the map reads
+    // obliquely instead of grid-square to the screen.
     Game.camera.position.set(
-        Game.cam.x + shakeX,
+        Game.cam.x + Math.sin(camYawR) * offset + shakeX,
         elevation,
-        Game.cam.z + offset + shakeZ
+        Game.cam.z + Math.cos(camYawR) * offset + shakeZ
     );
     Game.camera.lookAt(Game.cam.x, 0, Game.cam.z);
 

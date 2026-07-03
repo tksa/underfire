@@ -46,6 +46,16 @@ Game.SHOW_GRASS = false;
 // Road gravel tiling: repeat every N tiles, and blend opacity. Live-tunable.
 Game.ROAD_GRAVEL_TILES = 2.5;
 Game.ROAD_GRAVEL_ALPHA = 0.92;
+// Organic field joins: how far (in tiles) the painted boundary between two
+// terrain types wanders off the tile grid, plus fine edge raggedness and the
+// per-field tint spread that separates adjacent same-type plots.
+Game.TERRAIN_EDGE_WARP = 0.45;
+Game.TERRAIN_EDGE_WARP_FINE = 0.12;
+Game.TERRAIN_FIELD_TINT = 0.07;
+// Most real field boundaries are surveyed straight; only some wander. This is
+// the share of the map where joins go rough/organic — everywhere else they
+// stay nearly straight (and only straight zones get walls/fences).
+Game.TERRAIN_EDGE_ROUGH_SHARE = 0.35;
 Game.setGrassVisible = (v) => {
     Game.SHOW_GRASS = !!v;
     (Game._grassMeshes || []).forEach(m => { m.visible = !!v; });
@@ -55,8 +65,11 @@ Game._terrainControlDefs = () => [
     { group: 'Terrain', key: 'showGrass', label: 'Grass blades (0/1)', min: 0, max: 1, step: 1, default: 0, apply: v => Game.setGrassVisible(v >= 1) },
     { group: 'Terrain', key: 'roadGravelTiles', label: 'Road gravel scale (tiles/repeat)', min: 0.5, max: 8, step: 0.25, default: 2.5, apply: v => { Game.ROAD_GRAVEL_TILES = v; if (Game.rebuildTerrainTexture) Game.rebuildTerrainTexture(); } },
     { group: 'Terrain', key: 'roadGravelAlpha', label: 'Road gravel opacity', min: 0, max: 1, step: 0.05, default: 0.92, apply: v => { Game.ROAD_GRAVEL_ALPHA = v; if (Game.rebuildTerrainTexture) Game.rebuildTerrainTexture(); } },
-    { group: 'Terrain', key: 'fringeDens', label: 'Road grass fringe (reload)', min: 0, max: 4, step: 0.1, default: 1.6, apply: v => { Game.TERRAIN_FRINGE = v; } },
-    { group: 'Terrain', key: 'seamDepth', label: 'Seam depth (reload)', min: 0, max: 0.6, step: 0.02, default: 0.22, apply: v => { Game.TERRAIN_SEAM_DEPTH = v; } },
+    { group: 'Terrain', key: 'fringeDens', label: 'Road grass fringe', min: 0, max: 4, step: 0.1, default: 1.6, apply: v => { Game.TERRAIN_FRINGE = v; if (Game.rebuildTerrainTexture) Game.rebuildTerrainTexture(); } },
+    { group: 'Terrain', key: 'seamDepth', label: 'Seam depth', min: 0, max: 0.6, step: 0.02, default: 0.22, apply: v => { Game.TERRAIN_SEAM_DEPTH = v; if (Game.rebuildTerrainTexture) Game.rebuildTerrainTexture(); } },
+    { group: 'Terrain', key: 'edgeWarp', label: 'Field edge wander (tiles)', min: 0, max: 1, step: 0.05, default: 0.45, apply: v => { Game.TERRAIN_EDGE_WARP = v; if (Game.rebuildTerrainTexture) Game.rebuildTerrainTexture(); } },
+    { group: 'Terrain', key: 'roughShare', label: 'Rough edge share (0-1)', min: 0, max: 1, step: 0.05, default: 0.35, apply: v => { Game.TERRAIN_EDGE_ROUGH_SHARE = v; if (Game.rebuildTerrainTexture) Game.rebuildTerrainTexture(); } },
+    { group: 'Terrain', key: 'fieldTint', label: 'Per-field tint spread', min: 0, max: 0.2, step: 0.01, default: 0.07, apply: v => { Game.TERRAIN_FIELD_TINT = v; if (Game.rebuildTerrainTexture) Game.rebuildTerrainTexture(); } },
 ];
 
 Game._isBridgeTile = (tx, ty) => !!(Game.bridgeTiles || []).some(b => b.tx === tx && b.ty === ty);
@@ -183,6 +196,7 @@ Game.generateMap = () => {
     Game.river = { tiles: [], minZ: ROWS, maxZ: 0 };
     Game.bridgeTiles = [];
     Game._waterRibbonCache = null;
+    Game._terrainPaint = null;   // per-texel paint classification follows the new tiles
 
     for (let y = 0; y < ROWS; y++) {
         Game.terrain[y] = [];
@@ -706,6 +720,124 @@ Game._applyWaterBedDepth = () => {
     Game._waterBedApplied = true;
 };
 
+// ── Animated water surface ─────────────────────────────────────────────────
+// A translucent plane over the river at WATER_LEVEL: colour + alpha bake from
+// the same smooth shoreline mask as the bed carve (so surface, bank and bed
+// agree), and a tiling ripple normal map scrolls each frame for moving water.
+Game._makeWaterNormalTex = () => {
+    if (Game._waterNormalTex) return Game._waterNormalTex;
+    const N = 128;
+    const c = document.createElement('canvas');
+    c.width = c.height = N;
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(N, N);
+    const d = img.data;
+    const TAU = Math.PI * 2;
+    // sum of integer-frequency waves → tiles seamlessly under RepeatWrapping
+    const h = (x, y) =>
+        Math.sin((3 * x + 1 * y) / N * TAU) * 0.55 +
+        Math.sin((1 * x - 4 * y) / N * TAU + 1.7) * 0.35 +
+        Math.sin((6 * x + 5 * y) / N * TAU + 4.1) * 0.22 +
+        Math.sin((9 * x - 2 * y) / N * TAU + 2.3) * 0.14;
+    for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+            const dx = h(x + 1, y) - h(x - 1, y);
+            const dy = h(x, y + 1) - h(x, y - 1);
+            const inv = 1 / Math.hypot(dx, dy, 2);
+            const i = (y * N + x) * 4;
+            d[i] = 128 + (-dx * inv) * 127;
+            d[i + 1] = 128 + (-dy * inv) * 127;
+            d[i + 2] = 128 + (2 * inv) * 127;
+            d[i + 3] = 255;
+        }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    Game._waterNormalTex = tex;
+    return tex;
+};
+
+Game._buildWaterSurface = () => {
+    Game._waterFX = null;
+    if (!Game.river || !Game.river.tiles.length || !Game._waterEdgeAlphaAt) return;
+    const T = Game.TILE;
+    const pad = 2 * T;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    Game.river.tiles.forEach(({ tx, ty }) => {
+        minX = Math.min(minX, tx * T); maxX = Math.max(maxX, (tx + 1) * T);
+        minZ = Math.min(minZ, ty * T); maxZ = Math.max(maxZ, (ty + 1) * T);
+    });
+    minX = Math.max(0, minX - pad); maxX = Math.min(Game.WORLD_W, maxX + pad);
+    minZ = Math.max(0, minZ - pad); maxZ = Math.min(Game.WORLD_H, maxZ + pad);
+    const w = maxX - minX, hSpan = maxZ - minZ;
+    if (w <= 0 || hSpan <= 0) return;
+
+    // Bake colour + alpha from the shoreline mask (organic, not tile-square)
+    const res = 8;   // texels per tile
+    const CW = Math.max(4, Math.round(w / T * res));
+    const CH = Math.max(4, Math.round(hSpan / T * res));
+    const c = document.createElement('canvas');
+    c.width = CW; c.height = CH;
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(CW, CH);
+    const d = img.data;
+    const shallow = [92, 122, 116], deep = [24, 52, 66];
+    for (let y = 0; y < CH; y++) {
+        const wz = minZ + (y + 0.5) / CH * hSpan;
+        for (let x = 0; x < CW; x++) {
+            const wx = minX + (x + 0.5) / CW * w;
+            const a = Game._waterEdgeAlphaAt(wx, wz);
+            const i = (y * CW + x) * 4;
+            if (a <= 0.003) { d[i + 3] = 0; continue; }
+            const depth = Game._waterDepth01At ? Game._waterDepth01At(wx, wz) : a;
+            d[i] = shallow[0] + (deep[0] - shallow[0]) * depth;
+            d[i + 1] = shallow[1] + (deep[1] - shallow[1]) * depth;
+            d[i + 2] = shallow[2] + (deep[2] - shallow[2]) * depth;
+            d[i + 3] = Math.round(a * (150 + 70 * depth));   // shallow edges show the bed
+        }
+    }
+    ctx.putImageData(img, 0, 0);
+    const map = new THREE.CanvasTexture(c);
+    map.colorSpace = THREE.SRGBColorSpace;
+
+    const normalMap = Game._makeWaterNormalTex();
+    normalMap.repeat.set(w / 14, hSpan / 14);   // ripple wavelength a few metres
+
+    const mat = new THREE.MeshStandardMaterial({
+        map, normalMap,
+        normalScale: new THREE.Vector2(0.5, 0.35),
+        transparent: true, depthWrite: false,
+        roughness: 0.16, metalness: 0.05,
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, hSpan), mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(minX + w / 2, (Game.WATER_LEVEL || 0.55) + 0.02, minZ + hSpan / 2);
+    mesh.name = 'water-surface';
+    mesh.receiveShadow = true;
+    mesh.renderOrder = 1;
+    mesh.raycast = () => {};   // purely visual — never blocks picking
+    Game.terrainGroup.add(mesh);
+    Game._waterFX = { mat, t: Game.rand(0, 100) };
+};
+
+// Scroll the ripple normals along the river each frame (called from the loop).
+Game.updateWaterFX = (dt) => {
+    const fx = Game._waterFX;
+    if (!fx) return;
+    fx.t += dt;
+    const nm = fx.mat.normalMap;
+    if (nm) {
+        nm.offset.x = (fx.t * 0.020) % 1;   // flow along the river (E-W)
+        nm.offset.y = (fx.t * 0.008) % 1;
+    }
+    // soft cross-chop so the glints keep moving
+    fx.mat.normalScale.set(
+        0.45 + 0.12 * Math.sin(fx.t * 0.9),
+        0.32 + 0.09 * Math.sin(fx.t * 1.3 + 1.0)
+    );
+};
+
 /**
  * Shape the existing heightmap to the tile map: carve the river channel,
  * flatten roads / yards / buildings, and raise the bridge deck. Safe to call
@@ -1142,6 +1274,209 @@ Game._prepareRoadGravel = (img) => {
     return c;
 };
 
+// ── Per-texel paint classification (shared by the colour + material maps) ──
+// The old painter filled each tile as a flat rect, so every field-to-field join
+// was a dead-straight line along the tile grid — the single biggest "board
+// game" tell. Here each texel is classified through a noise-WARPED tile lookup
+// instead, so boundaries wander like real field edges. Each contiguous
+// same-type region also gets its own tint and cultivation-row direction, so
+// two adjacent wheat plots read as two different fields, not one blob.
+Game._getTerrainPaint = () => {
+    const px = Game.TERRAIN_TEXELS_PER_TILE || 20;
+    const COLS = Game.MAP_COLS, ROWS = Game.MAP_ROWS;
+    const W = COLS * px, H = ROWS * px;
+    const warpAmp = Game.TERRAIN_EDGE_WARP != null ? Game.TERRAIN_EDGE_WARP : 0.45;
+    const fineAmp = Game.TERRAIN_EDGE_WARP_FINE != null ? Game.TERRAIN_EDGE_WARP_FINE : 0.12;
+    const tintAmp = Game.TERRAIN_FIELD_TINT != null ? Game.TERRAIN_FIELD_TINT : 0.07;
+    const roughShare = Game.clamp(Game.TERRAIN_EDGE_ROUGH_SHARE != null ? Game.TERRAIN_EDGE_ROUGH_SHARE : 0.35, 0, 1);
+    const cached = Game._terrainPaint;
+    if (cached && cached.W === W && cached.H === H
+        && cached.warpAmp === warpAmp && cached.fineAmp === fineAmp
+        && cached.tintAmp === tintAmp && cached.roughShare === roughShare) return cached;
+
+    const paintType = (t) => {
+        if (t === 'hedge') return 'pasture';
+        if (t === 'wall' || t === 'house') return 'yard';
+        if (t === 'water') return 'mud';
+        return t;
+    };
+    // Painted type per tile; road tiles take their surrounding field (the road
+    // itself is stroked later as a smooth corridor over the finished ground).
+    const typeNames = [];
+    const typeIndexOf = {};
+    const idxFor = (n) => (typeIndexOf[n] !== undefined ? typeIndexOf[n] : (typeIndexOf[n] = typeNames.push(n) - 1));
+    const NEIGH8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
+    const fieldUnderRoad = (tx, ty) => {
+        for (const [dx, dy] of NEIGH8) {
+            const n = Game.getTile(tx + dx, ty + dy);
+            if (!n) continue;
+            const nt = paintType(n.type);
+            if (nt !== 'road' && nt !== 'yard') return nt;
+        }
+        return 'pasture';
+    };
+    const tileT = new Uint8Array(COLS * ROWS);
+    for (let ty = 0; ty < ROWS; ty++) {
+        for (let tx = 0; tx < COLS; tx++) {
+            let t = paintType(Game.terrain[ty][tx].type);
+            if (t === 'road') t = fieldUnderRoad(tx, ty);
+            tileT[ty * COLS + tx] = idxFor(t);
+        }
+    }
+
+    // Contiguous same-type regions (flood fill) → per-field tint + row layout.
+    const regionTile = new Int32Array(COLS * ROWS).fill(-1);
+    const regions = [];
+    const queue = new Int32Array(COLS * ROWS);
+    for (let seed = 0; seed < COLS * ROWS; seed++) {
+        if (regionTile[seed] >= 0) continue;
+        const id = regions.length;
+        const t = tileT[seed];
+        let head = 0, tail = 0;
+        queue[tail++] = seed; regionTile[seed] = id;
+        let x0 = COLS, x1 = 0, y0 = ROWS, y1 = 0;
+        while (head < tail) {
+            const cur = queue[head++];
+            const cx = cur % COLS, cy = (cur / COLS) | 0;
+            if (cx < x0) x0 = cx; if (cx > x1) x1 = cx;
+            if (cy < y0) y0 = cy; if (cy > y1) y1 = cy;
+            if (cx > 0 && regionTile[cur - 1] < 0 && tileT[cur - 1] === t) { regionTile[cur - 1] = id; queue[tail++] = cur - 1; }
+            if (cx < COLS - 1 && regionTile[cur + 1] < 0 && tileT[cur + 1] === t) { regionTile[cur + 1] = id; queue[tail++] = cur + 1; }
+            if (cy > 0 && regionTile[cur - COLS] < 0 && tileT[cur - COLS] === t) { regionTile[cur - COLS] = id; queue[tail++] = cur - COLS; }
+            if (cy < ROWS - 1 && regionTile[cur + COLS] < 0 && tileT[cur + COLS] === t) { regionTile[cur + COLS] = id; queue[tail++] = cur + COLS; }
+        }
+        const name = typeNames[t];
+        const flat = name === 'yard';
+        const woods = name === 'forest' || name === 'dense_forest';
+        // Rows run along the field's long axis, with a small organic skew.
+        const angle = ((x1 - x0) >= (y1 - y0) ? 0 : Math.PI / 2) + Game.rand(-0.12, 0.12);
+        const bAmp = flat ? 0 : tintAmp * (woods ? 0.5 : 1);
+        const bright = 1 + Game.rand(-bAmp, bAmp);
+        const warm = flat ? 0 : Game.rand(-0.05, 0.05) * (woods ? 0.5 : 1);
+        regions.push({
+            tr: bright * (1 + warm), tg: bright * (1 + warm * 0.35), tb: bright * (1 - warm),
+            rx: -Math.sin(angle), ry: Math.cos(angle), phase: Game.rand(0, 64),
+            area: tail,   // tiles in this region (dividers key wall styles off the enclosed plot)
+        });
+    }
+
+    // Noise lattices sampled bilinearly per texel (full-res fbm would be slow):
+    // two boundary-warp channels + a low/high-frequency detail pair, plus the
+    // straight/rough mask that decides WHERE joins get to wander.
+    const L = 4;
+    const LW = ((W / L) | 0) + 2, LH = ((H / L) | 0) + 2;
+    const latU = new Float32Array(LW * LH), latV = new Float32Array(LW * LH);
+    const latLo = new Float32Array(LW * LH), latHi = new Float32Array(LW * LH);
+    const latR = new Float32Array(LW * LH);
+    for (let ly = 0; ly < LH; ly++) {
+        const gy = ly * L / px;
+        for (let lx = 0; lx < LW; lx++) {
+            const gx = lx * L / px;
+            const i = ly * LW + lx;
+            latU[i] = (Game._fbm2(gx * 0.35 + 7.7, gy * 0.35 - 3.1) - 0.5) * 2;
+            latV[i] = (Game._fbm2(gx * 0.35 - 15.3, gy * 0.35 + 11.9) - 0.5) * 2;
+            latLo[i] = Game._fbm2(gx * 0.4, gy * 0.4);
+            latHi[i] = Game._fbm2(gx * 0.9 + 31.7, gy * 0.9 - 12.3);
+            // very-low-frequency zoning noise (~20+ tile patches)
+            latR[i] = Game._fbm2(gx * 0.05 + 57.1, gy * 0.05 + 23.7);
+        }
+    }
+    // Threshold the zoning noise at its (1 - roughShare) quantile, so exactly
+    // ~roughShare of the map goes organic and the rest stays surveyed-straight
+    // (with just a hint of fine raggedness so it isn't pixel-perfect).
+    {
+        const sorted = Float32Array.from(latR).sort();
+        const thr = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * (1 - roughShare)))];
+        const sm = (a, b, x) => { const t2 = Game.clamp((x - a) / (b - a), 0, 1); return t2 * t2 * (3 - 2 * t2); };
+        for (let i = 0; i < LW * LH; i++) {
+            const r01 = roughShare >= 1 ? 1 : roughShare <= 0 ? 0 : sm(thr - 0.035, thr + 0.035, latR[i]);
+            latR[i] = r01;
+            const big = warpAmp * (0.14 + 0.86 * r01);
+            const fine = fineAmp * (0.4 + 0.6 * r01);
+            latU[i] = latU[i] * big + (Game._fbm2((i % LW) * L / px * 1.9 - 13.7, ((i / LW) | 0) * L / px * 1.9 + 9.2) - 0.5) * 2 * fine;
+            latV[i] = latV[i] * big + (Game._fbm2((i % LW) * L / px * 1.9 + 4.1, ((i / LW) | 0) * L / px * 1.9 - 6.6) - 0.5) * 2 * fine;
+        }
+    }
+    const lat = (arr, x, y) => {
+        const u = x / L, v = y / L;
+        const ux = u | 0, vy = v | 0;
+        const fx = u - ux, fy = v - vy;
+        const i = vy * LW + ux;
+        const a = arr[i], b = arr[i + 1], c = arr[i + LW], d = arr[i + LW + 1];
+        return a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy;
+    };
+
+    // Per-texel classification through the warped lookup.
+    const typeIdx = new Uint8Array(W * H);
+    const regionIdx = new Int32Array(W * H);
+    // River shoreline: reclassify texels near the water off the smooth ribbon
+    // mask (same jittered signed distance as the surface/bed) so the banks
+    // meander instead of stair-stepping tile by tile.
+    const TT = Game.TILE;
+    const isWater = new Uint8Array(COLS * ROWS);
+    let rivY0 = -1, rivY1 = -1;
+    if (Game.river && Game.river.tiles.length >= 8 && Game._waterRibbonAt) {
+        Game.river.tiles.forEach(({ tx, ty }) => {
+            if (tx >= 0 && ty >= 0 && tx < COLS && ty < ROWS) isWater[ty * COLS + tx] = 1;
+        });
+        rivY0 = Math.max(0, (Game.river.minZ - 4) * px);
+        rivY1 = Math.min(H, (Game.river.maxZ + 5) * px);
+    }
+    const mudIdx = typeIndexOf['mud'];
+    const bankW = TT * 0.55;   // muddy bank strip beyond the waterline
+    const jitAmp = (Game.WATER_SHORE_JITTER || 0.25) * TT * 2;
+    for (let y = 0; y < H; y++) {
+        const inBand = y >= rivY0 && y < rivY1;
+        for (let x = 0; x < W; x++) {
+            const i = y * W + x;
+            let tx = ((x + 0.5) / px + lat(latU, x, y)) | 0;
+            let ty = ((y + 0.5) / px + lat(latV, x, y)) | 0;
+            if (tx < 0) tx = 0; else if (tx >= COLS) tx = COLS - 1;
+            if (ty < 0) ty = 0; else if (ty >= ROWS) ty = ROWS - 1;
+            let tI = ty * COLS + tx;
+            if (inBand && mudIdx !== undefined) {
+                const wx = (x + 0.5) / px * TT, wz = (y + 0.5) / px * TT;
+                const rib = Game._waterRibbonAt(wx, wz);
+                if (rib) {
+                    // same jitter as _waterEdgeAlphaAt so bed, bank and surface agree
+                    const signed = rib.signed
+                        + (Game._fbm2(wx * 0.055 + 19.3, wz * 0.055 - 7.1) - 0.5) * jitAmp;
+                    if (signed > -bankW) {
+                        // inside the meandering bed/bank: always mud
+                        const czTy = Game.clamp((rib.centerZ / TT) | 0, 0, ROWS - 1);
+                        const cI = czTy * COLS + tx;
+                        typeIdx[i] = mudIdx;
+                        regionIdx[i] = regionTile[isWater[cI] ? cI : tI];
+                        continue;
+                    }
+                    if (isWater[tI]) {
+                        // water tile beyond the smooth bank: hand the texel to
+                        // the field on this side so crops run up to the bank
+                        const dir = wz >= rib.centerZ ? 1 : -1;
+                        for (let s = 1; s <= 6; s++) {
+                            const nty = ty + dir * s;
+                            if (nty < 0 || nty >= ROWS) break;
+                            const nI = nty * COLS + tx;
+                            if (!isWater[nI]) { tI = nI; break; }
+                        }
+                    }
+                }
+            }
+            typeIdx[i] = tileT[tI];
+            regionIdx[i] = regionTile[tI];
+        }
+    }
+
+    Game._terrainPaint = {
+        W, H, px, warpAmp, fineAmp, tintAmp, roughShare,
+        typeNames, typeIdx, regionIdx, regions, regionTile,
+        lo: (x, y) => lat(latLo, x, y),
+        hi: (x, y) => lat(latHi, x, y),
+        rough: (x, y) => lat(latR, x, y),   // 0 = straight zone, 1 = organic zone
+    };
+    return Game._terrainPaint;
+};
+
 // Rebuild the terrain colour texture and swap it onto the terrain material (used
 // by the road-gravel debug sliders so scale/opacity changes apply live).
 Game.rebuildTerrainTexture = () => {
@@ -1190,128 +1525,96 @@ Game.buildTerrainTexture = () => {
         return t;
     };
 
-    // Field type surrounding a road tile — the base painted UNDER the road corridor
-    // so the diagonal staircase's cut corners read as field, not bare road squares.
-    const fieldUnderRoad = (tx, ty) => {
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
-            const n = Game.getTile(tx + dx, ty + dy);
-            if (!n) continue;
-            const nt = paintType(n.type);
-            if (nt !== 'road' && nt !== 'yard' && nt !== 'house') return nt;
-        }
-        return 'pasture';
-    };
-
-    // 1. Base tile fill. Brightness varies with SMOOTH noise (not per-tile
-    //    random) so the terrain no longer shows a hard tile grid; roads and
-    //    yards get no per-tile variation at all (that grid was very visible on
-    //    the roads). Texture for roads comes from the gravel speckle below.
-    for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
-        for (let tx = 0; tx < Game.MAP_COLS; tx++) {
-            let type = paintType(Game.terrain[ty][tx].type);
-            // Roads paint their surrounding field as the base; the actual road is
-            // drawn afterwards as a smooth corridor so diagonals don't staircase.
-            if (type === 'road') type = fieldUnderRoad(tx, ty);
-            const hex = colOf(type);
-            let r = (hex >> 16) & 255, g = (hex >> 8) & 255, b = hex & 255;
-            if (type !== 'yard') {
-                const v = 1 + (Game._fbm2(tx * 0.4, ty * 0.4) - 0.5) * 0.12;
-                r = Game.clamp(Math.round(r * v), 0, 255);
-                g = Game.clamp(Math.round(g * v), 0, 255);
-                b = Game.clamp(Math.round(b * v), 0, 255);
-            }
-            ctx.fillStyle = `rgb(${r},${g},${b})`;
-            ctx.fillRect(tx * px, ty * px, px, px);
-        }
-    }
-
-    // 2. Edge dithering — speckle this tile's color into differing neighbors
-    for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
-        for (let tx = 0; tx < Game.MAP_COLS; tx++) {
-            const type = paintType(Game.terrain[ty][tx].type);
-            if (type === 'road') continue; // keep road edges crisp-ish
-            const neighbors = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-            for (const [dx, dy] of neighbors) {
-                const n = Game.getTile(tx + dx, ty + dy);
-                if (!n || paintType(n.type) === type) continue;
-                // draw a few blobs across the shared edge
-                for (let k = 0; k < 5; k++) {
-                    const ex = (tx + 0.5 + dx * 0.5) * px + Game.rand(-2, 2) + (dy !== 0 ? Game.rand(-px / 2, px / 2) : 0);
-                    const ey = (ty + 0.5 + dy * 0.5) * px + Game.rand(-2, 2) + (dx !== 0 ? Game.rand(-px / 2, px / 2) : 0);
-                    ctx.fillStyle = rgb(colOf(type), 0.1);
-                    const sSize = Game.rand(1.5, 3.5);
-                    ctx.fillRect(ex - sSize / 2, ey - sSize / 2, sSize, sSize);
-                }
-            }
-        }
-    }
-
-    // 2.5 Boundary seam ("melting point"): a thin, noise-jittered dark groove with
-    //     a faint highlight lip wherever two different terrain types meet, so the
-    //     transition reads as a slight depth change rather than a flat colour blend.
-    //     Subtle by design (~1.5px of a 14px tile). Only +x/+z so each seam is drawn
-    //     once. Depth is tunable via Game.TERRAIN_SEAM_DEPTH.
+    // 1. Base ground through the warped per-texel classification (see
+    //    _getTerrainPaint): joins between field types wander organically
+    //    instead of tracing the tile grid, each contiguous field gets its own
+    //    tint, and cultivation rows run per-field (not per 4-tile block).
+    //    Roads paint their surrounding field as base; the road itself is drawn
+    //    afterwards as a smooth corridor so diagonals don't staircase.
+    const paint = Game._getTerrainPaint();
     {
+        const img0 = ctx.createImageData(W, H);
+        const d0 = img0.data;
+        const names = paint.typeNames;
+        const lut = names.map(n => { const hex = colOf(n); return [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255]; });
+        const GAP = { plowed: 3, vineyard: 3, garden: 3, wheat: 4, stubble: 4 };
+        const AMP = { plowed: 0.30, vineyard: 0.34, garden: 0.26, wheat: 0.16, stubble: 0.14 };
+        const rowGap = names.map(n => GAP[n] || 0);
+        const rowAmp = names.map(n => AMP[n] || 0);
+        const woods = names.map(n => n === 'forest' || n === 'dense_forest');
+        const flat = names.map(n => n === 'yard');
+        const TAU = Math.PI * 2;
+        for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+                const i = y * W + x;
+                const ti = paint.typeIdx[i];
+                const reg = paint.regions[paint.regionIdx[i]];
+                const c = lut[ti];
+                let r = c[0] * reg.tr, g = c[1] * reg.tg, b = c[2] * reg.tb;
+                let f = flat[ti] ? 1 : 1 + (paint.lo(x, y) - 0.5) * 0.12;
+                const gap = rowGap[ti];
+                if (gap) {
+                    // Straight cultivation rows along the field's long axis; they
+                    // stop at the warped field edge because the classification does.
+                    const rc = (x * reg.rx + y * reg.ry + reg.phase) * TAU / gap;
+                    const s = 0.5 + 0.5 * Math.sin(rc);
+                    f *= (1 - rowAmp[ti] * s * s) * (1 + 0.045 * Math.sin(rc / 5.3));
+                } else if (woods[ti]) {
+                    // clumpy canopy mottling instead of random squares
+                    f *= 1 - 0.26 * Math.max(0, paint.hi(x, y) - 0.45) * (1 / 0.55);
+                }
+                r *= f; g *= f; b *= f;
+                const o = i * 4;
+                d0[o] = r < 0 ? 0 : r > 255 ? 255 : r;
+                d0[o + 1] = g < 0 ? 0 : g > 255 ? 255 : g;
+                d0[o + 2] = b < 0 ? 0 : b > 255 ? 255 : b;
+                d0[o + 3] = 255;
+            }
+        }
+
+        // 2. Boundary seam: a soft dark groove + faint highlight lip along every
+        //    join. The joins are wavy now, so the groove reads as a natural field
+        //    margin instead of outlining the tile grid. Tunable via
+        //    Game.TERRAIN_SEAM_DEPTH.
         const seamA = Game.TERRAIN_SEAM_DEPTH != null ? Game.TERRAIN_SEAM_DEPTH : 0.22;
-        const dark = `rgba(28,22,15,${seamA})`;
-        const lite = `rgba(255,250,235,${(seamA * 0.28).toFixed(3)})`;
-        for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
-            for (let tx = 0; tx < Game.MAP_COLS; tx++) {
-                const type = paintType(Game.terrain[ty][tx].type);
-                if (type === 'road' || type === 'yard') continue;   // don't hard-outline roads/squares (looks blocky)
-                for (const [dx, dy] of [[1, 0], [0, 1]]) {
-                    const n = Game.getTile(tx + dx, ty + dy);
-                    const np = n && paintType(n.type);
-                    if (!n || np === type || np === 'road' || np === 'yard') continue;   // skip seams touching a road/yard
-                    if (dx !== 0) {
-                        const sx = (tx + 1) * px;
-                        for (let s = 0; s < px; s++) {
-                            const yy = ty * px + s;
-                            const j = (Game._fbm2(tx * 3.1, (ty * px + s) * 0.2) - 0.5) * 1.6;
-                            ctx.fillStyle = dark; ctx.fillRect(sx - 1 + j, yy, 1.5, 1);
-                            ctx.fillStyle = lite; ctx.fillRect(sx + 0.7 + j, yy, 0.8, 1);
-                        }
-                    } else {
-                        const sy = (ty + 1) * px;
-                        for (let s = 0; s < px; s++) {
-                            const xx = tx * px + s;
-                            const j = (Game._fbm2((tx * px + s) * 0.2, ty * 3.1) - 0.5) * 1.6;
-                            ctx.fillStyle = dark; ctx.fillRect(xx, sy - 1 + j, 1, 1.5);
-                            ctx.fillStyle = lite; ctx.fillRect(xx, sy + 0.7 + j, 1, 0.8);
-                        }
+        if (seamA > 0.001) {
+            const skip = names.map(n => n === 'yard');   // no hard outline around the village square
+            const darken = (o, a) => {
+                d0[o] += (28 - d0[o]) * a;
+                d0[o + 1] += (22 - d0[o + 1]) * a;
+                d0[o + 2] += (15 - d0[o + 2]) * a;
+            };
+            const lighten = (o, a) => {
+                d0[o] += (255 - d0[o]) * a;
+                d0[o + 1] += (250 - d0[o + 1]) * a;
+                d0[o + 2] += (235 - d0[o + 2]) * a;
+            };
+            const T = paint.typeIdx;
+            for (let y = 1; y < H; y++) {
+                for (let x = 1; x < W; x++) {
+                    const i = y * W + x;
+                    const t = T[i];
+                    if (T[i - 1] !== t && !skip[t] && !skip[T[i - 1]]) {
+                        darken(i * 4, seamA * 0.55); darken((i - 1) * 4, seamA * 0.5);
+                        if (x + 1 < W) lighten((i + 1) * 4, seamA * 0.15);
+                    }
+                    if (T[i - W] !== t && !skip[t] && !skip[T[i - W]]) {
+                        darken(i * 4, seamA * 0.55); darken((i - W) * 4, seamA * 0.5);
+                        if (y + 1 < H) lighten((i + W) * 4, seamA * 0.15);
                     }
                 }
             }
         }
+        ctx.putImageData(img0, 0, 0);
     }
 
-    // 3. Per-type detail — cultivated rows, furrows, canopy mottling
+    // 3. Per-type interior detail (rows, furrows and canopy mottling moved into
+    //    the per-texel pass above; what's left here are localized speckles).
     for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
         for (let tx = 0; tx < Game.MAP_COLS; tx++) {
             const type = Game.terrain[ty][tx].type;
             const x0 = tx * px, y0 = ty * px;
-            // Plot orientation alternates so neighboring fields read differently
-            const horiz = ((tx >> 2) + (ty >> 2)) % 2 === 0;
-            const rows = (color, gap) => {
-                ctx.fillStyle = color;
-                if (horiz) for (let r = 1; r < px; r += gap) ctx.fillRect(x0, y0 + r, px, 1);
-                else for (let r = 1; r < px; r += gap) ctx.fillRect(x0 + r, y0, 1, px);
-            };
-            if (type === 'wheat' || type === 'stubble') {
-                rows('rgba(70,56,24,0.16)', 4);
-            } else if (type === 'plowed') {
-                rows('rgba(40,28,18,0.30)', 3);
-            } else if (type === 'vineyard') {
-                rows('rgba(30,44,20,0.34)', 3);
-            } else if (type === 'garden') {
-                rows('rgba(45,55,28,0.26)', 3);
-            } else if (type === 'forest' || type === 'dense_forest') {
-                for (let k = 0; k < 4; k++) {
-                    ctx.fillStyle = `rgba(20,30,14,${Game.rand(0.12, 0.3)})`;
-                    const s = Game.rand(3, 7);
-                    ctx.fillRect(x0 + Game.rand(0, px - s), y0 + Game.rand(0, px - s), s, s);
-                }
-            } else if (type === 'road') {
+            if (type === 'road') {
                 // Road texture is drawn later as a smooth corridor (see below), not
                 // per square tile — skip here so diagonals don't staircase.
                 continue;
@@ -1550,9 +1853,10 @@ Game.buildTerrainTexture = () => {
 
 Game.buildTerrainMaterialMaps = () => {
     const THREE = Game.THREE;
-    const px = Game.TERRAIN_TEXELS_PER_TILE || 20;
-    const W = Game.MAP_COLS * px;
-    const H = Game.MAP_ROWS * px;
+    const paint = Game._getTerrainPaint();
+    const px = paint.px;
+    const W = paint.W;
+    const H = paint.H;
     const roughCanvas = document.createElement('canvas');
     const aoCanvas = document.createElement('canvas');
     roughCanvas.width = aoCanvas.width = W;
@@ -1560,7 +1864,6 @@ Game.buildTerrainMaterialMaps = () => {
     const rctx = roughCanvas.getContext('2d');
     const actx = aoCanvas.getContext('2d');
 
-    const gray = (v, a = 1) => `rgba(${v},${v},${v},${a})`;
     const fillCircle = (ctx, x, y, r, style) => {
         ctx.fillStyle = style;
         ctx.beginPath();
@@ -1575,31 +1878,79 @@ Game.buildTerrainMaterialMaps = () => {
         water: [72, 255], swamp: [136, 150],
     };
 
+    // Base roughness/AO follow the same warped classification as the colour map
+    // (so the material transition lands on the same wavy join), EXCEPT hard or
+    // structural surfaces, which keep their exact tile footprint: road roughness
+    // under the painted corridor, dark hedge bases, water sheen, walls/houses.
+    {
+        const HARD = { road: 1, yard: 1, house: 1, wall: 1, hedge: 1, swamp: 1 };
+        const matByIdx = paint.typeNames.map(n => mat[n] || mat.grass);
+        const GAP = { plowed: 3, vineyard: 3, garden: 3, wheat: 4, stubble: 4 };
+        const rowGap = paint.typeNames.map(n => GAP[n] || 0);
+        const woods = paint.typeNames.map(n => n === 'forest' || n === 'dense_forest');
+        const rImg = rctx.createImageData(W, H);
+        const aImg = actx.createImageData(W, H);
+        const rd = rImg.data, ad = aImg.data;
+        const TAU = Math.PI * 2;
+        // Water sheen follows the smooth shoreline mask, not the tile grid
+        // (water is no longer in HARD — the raw footprint stair-stepped).
+        const T = Game.TILE;
+        let wY0 = -1, wY1 = -1;
+        if (Game.river && Game.river.tiles.length && Game._waterEdgeAlphaAt) {
+            wY0 = Math.max(0, (Game.river.minZ - 3) * px);
+            wY1 = Math.min(H, (Game.river.maxZ + 4) * px);
+        }
+        for (let y = 0; y < H; y++) {
+            const rty = (y / px) | 0;
+            const row = Game.terrain[rty];
+            const inWaterBand = y >= wY0 && y < wY1;
+            for (let x = 0; x < W; x++) {
+                const i = y * W + x;
+                const raw = row[(x / px) | 0].type;
+                const ti = paint.typeIdx[i];
+                let rough, ao;
+                if (HARD[raw]) {
+                    const m = mat[raw] || mat.grass;
+                    rough = m[0]; ao = m[1];
+                } else {
+                    const m = matByIdx[ti];
+                    rough = m[0]; ao = m[1];
+                    const gap = rowGap[ti];
+                    if (gap) {
+                        const reg = paint.regions[paint.regionIdx[i]];
+                        const s = 0.5 + 0.5 * Math.sin((x * reg.rx + y * reg.ry + reg.phase) * TAU / gap);
+                        ao -= 26 * s * s;
+                        rough += 10 * (s * s - 0.5);
+                    } else if (woods[ti]) {
+                        ao -= 34 * Math.max(0, paint.hi(x, y) - 0.45) * (1 / 0.55);
+                    }
+                    // soft occlusion inside the boundary groove (matches the colour seam)
+                    if ((x > 0 && paint.typeIdx[i - 1] !== ti) || (y > 0 && paint.typeIdx[i - W] !== ti)) ao -= 18;
+                }
+                if (inWaterBand) {
+                    const a = Game._waterEdgeAlphaAt((x + 0.5) / px * T, (y + 0.5) / px * T);
+                    if (a > 0.004) {
+                        rough += (mat.water[0] - rough) * a;
+                        ao += (mat.water[1] - ao) * a;
+                    }
+                }
+                const o = i * 4;
+                rd[o] = rd[o + 1] = rd[o + 2] = rough < 0 ? 0 : rough > 255 ? 255 : rough;
+                rd[o + 3] = 255;
+                ad[o] = ad[o + 1] = ad[o + 2] = ao < 0 ? 0 : ao > 255 ? 255 : ao;
+                ad[o + 3] = 255;
+            }
+        }
+        rctx.putImageData(rImg, 0, 0);
+        actx.putImageData(aImg, 0, 0);
+    }
+
+    // Localized wear/pothole spots on hard and wet surfaces.
     for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
         for (let tx = 0; tx < Game.MAP_COLS; tx++) {
             const type = Game.terrain[ty][tx].type;
-            const [rough, ao] = mat[type] || mat.grass;
             const x0 = tx * px, y0 = ty * px;
-            rctx.fillStyle = gray(rough);
-            rctx.fillRect(x0, y0, px, px);
-            actx.fillStyle = gray(ao);
-            actx.fillRect(x0, y0, px, px);
-
-            const rowsRunX = ((tx >> 2) + (ty >> 2)) % 2 === 0;
-            if (type === 'plowed' || type === 'vineyard' || type === 'garden' || type === 'wheat' || type === 'stubble') {
-                const gap = type === 'plowed' ? 3 : 4;
-                actx.fillStyle = 'rgba(30,30,30,0.16)';
-                rctx.fillStyle = 'rgba(255,255,255,0.08)';
-                for (let p = 1; p < px; p += gap) {
-                    if (rowsRunX) {
-                        actx.fillRect(x0, y0 + p, px, 1);
-                        rctx.fillRect(x0, y0 + p + 1, px, 1);
-                    } else {
-                        actx.fillRect(x0 + p, y0, 1, px);
-                        rctx.fillRect(x0 + p + 1, y0, 1, px);
-                    }
-                }
-            } else if (type === 'road' || type === 'yard') {
+            if (type === 'road' || type === 'yard') {
                 // Soft, direction-free wear patches instead of hard rut lines.
                 for (let k = 0; k < 4; k++) {
                     const cx = x0 + Game.rand(2, px - 2);
@@ -1616,7 +1967,7 @@ Game.buildTerrainMaterialMaps = () => {
                     fillCircle(rctx, cx, cy, rad, 'rgba(20,20,20,0.22)');
                     fillCircle(actx, cx, cy, rad, 'rgba(40,40,40,0.18)');
                 }
-            } else if (type === 'forest' || type === 'dense_forest' || type === 'orchard') {
+            } else if (type === 'orchard') {
                 for (let k = 0; k < 5; k++) {
                     fillCircle(actx, x0 + Game.rand(0, px), y0 + Game.rand(0, px), Game.rand(1.5, 4), 'rgba(28,28,28,0.16)');
                 }
@@ -1624,20 +1975,8 @@ Game.buildTerrainMaterialMaps = () => {
         }
     }
 
-    // Tile-border occlusion darkens seams/hedge bases so fields sit into the map.
-    actx.strokeStyle = 'rgba(24,24,24,0.08)';
-    actx.lineWidth = 1;
-    for (let ty = 1; ty < Game.MAP_ROWS; ty++) {
-        for (let tx = 1; tx < Game.MAP_COLS; tx++) {
-            const type = Game.terrain[ty][tx].type;
-            if (Game.terrain[ty][tx - 1].type !== type) {
-                actx.beginPath(); actx.moveTo(tx * px, ty * px); actx.lineTo(tx * px, (ty + 1) * px); actx.stroke();
-            }
-            if (Game.terrain[ty - 1][tx].type !== type) {
-                actx.beginPath(); actx.moveTo(tx * px, ty * px); actx.lineTo((tx + 1) * px, ty * px); actx.stroke();
-            }
-        }
-    }
+    // (Boundary occlusion now follows the warped joins — painted in the
+    // per-texel pass above — instead of stroking straight tile-grid lines.)
 
     [rctx, actx].forEach(ctx => {
         const img = ctx.getImageData(0, 0, W, H);
@@ -1664,6 +2003,326 @@ Game.buildTerrainMaterialMaps = () => {
         roughnessMap: makeTex(roughCanvas),
         aoMap: makeTex(aoCanvas),
     };
+};
+
+// ═══════════════════════════════════════════════════════
+//  FIELD DIVIDERS — stone walls + wood farm fences on field joins
+// ═══════════════════════════════════════════════════════
+// Placement strategy (aerial-photo realism): dividers go only along
+// straight-ish joins (the rough/organic zones of the edge mask get none —
+// nobody builds a fence on a wandering boundary), stone walls cluster near the
+// village and around garden/orchard/vineyard plots, wooden stock fences ring
+// pasture and crops further out. Runs are partial with gateway gaps, and never
+// duplicate an existing hedgerow (hedges occupy the border tile itself, so a
+// hedge line simply breaks the field-field adjacency).
+// Gameplay: cosmetic obstacles — infantry step/climb over freely; tanks crush
+// them flat via the shared knock-down animator (Game.foliageKD).
+Game.DIVIDER_MODELS = {
+    wall: [
+        'models/dividers/stone_wall_1.glb',
+        'models/dividers/stone_wall_2.glb',
+        'models/dividers/stone_wall_3.glb',
+        'models/dividers/stone_wall_small.glb',
+    ],
+    fence: ['models/dividers/wood_fence.glb'],
+};
+Game.DIVIDER_RUN_CHANCE = 0.9;   // share of eligible boundary runs that get a divider
+
+Game._addFieldDividers = () => {
+    const THREE = Game.THREE;
+    const T = Game.TILE;
+    const COLS = Game.MAP_COLS, ROWS = Game.MAP_ROWS;
+    if (!Game.gltfLoader) return;
+    const paint = Game._getTerrainPaint ? Game._getTerrainPaint() : null;
+    const FIELD = new Set(Game.FIELD_TYPES);
+    const typeAt = (x, y) => { const r = Game.terrain[y]; return r && r[x] ? r[x].type : null; };
+    // Two eligible boundary classes: field-to-field joins, and yard perimeters
+    // (farmstead / village-square edges get deliberate stone walls).
+    const eligible = (a, b) => {
+        if (!a || !b) return null;
+        if (a !== b && FIELD.has(a) && FIELD.has(b)) return 'field';
+        if ((a === 'yard' && FIELD.has(b)) || (b === 'yard' && FIELD.has(a))) return 'yard';
+        return null;
+    };
+
+    // 1. Boundary edges (hedges, roads, water and structures break the
+    //    adjacency), grouped into straight runs.
+    const runs = [];
+    for (let k = 1; k < COLS; k++) {           // vertical grid lines (pieces run along z)
+        let cur = null;
+        for (let y = 0; y < ROWS; y++) {
+            const a = typeAt(k - 1, y), b = typeAt(k, y);
+            const cls = eligible(a, b);
+            if (cls && cur && cur.cls !== cls) { runs.push(cur); cur = null; }
+            if (cls) {
+                if (!cur) cur = { vert: true, k, start: y, len: 0, a, b, cls };
+                cur.len++;
+            } else if (cur) { runs.push(cur); cur = null; }
+        }
+        if (cur) runs.push(cur);
+    }
+    for (let k = 1; k < ROWS; k++) {           // horizontal grid lines (pieces run along x)
+        let cur = null;
+        for (let x = 0; x < COLS; x++) {
+            const a = typeAt(x, k - 1), b = typeAt(x, k);
+            const cls = eligible(a, b);
+            if (cls && cur && cur.cls !== cls) { runs.push(cur); cur = null; }
+            if (cls) {
+                if (!cur) cur = { vert: false, k, start: x, len: 0, a, b, cls };
+                cur.len++;
+            } else if (cur) { runs.push(cur); cur = null; }
+        }
+        if (cur) runs.push(cur);
+    }
+
+    // 2. Decide which runs get what.
+    const px = paint ? paint.px : (Game.TERRAIN_TEXELS_PER_TILE || 14);
+    const roughAt = (txf, tyf) => (paint && paint.rough) ? paint.rough(txf * px, tyf * px) : 0;
+    const WALLY = new Set(['garden', 'orchard', 'vineyard']);
+    // Walls belong to ENCLOSURES: every wall around one farm plot shares a
+    // single style — same model variant and the same grey (whole enclosures
+    // vary from lighter to darker stone). The enclosure is the smaller of the
+    // two field regions a boundary separates (a walled garden inside a big
+    // pasture belongs to the garden).
+    const rt = paint ? paint.regionTile : null;
+    const wallStyles = {};
+    const styleFor = (rid) => wallStyles[rid] || (wallStyles[rid] = {
+        variant: Game.randi(0, Game.DIVIDER_MODELS.wall.length - 1),
+        tint: (() => {
+            const r = Math.random();
+            return r < 0.4 ? Game.rand(0.62, 0.82)     // darker grey
+                : r < 0.75 ? Game.rand(0.95, 1.12)     // mid
+                    : Game.rand(1.22, 1.45);           // lighter grey
+        })(),
+    });
+    const pieces = [];   // {x, z, rotY, kind, variant, tint, c1, c2}
+    for (const run of runs) {
+        const yardRun = run.cls === 'yard';
+        if (run.len < 2) continue;
+        if (!yardRun && Math.random() > (Game.DIVIDER_RUN_CHANCE != null ? Game.DIVIDER_RUN_CHANCE : 0.9)) continue;
+        if (yardRun && Math.random() > 0.9) continue;
+        const midT = run.start + run.len / 2;
+        const ctx = run.vert ? run.k : midT;
+        const cty = run.vert ? midT : run.k;
+        // Organic edges get no divider (nobody fences a wandering boundary);
+        // yard walls are deliberate structures, so they ignore the mask.
+        if (!yardRun && roughAt(ctx, cty) > 0.7) continue;
+        // Context: walls around yards + near the village square + around
+        // garden-type plots, wooden stock fences out in the open fields.
+        const wx = ctx * T, wz = cty * T;
+        const dVillage = Math.hypot(wx - Game.missionState.objectiveX, wz - Game.missionState.objectiveY);
+        const wallP = yardRun ? 0.95
+            : (WALLY.has(run.a) || WALLY.has(run.b)) ? 0.85
+                : (dVillage < 60 ? 0.7 : 0.45);
+        const kind = Math.random() < wallP ? 'wall' : 'fence';
+        // Wall style comes from the ENCLOSURE (see styleFor above): same model
+        // + same grey all the way around a plot, never mixed mid-run.
+        let variant = 0, tint = 1;
+        if (kind === 'wall') {
+            const my = midT | 0;
+            const aRid = rt ? rt[run.vert ? my * COLS + (run.k - 1) : (run.k - 1) * COLS + my] : 0;
+            const bRid = rt ? rt[run.vert ? my * COLS + run.k : run.k * COLS + my] : 0;
+            const areaOf = (rid) => (paint && paint.regions[rid]) ? paint.regions[rid].area || 1e9 : 1e9;
+            const st = styleFor(areaOf(aRid) <= areaOf(bRid) ? aRid : bRid);
+            variant = st.variant;
+            tint = st.tint;
+        }
+        // Partial coverage: trim the ends a little, and cut a gateway into
+        // longer runs so fields stay entered (and it reads as farm access).
+        const s = run.start + (Math.random() < 0.25 ? 1 : 0);
+        const e = run.start + run.len - (Math.random() < 0.25 ? 1 : 0);
+        const gapAt = (e - s) >= 6 && Math.random() < 0.5 ? Game.randi(s + 2, e - 3) : -99;
+        for (let i = s; i < e; i++) {
+            if (i === gapAt || i === gapAt + 1) continue;
+            // Jitter only PERPENDICULAR to the run — along-axis jitter opened
+            // visible gaps between pieces (they also overscale ~12%, below).
+            const jp = Game.rand(-0.08, 0.08);
+            pieces.push({
+                x: run.vert ? run.k * T + jp : (i + 0.5) * T,
+                z: run.vert ? (i + 0.5) * T : run.k * T + jp,
+                rotY: (run.vert ? Math.PI / 2 : 0) + Game.rand(-0.02, 0.02),
+                kind, variant, tint,
+                // Edge endpoints on the tile-corner grid, for junction checks
+                c1: run.vert ? (i * (COLS + 1) + run.k) : (run.k * (COLS + 1) + i),
+                c2: run.vert ? ((i + 1) * (COLS + 1) + run.k) : (run.k * (COLS + 1) + i + 1),
+            });
+        }
+    }
+    // Roadside dividers: walls/fences that FOLLOW the road contour. The road
+    // is a graph of tile-centre segments — diagonals included, the same graph
+    // the gravel corridor texture is stroked from — so pieces laid along the
+    // segments bend with the road. Coherent noise picks contiguous stretches;
+    // kind and style are keyed to the field region the divider fronts, so one
+    // stretch never mixes wall/fence or stone styles.
+    {
+        const segs = [];
+        for (let ty = 0; ty < ROWS; ty++) {
+            for (let tx = 0; tx < COLS; tx++) {
+                if (typeAt(tx, ty) !== 'road') continue;
+                for (const [dx, dy] of [[1, 0], [0, 1], [1, 1], [1, -1]]) {
+                    if (typeAt(tx + dx, ty + dy) === 'road') {
+                        segs.push({
+                            x1: (tx + 0.5) * T, z1: (ty + 0.5) * T,
+                            x2: (tx + dx + 0.5) * T, z2: (ty + dy + 0.5) * T,
+                        });
+                    }
+                }
+            }
+        }
+        const off = T * 0.68;   // just off the gravel corridor edge
+        for (const sg of segs) {
+            const mx = (sg.x1 + sg.x2) / 2, mz = (sg.z1 + sg.z2) / 2;
+            const dx = sg.x2 - sg.x1, dz = sg.z2 - sg.z1;
+            const len = Math.hypot(dx, dz);
+            const nx = -dz / len, nz = dx / len;
+            for (const side of [1, -1]) {
+                const sx = mx + nx * off * side, sz = mz + nz * off * side;
+                const st = Game.getTileAtWorld(sx, sz);
+                if (!st || !FIELD.has(st.type)) continue;
+                // coherent stretches (~45% of eligible roadside), not salt-and-pepper
+                if (Game._fbm2(mx * 0.045 + side * 37.7, mz * 0.045 - side * 11.3) < 0.5) continue;
+                const tw = Game.tileAtWorld(sx, sz);
+                const rid = rt ? rt[tw.ty * COLS + tw.tx] : 0;
+                const dVillage = Math.hypot(mx - Game.missionState.objectiveX, mz - Game.missionState.objectiveY);
+                // deterministic per (fronted region, side): one stretch, one look
+                const wall = Game._hash2(rid * 0.37 + side * 13.7, rid * 0.11) < (dVillage < 55 ? 0.7 : 0.3);
+                const stl = wall ? styleFor(rid) : null;
+                pieces.push({
+                    x: sx, z: sz,
+                    rotY: Math.atan2(-dz, dx),      // piece long axis along the segment
+                    sMul: len / T,                   // diagonals are 1.41 tiles long
+                    kind: wall ? 'wall' : 'fence',
+                    variant: stl ? stl.variant : 0,
+                    tint: stl ? stl.tint : 1,
+                    c1: -1, c2: -1,                  // not part of the tile-corner junction logic
+                });
+            }
+        }
+    }
+    if (!pieces.length) return;
+
+    // Fence-to-wall junctions: a fence piece that meets a wall (shared
+    // tile-corner endpoint) is pulled 6% toward the wall so its end tip is
+    // buried INSIDE the masonry — firm contact, no gap, and nothing pokes out
+    // of the far side (the wall is taller and thicker than the fence tip).
+    {
+        const wallCorners = new Set();
+        pieces.forEach(p => { if (p.kind === 'wall') { wallCorners.add(p.c1); wallCorners.add(p.c2); } });
+        for (const p of pieces) {
+            if (p.kind !== 'fence') continue;
+            const atC1 = wallCorners.has(p.c1), atC2 = wallCorners.has(p.c2);
+            if (atC1 === atC2) continue;               // free-standing, or bridging two walls: leave centred
+            const shift = T * 0.06 * (atC1 ? -1 : 1);  // c1 is the lower-coordinate end of the run axis
+            if (p.rotY > 0.5) p.z += shift;            // vertical run: pieces lie along z
+            else p.x += shift;                          // horizontal run: along x
+        }
+    }
+
+    // 3. Load each model once and instance its share of the pieces (one
+    //    InstancedMesh per variant, variants assigned per run). Degradable: a
+    //    missing model just skips its runs.
+    const byKind = { wall: [], fence: [] };
+    pieces.forEach(p => byKind[p.kind].push(p));
+    const place = (url, list, variant, kind) => {
+        const mine = list.filter(p => p.variant === variant);
+        if (!mine.length) return;
+        Game.gltfLoader.load(url, (gltf) => {
+            let src = null;
+            gltf.scene.traverse(o => { if (!src && o.isMesh) src = o; });
+            if (!src) return;
+            const geo = src.geometry;
+            if (!geo.attributes.normal) geo.computeVertexNormals();   // optimizer strips normals
+            geo.computeBoundingBox();
+            const bb = geo.boundingBox;
+            // Each piece spans one tile edge PLUS ~12% overlap into its
+            // neighbours, so consecutive pieces interpenetrate and the joins
+            // between elements disappear. Walls keep that length but drop 20%
+            // in height/thickness (they read oversized at full scale).
+            const scale = (T * 1.12) / Math.max(0.001, bb.max.x - bb.min.x);
+            const bulk = kind === 'wall' ? scale * 0.8 : scale;
+            const lift = -bb.min.y * bulk - 0.07;                     // base on the ground, slight sink for slopes
+            const mat = src.material;
+            mat.roughness = 0.95; mat.metalness = 0.0;
+            if (kind === 'wall') {
+                // The baked source texture reads too light/beige on the terrain —
+                // swap in the procedural dark fieldstone (normal map kept).
+                mat.map = Game._makeDarkStoneTexture();
+                if (mat.color) mat.color.setHex(0xffffff);
+                mat.needsUpdate = true;
+            }
+            const inst = new THREE.InstancedMesh(geo, mat, mine.length);
+            inst.name = 'divider-' + kind + '-' + (variant + 1);
+            inst.castShadow = true;
+            inst.receiveShadow = true;
+            const dummy = new THREE.Object3D();
+            const icol = new THREE.Color();
+            mine.forEach((p, i) => {
+                const y = Game.getHeight(p.x, p.z) + lift;
+                dummy.position.set(p.x, y, p.z);
+                dummy.rotation.set(0, p.rotY, 0);
+                dummy.scale.set(p.sMul ? scale * p.sMul : scale, bulk, bulk);
+                dummy.updateMatrix();
+                inst.setMatrixAt(i, dummy.matrix);
+                icol.setScalar(p.tint || 1);           // per-enclosure lighter/darker grey
+                inst.setColorAt(i, icol);
+                // Tanks crush dividers via the shared knock-down animator; the
+                // tighter radius keeps a tank driving ALONGSIDE a wall from
+                // flattening it — it has to actually hit it.
+                if (Game.foliageKD) {
+                    Game.foliageKD.push({
+                        leaves: inst, branches: inst, idx: i,
+                        x: p.x, y, z: p.z, rotY: p.rotY,
+                        s: p.sMul ? scale * p.sMul : scale, sy: bulk, sz: bulk,
+                        rrMul: 0.8, rrAdd: 0.1,
+                        dir: 0, fallT: 0, triggered: false,
+                    });
+                }
+            });
+            inst.instanceMatrix.needsUpdate = true;
+            if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+            inst.computeBoundingSphere();
+            Game.terrainGroup.add(inst);
+        }, undefined, () => { /* optional asset missing — keep the map bare there */ });
+    };
+    Game.DIVIDER_MODELS.wall.forEach((u, i) => place(u, byKind.wall, i, 'wall'));
+    Game.DIVIDER_MODELS.fence.forEach((u, i) => place(u, byKind.fence, i, 'fence'));
+};
+
+// Procedural dark-grey fieldstone texture for the divider walls: irregular
+// stones in cool greys over near-charcoal mortar. UV-agnostic by design (the
+// generated models' bake atlas is arbitrary, so the pattern must read as stone
+// from any mapping).
+Game._makeDarkStoneTexture = () => {
+    if (Game._darkStoneTex) return Game._darkStoneTex;
+    const THREE = Game.THREE;
+    const S = 256;
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const g = c.getContext('2d');
+    g.fillStyle = '#3d3d40';
+    g.fillRect(0, 0, S, S);
+    for (let i = 0; i < 850; i++) {
+        const v = 58 + Math.random() * 50;                 // 58..108 stone greys
+        const r = (v + Game.rand(-4, 4)) | 0;
+        const b = (v + Game.rand(0, 9)) | 0;               // faint cool cast
+        g.fillStyle = `rgba(${r},${v | 0},${b},${Game.rand(0.55, 0.95).toFixed(2)})`;
+        g.beginPath();
+        g.ellipse(Math.random() * S, Math.random() * S, Game.rand(4, 13), Game.rand(3, 8), Game.rand(0, Math.PI), 0, Math.PI * 2);
+        g.fill();
+        g.strokeStyle = 'rgba(16,16,18,0.4)';              // mortar shadow
+        g.lineWidth = 1.4;
+        g.stroke();
+    }
+    for (let i = 0; i < 2400; i++) {                       // grain
+        const v = (36 + Math.random() * 76) | 0;
+        g.fillStyle = `rgba(${v},${v},${v},0.15)`;
+        g.fillRect(Math.random() * S, Math.random() * S, 1.4, 1.4);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    Game._darkStoneTex = tex;
+    return tex;
 };
 
 // ═══════════════════════════════════════════════════════
@@ -2114,14 +2773,22 @@ Game.buildTerrainMeshes = () => {
     barkColor.anisotropy = Math.min(4, Game.renderer.capabilities.getMaxAnisotropy());
     const barkNormal = texLoader.load('textures/bark_normal.jpg');
     barkNormal.wrapS = barkNormal.wrapT = THREE.RepeatWrapping;
-    const barkMat = new THREE.MeshStandardMaterial({
-        map: barkColor, normalMap: barkNormal, roughness: 0.76, metalness: 0.0,
-        transparent: true, depthWrite: true,   // allow the soft-blend opacity ease
-    });
-    barkMat.name = 'eztree-bark';
+    // Shared CC0 bark, tinted per species (oak neutral, pine reddish, birch pale).
     // VALOR: soft-blend the trunk/branches too, so the whole tree model melds
     // into the scene with the same slider (leaf cards via _attachFoliageWind).
-    barkMat.onBeforeCompile = (shader) => { if (Game._valorTreeBlurInject) Game._valorTreeBlurInject(shader); };
+    const makeBarkMat = (tint, name) => {
+        const m = new THREE.MeshStandardMaterial({
+            map: barkColor, normalMap: barkNormal, roughness: 0.76, metalness: 0.0,
+            color: tint,
+            transparent: true, depthWrite: true,   // allow the soft-blend opacity ease
+        });
+        m.name = name;
+        m.onBeforeCompile = (shader) => { if (Game._valorTreeBlurInject) Game._valorTreeBlurInject(shader); };
+        return m;
+    };
+    const barkMat = makeBarkMat(0xffffff, 'eztree-bark');
+    const pineBarkMat = makeBarkMat(0xc08a5e, 'eztree-bark-pine');    // Scots pine: warm red-brown
+    const birchBarkMat = makeBarkMat(0xe9e5da, 'eztree-bark-birch');  // birch: pale silver
 
     // Generate one EZ-Tree prototype: returns baked branch + leaf geometry and
     // the natural height (for scale normalisation). Pure math, no GPU/DOM work.
@@ -2149,9 +2816,10 @@ Game.buildTerrainMeshes = () => {
 
     // Instance prototypes across positions ({x, z, height, scale}). World height
     // of each instance ~= height * scale * scaleK. One draw call per prototype.
-    const placeFoliage = (protos, positions, scaleK, namePrefix, leafMat) => {
+    const placeFoliage = (protos, positions, scaleK, namePrefix, leafMat, trunkMat) => {
         if (!protos.length || !positions.length) return;
         const lMat = leafMat || foliageCardMat;   // trees get the soft-blend leaf; shrubs pass a crisp one
+        const bMat = trunkMat || barkMat;         // species bark tint (pine/birch)
         const buckets = Array.from({ length: protos.length }, () => []);
         positions.forEach((t, i) => buckets[i % protos.length].push(t));
         const dummy = new THREE.Object3D();
@@ -2159,7 +2827,7 @@ Game.buildTerrainMeshes = () => {
         protos.forEach((proto, p) => {
             const list = buckets[p];
             if (!list.length) return;
-            const branches = new THREE.InstancedMesh(proto.bgeo, barkMat, list.length);
+            const branches = new THREE.InstancedMesh(proto.bgeo, bMat, list.length);
             const leaves = new THREE.InstancedMesh(proto.lgeo, lMat, list.length);
             branches.name = namePrefix + '-branches-' + p;
             leaves.name = namePrefix + '-leaves-' + p;
@@ -2408,6 +3076,9 @@ Game.buildTerrainMeshes = () => {
         Game.terrainGroup.add(mesh);
     });
 
+    // ── Field dividers: stone walls + farm fences along some field joins ──
+    if (Game._addFieldDividers) Game._addFieldDividers();
+
     // ── Hedges: rows of squashed bushes on hedge tiles ──
     const hedgeTiles = [];
     for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
@@ -2585,9 +3256,37 @@ Game.buildTerrainMeshes = () => {
         }
     }
 
-    // ── Instanced trees: forests, orchards, hedgerow treelines, clusters ──
+    // ── Instanced trees: species-mixed forests, orchards, treelines, clusters ──
+    // Species per docs/foliage.md (France 1940): oak-mixed woodland is the
+    // default, Scots PINE grows in coherent stands on "dry ground" (a smooth
+    // noise mask, so stands read as stands rather than salt-and-pepper), and
+    // BIRCH is the pioneer species, biased to forest edges.
     {
-        const treePositions = [];
+        const treeList = [];   // {x, z, height, scale, species}
+        const pineStand = (x, z) => Game._fbm2(x * 0.021 + 3.3, z * 0.021 - 8.1) > 0.585;
+        const forestEdge = (tx, ty) => {
+            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                const n = Game.getTile(tx + dx, ty + dy);
+                if (!n || (n.type !== 'forest' && n.type !== 'dense_forest')) return true;
+            }
+            return false;
+        };
+        const pickSpecies = (x, z, tx, ty) => {
+            const edge = forestEdge(tx, ty);
+            const r = Math.random();
+            if (pineStand(x, z)) {
+                if (r < (edge ? 0.6 : 0.8)) return 'pine';   // pine mass, birch on the fringe
+                if (r < 0.92) return 'birch';
+                return 'oak';
+            }
+            if (r < (edge ? 0.26 : 0.08)) return 'birch';
+            if (r < (edge ? 0.32 : 0.16)) return 'pine';     // the odd lone pine in oak woods
+            return 'oak';
+        };
+        const heightFor = (species) =>
+            species === 'pine' ? Game.rand(3.0, 5.0)         // pines overtop the canopy
+                : species === 'birch' ? Game.rand(2.0, 3.2)
+                    : Game.rand(2.6, 4.2);
 
         for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
             for (let tx = 0; tx < Game.MAP_COLS; tx++) {
@@ -2597,21 +3296,20 @@ Game.buildTerrainMeshes = () => {
                     // 1-2 and ordinary forest 0-2 (plus a global 30% thin below).
                     const count = tile.type === 'dense_forest' ? Game.randi(1, 2) : Game.randi(0, 2);
                     for (let i = 0; i < count; i++) {
-                        treePositions.push({
-                            x: tx * T + Game.rand(0.3, T - 0.3),
-                            z: ty * T + Game.rand(0.3, T - 0.3),
-                            height: Game.rand(2.6, 4.2),
-                            scale: Game.rand(0.85, 1.4)
-                        });
+                        const x = tx * T + Game.rand(0.3, T - 0.3);
+                        const z = ty * T + Game.rand(0.3, T - 0.3);
+                        const species = pickSpecies(x, z, tx, ty);
+                        treeList.push({ x, z, height: heightFor(species), scale: Game.rand(0.85, 1.4), species });
                     }
                 } else if (tile.type === 'orchard') {
                     // orderly orchard rows: one tree per tile, near center
                     if ((tx + ty) % 2 === 0) {
-                        treePositions.push({
+                        treeList.push({
                             x: tx * T + T / 2 + Game.rand(-0.4, 0.4),
                             z: ty * T + T / 2 + Game.rand(-0.4, 0.4),
                             height: Game.rand(1.8, 2.6),
-                            scale: Game.rand(0.7, 1.0)
+                            scale: Game.rand(0.7, 1.0),
+                            species: 'oak',
                         });
                     }
                 }
@@ -2621,11 +3319,12 @@ Game.buildTerrainMeshes = () => {
         // Treelines: a tree on ~12% of hedgerow tiles (dotted field borders)
         hedgeTiles.forEach(({ tx, ty }) => {
             if (Math.random() < 0.12) {
-                treePositions.push({
+                treeList.push({
                     x: tx * T + Game.rand(0.3, T - 0.3),
                     z: ty * T + Game.rand(0.3, T - 0.3),
                     height: Game.rand(2.4, 3.8),
-                    scale: Game.rand(0.8, 1.2)
+                    scale: Game.rand(0.8, 1.2),
+                    species: 'oak',
                 });
             }
         });
@@ -2642,24 +3341,26 @@ Game.buildTerrainMeshes = () => {
             if (treeNoise(x, z) < 0.62) continue;
             const tile = Game.getTileAtWorld(x, z);
             if (!tile || ['house', 'wall', 'road', 'yard', 'wheat', 'water', 'plowed'].includes(tile.type)) continue;
-            treePositions.push({
+            const r = Math.random();
+            const species = r < 0.15 ? 'pine' : r < 0.27 ? 'birch' : 'oak';
+            treeList.push({
                 x, z,
-                height: Game.rand(2.0, 3.6),
-                scale: Game.rand(0.7, 1.2)
+                height: heightFor(species) * 0.85,
+                scale: Game.rand(0.7, 1.2),
+                species,
             });
         }
 
         // Global thinning: render ~30% fewer trees overall (forests, treelines,
         // orchards and lone trees alike) — the map read too wooded.
-        for (let i = treePositions.length - 1; i >= 0; i--) {
-            if (Math.random() < 0.30) treePositions.splice(i, 1);
+        for (let i = treeList.length - 1; i >= 0; i--) {
+            if (Math.random() < 0.30) treeList.splice(i, 1);
         }
 
-        const treeCount = treePositions.length;
-        if (treeCount > 0 && Game.EZTree && Game.EZTree.Tree) {
-            // A few prototype trees, generated once, then instanced across every
-            // tree position. Geometry is EZ-Tree (MIT); rendered with CC0 textures
-            // via the shared helpers above (oak bark + leaf cards).
+        if (treeList.length > 0 && Game.EZTree && Game.EZTree.Tree) {
+            // A few prototype trees per species, generated once, then instanced.
+            // Geometry is EZ-Tree (MIT); rendered with CC0 textures via the
+            // shared helpers above (tinted bark + leaf cards).
             const treeProtos = [];
             for (let p = 0; p < 4; p++) {
                 treeProtos.push(makeFoliageProto(1009 + p * 131, (o) => {
@@ -2681,14 +3382,75 @@ Game.buildTerrainMeshes = () => {
                     o.leaves.start = 0.1;
                 }));
             }
-            placeFoliage(treeProtos, treePositions, 1.7, 'tree');
+
+            // Scots pine, LARGE + MEDIUM. EZ-Tree's 'evergreen' type shortens the
+            // whorl branches toward the top automatically → conical crown; a bare
+            // lower trunk comes from branch.start, and a slight downward force
+            // droops the mature boughs.
+            const pineCfg = (tall) => (o) => {
+                o.type = 'evergreen';
+                o.branch.levels = 2;
+                o.branch.children = { 0: tall ? 15 : 11, 1: 4, 2: 2 };
+                o.branch.sections = { 0: 6, 1: 3, 2: 3, 3: 2 };
+                o.branch.segments = { 0: 5, 1: 3, 2: 3, 3: 3 };
+                o.branch.length = { 0: tall ? 44 : 32, 1: 13, 2: 6, 3: 3 };
+                o.branch.radius = { 0: 1.3, 1: 0.55, 2: 0.35, 3: 0.25 };
+                o.branch.angle = { 1: 84, 2: 62, 3: 58 };
+                o.branch.start = { 1: tall ? 0.4 : 0.3, 2: 0.25, 3: 0 };
+                o.branch.gnarliness = { 0: 0.04, 1: 0.1, 2: 0.12, 3: 0.08 };
+                o.branch.force = { direction: { x: 0, y: 1, z: 0 }, strength: -0.008 };
+                o.leaves.type = 'pine';
+                o.leaves.billboard = 'double';
+                o.leaves.count = 4;
+                o.leaves.size = tall ? 4.4 : 3.8;
+                o.leaves.sizeVariance = 0.5;
+                o.leaves.start = 0.2;
+            };
+            const pineProtos = [
+                makeFoliageProto(4021, pineCfg(true)),    // large
+                makeFoliageProto(4153, pineCfg(false)),   // medium
+            ];
+            pineProtos.forEach(pr => { pr.leafHSL = { h: 0.34, s: 0.30, l: 0.20 }; });   // deep stable green
+
+            // Silver birch: slender pale trunk, small light crown.
+            const birchProto = makeFoliageProto(5077, (o) => {
+                o.type = 'deciduous';
+                o.branch.levels = 2;
+                o.branch.children = { 0: 4, 1: 3, 2: 2 };
+                o.branch.sections = { 0: 5, 1: 4, 2: 3, 3: 2 };
+                o.branch.segments = { 0: 5, 1: 4, 2: 3, 3: 3 };
+                o.branch.length = { 0: 30, 1: 12, 2: 6, 3: 3 };
+                o.branch.radius = { 0: 0.8, 1: 0.35, 2: 0.22, 3: 0.15 };
+                o.branch.angle = { 1: 42, 2: 48, 3: 50 };
+                o.branch.gnarliness = { 0: 0.08, 1: 0.18, 2: 0.16, 3: 0.1 };
+                o.leaves.type = 'ash';
+                o.leaves.billboard = 'double';
+                o.leaves.count = 5;
+                o.leaves.size = 3.4;
+                o.leaves.sizeVariance = 0.8;
+                o.leaves.start = 0.25;
+            });
+            birchProto.leafHSL = { h: 0.23, s: 0.45, l: 0.42 };   // light fresh green
+
+            const bySpecies = { oak: [], pine: [], birch: [] };
+            treeList.forEach(t => bySpecies[t.species].push(t));
+            placeFoliage(treeProtos, bySpecies.oak, 1.7, 'tree');
+            placeFoliage(pineProtos, bySpecies.pine, 1.7, 'tree-pine', null, pineBarkMat);
+            placeFoliage([birchProto], bySpecies.birch, 1.7, 'tree-birch', null, birchBarkMat);
         }
     }
 
-    // Water surface FX removed; water remains terrain tile material only.
+    // ── Animated water surface over the river ──
+    if (Game._buildWaterSurface) Game._buildWaterSurface();
 
     // ── Stone arch bridge over the river (on the N-S road) ──
+    // The modeled stone bridge (models/bridge_stone.glb) replaces the
+    // procedural causeway once it loads; the procedural build below stays as
+    // the instant visual and the fallback if the model is missing.
     if (Game.bridges && Game.bridges.length) {
+        const procBridges = new THREE.Group();
+        procBridges.name = 'bridges-procedural';
+        Game.terrainGroup.add(procBridges);
         const stoneMat = new THREE.MeshStandardMaterial({
             color: 0xb0a690, roughness: 0.95,
             map: tiled(wallColorBase, 3, 1), normalMap: tiled(wallNormalBase, 3, 1),
@@ -2701,13 +3463,13 @@ Game.buildTerrainMeshes = () => {
             const deck = new THREE.Mesh(new THREE.BoxGeometry(deckW, 0.45, span + 1.0), stoneMat);
             deck.position.set(br.cx, deckY, br.cz);
             deck.castShadow = true; deck.receiveShadow = true;
-            Game.terrainGroup.add(deck);
+            procBridges.add(deck);
             // Parapets along both road edges
             [-1, 1].forEach(s => {
                 const rail = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.55, span + 1.0), stoneMat);
                 rail.position.set(br.cx + s * (deckW / 2 - 0.18), deckY + 0.45, br.cz);
                 rail.castShadow = true;
-                Game.terrainGroup.add(rail);
+                procBridges.add(rail);
             });
             // A small central arch springer + two abutment piers down to the water
             const archR = Math.min(span * 0.28, 1.3);
@@ -2717,15 +3479,54 @@ Game.buildTerrainMeshes = () => {
             );
             arch.rotation.z = Math.PI / 2;
             arch.position.set(br.cx, Game.WATER_LEVEL + 0.05, br.cz);
-            Game.terrainGroup.add(arch);
+            procBridges.add(arch);
             [-1, 1].forEach(s => {
                 const h = Math.max(0.4, deckY - Game.WATER_LEVEL);
                 const pier = new THREE.Mesh(new THREE.BoxGeometry(deckW, h, 0.7), stoneMat);
                 pier.position.set(br.cx, Game.WATER_LEVEL + h / 2, br.cz + s * (span / 2 - 0.1));
                 pier.castShadow = true;
-                Game.terrainGroup.add(pier);
+                procBridges.add(pier);
             });
         });
+
+        if (Game.gltfLoader) {
+            Game.gltfLoader.load('models/bridge_stone.glb', (gltf) => {
+                let src = null;
+                gltf.scene.traverse(o => { if (!src && o.isMesh) src = o; });
+                if (!src) return;
+                const geo = src.geometry;
+                if (!geo.attributes.normal) geo.computeVertexNormals();
+                geo.computeBoundingBox();
+                const bb = geo.boundingBox;
+                const len = Math.max(0.001, bb.max.x - bb.min.x);   // model long axis = span
+                const wid = Math.max(0.001, bb.max.z - bb.min.z);
+                src.material.roughness = 0.95;
+                src.material.metalness = 0.0;
+                const group = new THREE.Group();
+                group.name = 'bridges-model';
+                Game.bridges.forEach(br => {
+                    const m = src.clone();
+                    m.castShadow = true;
+                    m.receiveShadow = true;
+                    const sSpan = (br.span + 1.6) / len;            // reach past both banks
+                    const sWide = (2 * T + 0.8) / wid;              // cover the 2-tile road
+                    const sY = sSpan * 0.5;                         // low profile: deck near road level
+                    // model X axis → world Z (the road crosses the river north-south)
+                    m.rotation.y = Math.PI / 2;
+                    m.scale.set(sSpan, sY, sWide);
+                    // Bed the ends well into the banks so the deck meets the
+                    // road with no step; the arch dips into the carved channel.
+                    const bankY = Math.min(
+                        Game.getHeight(br.cx, br.cz - br.span / 2 - 1),
+                        Game.getHeight(br.cx, br.cz + br.span / 2 + 1)
+                    );
+                    m.position.set(br.cx, bankY - bb.min.y * sY - 0.55, br.cz);
+                    group.add(m);
+                });
+                Game.terrainGroup.add(group);
+                Game.terrainGroup.remove(procBridges);
+            }, undefined, () => { /* keep the procedural bridge */ });
+        }
     }
 
     // ── Static crater decals ──

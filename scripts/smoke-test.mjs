@@ -18,8 +18,15 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + 
 await page.goto(URL, { waitUntil: 'load' });
 await page.waitForTimeout(2500); // let the scene/assets boot
 
-await page.click('#btnEnterGame').catch(() => {});   // welcome gate (if present)
-await page.click('#btnStartMission');
+// Welcome gate (if present): force the click — decorative children of the gate
+// can intercept pointer events and make a plain click flake — then wait for the
+// gate to actually go away before starting the mission.
+const gate = page.locator('#btnEnterGame');
+if (await gate.count()) {
+  await gate.click({ force: true }).catch(() => {});
+  await page.locator('#welcomeGate').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+}
+await page.click('#btnStartMission', { force: true });
 await page.waitForTimeout(2500);
 
 const info = await page.evaluate(() => ({

@@ -2425,6 +2425,7 @@ Game.tick = (now) => {
         if (Game.updateSmoke3D) Game.updateSmoke3D(dt);
         if (Game.updateScorch3D) Game.updateScorch3D(dt);
         if (Game.updateFoliageKnockdown) Game.updateFoliageKnockdown(dt);
+        if (Game.updateWaterFX) Game.updateWaterFX(dt);
         if (Game.updateTracks3D) Game.updateTracks3D(dt);
         Game.updateMines(dt);
         Game.updateTowing(dt);

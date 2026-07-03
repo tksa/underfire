@@ -54,6 +54,13 @@ infantry) is a Sketchfab model ("German WWI Soldier"). **TODO: confirm author +
 exact licence/source URL before public release.** Textures downscaled to 512 and
 recompressed for web; geometry/rig unchanged.
 
+The **field divider set** (`models/dividers/` — four dry-stone wall variants and
+a wooden farm fence) and the **stone bridge** (`models/bridge_stone.glb`) are
+original models created for Under Fire by the project (tksa, with ChatGPT +
+Sam3D), released as **CC0 / public domain**. (Optimized for instancing: meshes
+simplified and textures downscaled via gltf-transform; the walls are re-skinned
+in-engine with a procedural dark fieldstone texture.)
+
 ## Textures (OpenGameArt.org, CC0)
 - **Dirty Grass Seamless** (ground detail normal + AO) — used as terrain detail maps.
   Source: "4K Seamless Grass Dirt Ground Texture with all Shader Maps", CC0.

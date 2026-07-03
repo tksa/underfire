@@ -655,7 +655,9 @@ Game.updateFoliageKnockdown = (dt) => {
     for (const r of list) {
         if (!r.triggered && scan && tanks.length) {
             for (const tk of tanks) {
-                const rr = tk.size * 1.1 + 0.5;
+                // Per-record radius override: dividers (walls/fences) use a tighter
+                // hit circle than bushy foliage so driving alongside doesn't count.
+                const rr = tk.size * (r.rrMul != null ? r.rrMul : 1.1) + (r.rrAdd != null ? r.rrAdd : 0.5);
                 if (Game.distSq(tk.x, tk.z, r.x, r.z) < rr * rr) {
                     r.triggered = true; r.dir = tk.angle; r.fallT = 0;
                     break;
@@ -672,7 +674,7 @@ Game.updateFoliageKnockdown = (dt) => {
             if (axis.lengthSq() < 1e-6) axis.set(1, 0, 0);
             axis.normalize();
             qT.setFromAxisAngle(axis, angle).multiply(qY);  // tilt (world) after yaw
-            scl.set(r.s, r.s, r.s);
+            scl.set(r.s, r.sy != null ? r.sy : r.s, r.sz != null ? r.sz : r.s);
             mat.compose(pos, qT, scl);
             r.leaves.setMatrixAt(r.idx, mat);
             r.branches.setMatrixAt(r.idx, mat);

@@ -1,10 +1,15 @@
 {
  "version": "v0.10.1",
- "build": "6c945b2",
- "generated": "2026-07-02",
+ "build": "e2a31e0",
+ "generated": "2026-07-03",
  "commits": [
   {
-   "hash": "6c945b2",
+   "hash": "e2a31e0",
+   "date": "2026-07-03",
+   "subject": "stone wall/fence dividers, organic river + water FX, stone bridge, camera yaw"
+  },
+  {
+   "hash": "377730a",
    "date": "2026-07-02",
    "subject": "smooth road corridors, gravel texture + tracks, seams, shrubs, heightmap"
   },
@@ -67,11 +72,6 @@
    "hash": "8705ec2",
    "date": "2026-06-30",
    "subject": "stop stuck-tank judder (detour flicker) + idle \"swing out of the blue\""
-  },
-  {
-   "hash": "b8a7e18",
-   "date": "2026-06-30",
-   "subject": "kill the unit jitter"
   }
  ]
 }
