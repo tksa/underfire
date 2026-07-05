@@ -1,8 +1,18 @@
 {
  "version": "v0.10.1",
- "build": "16cbbbc",
- "generated": "2026-07-05",
+ "build": "49ef707",
+ "generated": "2026-07-06",
  "commits": [
+  {
+   "hash": "49ef707",
+   "date": "2026-07-06",
+   "subject": "fr_house_2 building model, thinned hamlet, prop cleanup"
+  },
+  {
+   "hash": "c9cc999",
+   "date": "2026-07-05",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "16cbbbc",
    "date": "2026-07-05",
@@ -60,16 +70,6 @@
   },
   {
    "hash": "f4ccf27",
-   "date": "2026-07-05",
-   "subject": "refresh changelog"
-  },
-  {
-   "hash": "602d50f",
-   "date": "2026-07-05",
-   "subject": "New Blank Map froze the browser (fluff cap used O(n^2) splice)"
-  },
-  {
-   "hash": "40ae2e1",
    "date": "2026-07-05",
    "subject": "refresh changelog"
   }
