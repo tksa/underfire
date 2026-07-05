@@ -1,8 +1,18 @@
 {
  "version": "v0.10.1",
- "build": "059ca8b",
+ "build": "2eff25c",
  "generated": "2026-07-05",
  "commits": [
+  {
+   "hash": "2eff25c",
+   "date": "2026-07-05",
+   "subject": "trunks were see-through (leaf soft-blend opacity applied to bark)"
+  },
+  {
+   "hash": "d84af44",
+   "date": "2026-07-05",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "059ca8b",
    "date": "2026-07-05",
@@ -62,16 +72,6 @@
    "hash": "e616ca2",
    "date": "2026-07-01",
    "subject": "release: v0.9.0"
-  },
-  {
-   "hash": "17a3db8",
-   "date": "2026-07-01",
-   "subject": "cap de-penetration (no teleport) + faster stuck give-up"
-  },
-  {
-   "hash": "3d6a461",
-   "date": "2026-06-30",
-   "subject": "attack-move HALTS trucks (not just excludes them)"
   }
  ]
 }
