@@ -18,7 +18,7 @@
  * intermediate states light up automatically — no code change needed.
  */
 
-Game.BUILDING_MODEL = 'models/fr_shop_house_1_states.glb';
+Game.BUILDING_MODEL = 'models/fr_house_2.glb';
 // State meshes are matched by name PREFIX, so suffix variants (House_3 vs
 // House_3_heavy) and the "_undam" tag all resolve.
 Game.BUILDING_STATES = ['House_0', 'House_1', 'House_2', 'House_3'];
@@ -27,7 +27,9 @@ Game.BUILDING_STATES = ['House_0', 'House_1', 'House_2', 'House_3'];
 Game.BUILDING_MAX_HP = 460;
 // Houses are placed at ONE fixed scale (no per-footprint resizing/stretching).
 // The GLB is exported ~1 world-unit wide, so this is the in-world house size.
-Game.BUILDING_SCALE = 8.58;   // houses +30% on the prior 6.6 (orig 5.5)
+Game.BUILDING_SCALE = 5.82;  // depth-matched 4.4 +15% +15% per playtest
+Game.BUILDING_SPACING = 1.25; // row cell = frontage x this (1.0 = shoulder to shoulder)
+Game.BUILDING_SINK = 0.15;    // settle houses into the ground a touch
 Game._buildingSmokeScale = 1;   // debug "Smoke ×" — scales hit/destruction smoke
 Game._buildingDmgMult = 1;      // debug "Damage ×" — scales damage dealt to buildings
 Game.buildingRecords = [];
@@ -56,6 +58,7 @@ Game.registerBuilding = (b, bGroup, dims, procMeshes) => {
 Game._loadBuildingModels = () => {
     if (!Game.buildingRecords.length || !Game.loadModel) return;
     Game.loadModel(Game.BUILDING_MODEL).then(model => {
+        Game._buildingSrcModel = model;
         Game.buildingRecords.forEach(rec => {
             try { Game._populateBuildingModel(rec, model); }
             catch (e) { console.warn('building model populate failed:', e); }
@@ -95,8 +98,8 @@ Game._populateBuildingModel = (rec, srcModel) => {
     // Only as many houses as FIT without overlapping (floor, not round) and place
     // them exactly one house-width apart. Overlapping houses z-fight on their
     // roofs/walls, which looks like phantom "damage" / a doubled building.
-    const count = Math.max(1, Math.floor(longLen / houseW + 0.05));
-    const cell = houseW;                             // edge-to-edge, never overlap
+    const cell = houseW * (Game.BUILDING_SPACING || 1);   // breathing room between houses
+    const count = Math.max(1, Math.floor(longLen / cell + 0.02));
 
     rec.houses = [];
     for (let k = 0; k < count; k++) {
@@ -119,7 +122,7 @@ Game._populateBuildingModel = (rec, srcModel) => {
         const bb = new THREE.Box3().setFromObject(model);
         model.position.x += rec.cx - (bb.min.x + bb.max.x) / 2;
         model.position.z += rec.cz - (bb.min.z + bb.max.z) / 2;
-        model.position.y += rec.baseY - bb.min.y;
+        model.position.y += rec.baseY - bb.min.y - (Game.BUILDING_SINK || 0);
         const off = (k - (count - 1) / 2) * cell;
         const jit = Game.rand(-0.18, 0.18);
         if (longAxisIsX) { model.position.x += off; model.position.z += jit; }
@@ -208,6 +211,21 @@ Game._cleanRoofGrime = (tex) => {
 // Show the right damage-state mesh for a level. With states missing, show the
 // highest available state at or below the level (so a single-state model just
 // stays undamaged until destroyed). Level 3 with no House_3 mesh collapses.
+Game._tintStatelessDamage = (h, level) => {
+    const f = [1, 0.8, 0.6, 0.45][level] != null ? [1, 0.8, 0.6, 0.45][level] : 1;
+    if (h._dmgTint === f) return;
+    h._dmgTint = f;
+    h.root.traverse(o => {
+        if (!o.isMesh || !o.material) return;
+        if (!o.userData._dmgMat) {
+            o.material = o.material.clone();
+            o.userData._dmgMat = true;
+        }
+        // soot: darken overall, slightly more in green/blue so it reads burnt
+        o.material.color.setRGB(f, f * 0.95, f * 0.9);
+    });
+};
+
 Game.setBuildingDamage = (rec, level) => {
     level = Game.clamp ? Game.clamp(Math.round(level), 0, 3) : Math.max(0, Math.min(3, Math.round(level)));
     rec.level = level;
@@ -215,6 +233,9 @@ Game.setBuildingDamage = (rec, level) => {
         let shown = -1;
         for (let i = 0; i <= level; i++) if (h.states[i]) shown = i;
         h.states.forEach((m, i) => { if (m) m.visible = (i === shown); });
+        // stateless model (no House_N meshes): show damage by progressive
+        // soot/char darkening instead, until level 3 collapses it
+        if (shown === -1 && h.root) Game._tintStatelessDamage(h, level);
     });
     const noHeavyState = (rec.houses || []).every(h => !h.states[3]);
     if (level >= 3 && noHeavyState) {
@@ -646,11 +667,32 @@ Game._eachBuildingMat = (fn) => {
     }));
 };
 
+// Re-place every building's houses with the current scale/spacing/sink —
+// used by the debug sliders for live town-density tuning.
+Game._rebuildBuildingModels = () => {
+    if (!Game._buildingSrcModel) return;
+    (Game.buildingRecords || []).forEach(rec => {
+        if (rec.collapsed) return;
+        (rec.houses || []).forEach(h => { if (h.root && rec.group) rec.group.remove(h.root); });
+        rec.houses = [];
+        try { Game._populateBuildingModel(rec, Game._buildingSrcModel); }
+        catch (e) { console.warn('building re-layout failed:', e); }
+    });
+};
+Game._debouncedBldgRebuild = () => {
+    clearTimeout(Game._bldgRebuildT);
+    Game._bldgRebuildT = setTimeout(() => Game._rebuildBuildingModels(), 350);
+};
+
 Game.buildingDebugDefaults = {
+    bldgScale: 5.82, bldgSpacing: 1.25, bldgSink: 0.15,
     bldgDmgMult: 1, bldgSmokeScale: 1, bldgMaxHp: Game.BUILDING_MAX_HP,
     bldgBright: 0, bldgNormal: 1, bldgRough: 0.55, bldgRecvShadow: 0, bldgForceState: -1,
 };
 Game._buildingControlDefs = () => [
+    { group: 'Buildings', key: 'bldgScale', label: 'House Scale', min: 2, max: 12, step: 0.1, apply: v => { Game.BUILDING_SCALE = v; Game._debouncedBldgRebuild(); } },
+    { group: 'Buildings', key: 'bldgSpacing', label: 'Row Spacing x', min: 0.9, max: 2.5, step: 0.05, apply: v => { Game.BUILDING_SPACING = v; Game._debouncedBldgRebuild(); } },
+    { group: 'Buildings', key: 'bldgSink', label: 'Ground Sink', min: 0, max: 1, step: 0.02, apply: v => { Game.BUILDING_SINK = v; Game._debouncedBldgRebuild(); } },
     { group: 'Buildings', key: 'bldgDmgMult', label: 'Damage × (shots to wreck)', min: 0.2, max: 4, step: 0.1, apply: v => { Game._buildingDmgMult = v; } },
     { group: 'Buildings', key: 'bldgSmokeScale', label: 'Smoke ×', min: 0.3, max: 4, step: 0.1, apply: v => { Game._buildingSmokeScale = v; } },
     // ── Roof/texture diagnostics (the baked grime on the model's texture) ──

@@ -341,20 +341,14 @@ Game.generateMap = () => {
     Game.setPatch(37 + vdx, 10 + vdy, 3, 4, 'house');
     Game.church = { tx: 37 + vdx, ty: 10 + vdy, tw: 3, th: 4 };
 
-    // Houses ringing the square + along the high street (jumbled, tight)
+    // Houses ringing the square — thinned out so the deeper fr_house_2 model
+    // breathes between plots instead of merging into one mass
     const houseSpots = [
-        [33, 11, 2, 2], [35, 10, 2, 2], [41, 10, 2, 3], [44, 11, 2, 2],
-        [33, 14, 2, 3], [44, 14, 2, 3], [33, 18, 2, 2], [36, 18, 3, 2],
-        [40, 18, 2, 2], [43, 18, 2, 2], [30, 15, 2, 2], [46, 15, 2, 2],
-        [35, 19, 2, 2], [39, 11, 2, 2],
+        [33, 11, 2, 2], [41, 10, 2, 3], [44, 14, 2, 3],
+        [33, 14, 2, 3], [36, 18, 3, 2], [43, 18, 2, 2],
+        [30, 15, 2, 2],
     ];
     houseSpots.forEach(([x, y, w, h]) => { if (!(x === 37 && y === 10)) Game.addBuilding(x + vdx, y + vdy, w, h); });
-
-    // Low stone garden walls around the square
-    Game.addWall(34 + vdx, 12 + vdy, 1, 5);
-    Game.addWall(43 + vdx, 12 + vdy, 1, 5);
-    Game.addWall(35 + vdx, 12 + vdy, 3, 1);
-    Game.addWall(40 + vdx, 17 + vdy, 4, 1);
 
     // ═══════════════════════════════════════════════════
     //  5. FARMSTEAD with haystacks (east of the village)
@@ -363,18 +357,6 @@ Game.generateMap = () => {
     Game.addBuilding(50 + vdx, 21 + vdy, 3, 2);          // long barn
     Game.addBuilding(54 + vdx, 21 + vdy, 2, 3);          // farmhouse
     Game.addBuilding(50 + vdx, 25 + vdy, 2, 2);          // shed
-    Game.addWall(53 + vdx, 24 + vdy, 4, 1);
-    for (let i = 0; i < 7; i++) {
-        const hx = (51 + vdx + Game.rand(0, 4)) * T;
-        const hz = (24 + vdy + Game.rand(0, 2)) * T;
-        Game.haystacks.push({ x: hx, z: hz, r: Game.rand(1.0, 1.5), h: Game.rand(1.6, 2.3) });
-    }
-
-    // ═══════════════════════════════════════════════════
-    //  6. WINDMILL landmark (open rise NE of the village)
-    // ═══════════════════════════════════════════════════
-    Game.setPatch(59 + vdx, 8 + vdy, 3, 3, 'yard');
-    Game.windmill = { x: (60.5 + vdx) * T, z: (9.5 + vdy) * T };
 
     // ═══════════════════════════════════════════════════
     //  6.5 PONDS — still-water mares dug into low fields
