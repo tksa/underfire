@@ -1,10 +1,15 @@
 {
  "version": "v0.10.1",
- "build": "e2a31e0",
- "generated": "2026-07-03",
+ "build": "36fbbbf",
+ "generated": "2026-07-05",
  "commits": [
   {
-   "hash": "e2a31e0",
+   "hash": "36fbbbf",
+   "date": "2026-07-05",
+   "subject": "terrain ControlNet pipeline, map maker, fluffy grass, bundled baked map"
+  },
+  {
+   "hash": "f2e8f82",
    "date": "2026-07-03",
    "subject": "stone wall/fence dividers, organic river + water FX, stone bridge, camera yaw"
   },
@@ -67,11 +72,6 @@
    "hash": "2de2464",
    "date": "2026-06-30",
    "subject": "vehicles form columns instead of weaving (RVO-style reciprocity)"
-  },
-  {
-   "hash": "8705ec2",
-   "date": "2026-06-30",
-   "subject": "stop stuck-tank judder (detour flicker) + idle \"swing out of the blue\""
   }
  ]
 }
