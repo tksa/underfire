@@ -25,7 +25,10 @@ Game.initEngine = () => {
     // Scene
     Game.scene = new THREE.Scene();
     // Light warm haze only — keep the field patchwork crisp
-    Game.scene.fog = new THREE.FogExp2(0xd0cab0, 0.0016);
+    // Distance haze fades toward the off-map tone, so nothing beyond the map
+    // edge can wash grey; reference mode swaps the trained pale haze back in.
+    Game.REF_FOG_COLOR = 0xd0cab0;
+    Game.scene.fog = new THREE.FogExp2(Game.OFFMAP_COLOR || 0x14161c, 0.0016);
 
     // Camera (orthographic, top-down angled)
     const aspect = Game.viewW / Game.viewH;
@@ -158,6 +161,8 @@ Game.initEngine = () => {
         Game.camera.updateProjectionMatrix();
         Game.renderer.setSize(Game.viewW, Game.viewH);
         if (Game.composer) Game._applyComposerSize();
+        clearTimeout(Game._tiltResizeT);
+        Game._tiltResizeT = setTimeout(() => { if (Game._applyTiltShift) Game._applyTiltShift(); }, 150);
     });
 
     // Postprocessing (bloom, tilt-shift DoF, colour grade, vignette, SMAA)
@@ -329,10 +334,10 @@ Game._applyTiltShift = () => {
         Game._tiltPass = null;
     }
     const eff = new PF.TiltShiftEffect({
-        offset: 0.0,
+        offset: st.tiltOffset ?? 0,
         rotation: 0.0,
-        focusArea: st.tiltFocusArea ?? 0.7,
-        feather: st.tiltFeather ?? 0.56,
+        focusArea: st.tiltFocusArea ?? 0.92,
+        feather: st.tiltFeather ?? 0.22,
         kernelSize: PF.KernelSize.LARGE,
     });
     Game._tiltPass = new PF.EffectPass(Game.camera, eff);
@@ -376,14 +381,18 @@ Game.setupPostFX = () => {
         Game._setupUpscaler();
         Game._applyComposerSize();
         // Tilt-shift LAST: rebuilt as the topmost pass so the diorama blur
-        // sits over bloom, grade, vignette — everything.
-        Game._applyTiltShift();
+        // sits over bloom, grade, vignette — everything. Built on the first
+        // rendered frames, NOT here: a pass created mid-setup came up dead
+        // until a later rebuild (that is what the debug sliders were doing).
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (Game._applyTiltShift) Game._applyTiltShift();
+        }));
 
         // Live-tunable state (mirrors the constructor values above) + debug UI.
         Game.postfxState = {
             upscaleFactor: Game.upscaleFactor,
             bloomIntensity: 0.4, bloomThreshold: 0.65,
-            tiltFocusArea: 0.7, tiltFeather: 0.56,
+            tiltFocusArea: 0.92, tiltFeather: 0.22, tiltOffset: 0,
             saturation: 0.05, hue: -0.06,
             brightness: 0.01, contrast: 0.12,
             vignetteOffset: 0.62, vignetteDarkness: 0.67,

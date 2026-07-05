@@ -162,6 +162,12 @@ Neural terrain stands on:
   2x upscale pass
 - OpenAI `gpt-image-2` — generated the photorealistic training targets
 
+Capture geometry note: the published dataset and models were trained on
+tilted views captured at camera tilt **35 degrees** (zoom 20), while the
+game's default camera tilt is now **45 degrees**. Reproducing the tilted
+capture distribution means pinning tilt back to 35 (debug panel, Camera
+section); the top-down ortho capture mode is unaffected.
+
 The game looks for the server on `http://127.0.0.1:8788`. To point it at a
 different machine: `localStorage.setItem('uf_neural_url', 'http://host:8788')`
 in the browser console, once.

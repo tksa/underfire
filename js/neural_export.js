@@ -207,7 +207,7 @@ Game.NeuralExport = (() => {
             // metadata
             out.meta = {
                 width: W, height: H,
-                camera: { x: Game.cam.x, z: Game.cam.z, zoom: Game.cam.zoom, tiltDeg: Game.camTiltDeg || 35 },
+                camera: { x: Game.cam.x, z: Game.cam.z, zoom: Game.cam.zoom, tiltDeg: Game.camTiltDeg || 45 },
                 units: Game.units.filter(u => u.alive).map(u => ({
                     id: u.id, team: u.team, kind: u.kind,
                     class: (Game.UNIT_STATS[`${u.team}_${u.kind}`] || {}).class || 'default',

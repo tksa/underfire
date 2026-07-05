@@ -1794,7 +1794,9 @@ Game.updateFogOfWar = (dt) => {
                 if (fogVal >= 1.0) {
                     data[idx + 3] = 0;    // Visible = transparent
                 } else if (fogVal > 0) {
-                    data[idx + 3] = 115;  // Explored = readable dim
+                    data[idx + 3] = 78;   // Explored = readable dim (softened:
+                                          // 115 made the reveal bubble read as
+                                          // a bright band against it)
                 } else {
                     data[idx + 3] = 215;  // Hidden = nearly opaque
                 }
@@ -2209,6 +2211,9 @@ Game.setReferenceMode = (on) => {
     // off-map colour: captures must keep the pale margin the model was
     // trained on; play uses the dark UI tone (engine sets it at boot)
     if (Game.renderer) Game.renderer.setClearColor(on ? 0xcabf9f : (Game.OFFMAP_COLOR || 0x14161c));
+    if (Game.scene && Game.scene.fog) {
+        Game.scene.fog.color.setHex(on ? (Game.REF_FOG_COLOR || 0xd0cab0) : (Game.OFFMAP_COLOR || 0x14161c));
+    }
     if (Game.groundPlane && Game._groundPlaneRefMat) {
         if (on) {
             Game._groundPlanePlayMat = Game.groundPlane.material;
@@ -3425,12 +3430,10 @@ Game.applyFoliageTint = (sp) => {
     const setFold = (folded) => {
         if (!bar || !up) return;
         bar.classList.toggle('hud-collapsed', folded);
-        up.style.display = folded ? 'block' : 'none';
-        localStorage.setItem('uf_hudFolded', folded ? '1' : '');
+        up.style.display = folded ? 'flex' : 'none';
     };
     down?.addEventListener('click', () => setFold(true));
     up?.addEventListener('click', () => setFold(false));
-    if (localStorage.getItem('uf_hudFolded') === '1') setFold(true);
 }
 
 // ── Lighting controls ──
@@ -3461,6 +3464,7 @@ const _tiltApply = (key, v) => {
     Game._tiltDebounce = setTimeout(() => { if (Game._applyTiltShift) Game._applyTiltShift(); }, 120);
 };
 _dbgSlider('dbgTiltFocus', 'dbgTiltFocusVal', v => _tiltApply('tiltFocusArea', v));
+_dbgSlider('dbgTiltOffset', 'dbgTiltOffsetVal', v => _tiltApply('tiltOffset', v));
 _dbgSlider('dbgTiltFeather', 'dbgTiltFeatherVal', v => _tiltApply('tiltFeather', v));
 
 _dbgSlider('dbgAmbient', 'dbgAmbientVal', v => {

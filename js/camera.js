@@ -56,7 +56,7 @@ Game.updateCamera = (dt) => {
 
     // Apply camera position (oblique, Sudden Strike-style tilt).
     // Lower angle from horizontal = more tilted/oblique; 90° would be straight down.
-    const camAngle = (Game.camTiltDeg || 35) * Math.PI / 180;
+    const camAngle = (Game.camTiltDeg || 45) * Math.PI / 180;
     const elevation = Game.cam.zoom * 1.5 * Math.sin(camAngle) / Math.sin(60 * Math.PI / 180);
     const offset = elevation / Math.tan(camAngle);
 
