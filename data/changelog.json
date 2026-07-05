@@ -1,8 +1,18 @@
 {
  "version": "v0.10.1",
- "build": "e2a1a7e",
+ "build": "16cbbbc",
  "generated": "2026-07-05",
  "commits": [
+  {
+   "hash": "16cbbbc",
+   "date": "2026-07-05",
+   "subject": "drifting sun-glint sparkle + ripple controls, tuned defaults"
+  },
+  {
+   "hash": "9bba238",
+   "date": "2026-07-05",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "e2a1a7e",
    "date": "2026-07-05",
@@ -62,16 +72,6 @@
    "hash": "40ae2e1",
    "date": "2026-07-05",
    "subject": "refresh changelog"
-  },
-  {
-   "hash": "36fbbbf",
-   "date": "2026-07-05",
-   "subject": "terrain ControlNet pipeline, map maker, fluffy grass, bundled baked map"
-  },
-  {
-   "hash": "f2e8f82",
-   "date": "2026-07-03",
-   "subject": "stone wall/fence dividers, organic river + water FX, stone bridge, camera yaw"
   }
  ]
 }
