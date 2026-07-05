@@ -3344,13 +3344,13 @@ Game.buildTerrainMeshes = () => {
     // VALOR: soft-blend the trunk/branches too, so the whole tree model melds
     // into the scene with the same slider (leaf cards via _attachFoliageWind).
     const makeBarkMat = (tint, name) => {
+        // Bark stays fully opaque: the soft-blend opacity ease is for leaf
+        // card edges, and on solid trunks it just made them see-through.
         const m = new THREE.MeshStandardMaterial({
             map: barkColor, normalMap: barkNormal, roughness: 0.76, metalness: 0.0,
             color: tint,
-            transparent: true, depthWrite: true,   // allow the soft-blend opacity ease
         });
         m.name = name;
-        m.onBeforeCompile = (shader) => { if (Game._valorTreeBlurInject) Game._valorTreeBlurInject(shader); };
         return m;
     };
     const barkMat = makeBarkMat(0xffffff, 'eztree-bark');
