@@ -1,8 +1,18 @@
 {
  "version": "v0.10.1",
- "build": "36fbbbf",
+ "build": "602d50f",
  "generated": "2026-07-05",
  "commits": [
+  {
+   "hash": "602d50f",
+   "date": "2026-07-05",
+   "subject": "New Blank Map froze the browser (fluff cap used O(n^2) splice)"
+  },
+  {
+   "hash": "40ae2e1",
+   "date": "2026-07-05",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "36fbbbf",
    "date": "2026-07-05",
@@ -62,16 +72,6 @@
    "hash": "5a05a1a",
    "date": "2026-06-30",
    "subject": "supply/fuel trucks ignore attack-move (they can't fight)"
-  },
-  {
-   "hash": "85e1c01",
-   "date": "2026-06-30",
-   "subject": "preview circles == actual per-unit destinations"
-  },
-  {
-   "hash": "2de2464",
-   "date": "2026-06-30",
-   "subject": "vehicles form columns instead of weaving (RVO-style reciprocity)"
   }
  ]
 }
