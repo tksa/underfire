@@ -1,8 +1,18 @@
 {
  "version": "v0.10.1",
- "build": "0081a69",
+ "build": "e2a1a7e",
  "generated": "2026-07-05",
  "commits": [
+  {
+   "hash": "e2a1a7e",
+   "date": "2026-07-05",
+   "subject": "destructible walls and fences with debris, dust, and ground scars"
+  },
+  {
+   "hash": "9f0cd26",
+   "date": "2026-07-05",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "0081a69",
    "date": "2026-07-05",
@@ -62,16 +72,6 @@
    "hash": "f2e8f82",
    "date": "2026-07-03",
    "subject": "stone wall/fence dividers, organic river + water FX, stone bridge, camera yaw"
-  },
-  {
-   "hash": "377730a",
-   "date": "2026-07-02",
-   "subject": "smooth road corridors, gravel texture + tracks, seams, shrubs, heightmap"
-  },
-  {
-   "hash": "81b7785",
-   "date": "2026-07-02",
-   "subject": "fix dark materials, add French skin + material/leg tuning controls"
   }
  ]
 }
