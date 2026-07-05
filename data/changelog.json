@@ -1,8 +1,18 @@
 {
  "version": "v0.10.1",
- "build": "2eff25c",
+ "build": "0081a69",
  "generated": "2026-07-05",
  "commits": [
+  {
+   "hash": "0081a69",
+   "date": "2026-07-05",
+   "subject": "tilt-shift boot fix + offset control, 45deg camera, HUD fold polish, dark haze"
+  },
+  {
+   "hash": "4d2c481",
+   "date": "2026-07-05",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "2eff25c",
    "date": "2026-07-05",
@@ -62,16 +72,6 @@
    "hash": "81b7785",
    "date": "2026-07-02",
    "subject": "fix dark materials, add French skin + material/leg tuning controls"
-  },
-  {
-   "hash": "80c3a37",
-   "date": "2026-07-01",
-   "subject": "skinned 3D soldier model with animations + live tuning panel"
-  },
-  {
-   "hash": "e616ca2",
-   "date": "2026-07-01",
-   "subject": "release: v0.9.0"
   }
  ]
 }
