@@ -2206,6 +2206,9 @@ Game.setReferenceMode = (on) => {
     on = !!on;
     if (on === !!Game._refMode) return;
     Game._refMode = on;
+    // off-map colour: captures must keep the pale margin the model was
+    // trained on; play uses the dark UI tone (engine sets it at boot)
+    if (Game.renderer) Game.renderer.setClearColor(on ? 0xcabf9f : (Game.OFFMAP_COLOR || 0x14161c));
     if (on) {
         const saved = Game._refSaved = new Map();
         const hide = (o) => {
@@ -3427,6 +3430,14 @@ _dbgSlider('dbgShadowBlur', 'dbgShadowBlurVal', v => {
     }
 });
 
+_dbgSlider('dbgTiltFocus', 'dbgTiltFocusVal', v => {
+    if (Game.postfx && Game.postfx.tiltShift) Game.postfx.tiltShift.focusArea = v;
+});
+
+_dbgSlider('dbgTiltFeather', 'dbgTiltFeatherVal', v => {
+    if (Game.postfx && Game.postfx.tiltShift) Game.postfx.tiltShift.feather = v;
+});
+
 _dbgSlider('dbgAmbient', 'dbgAmbientVal', v => {
     Game._dbgAmbientBase = v;
     if (Game.ambient) Game.ambient.intensity = v;
@@ -3921,7 +3932,7 @@ Game.boot = async () => {
     // Spawn scenario
     Game.spawnScenario();
     Game._endMapSeed();
-    if (pendingSave && Game._applySavedMap) Game._applySavedMap(pendingSave);
+    if (pendingSave && Game._applySavedMap) await Game._applySavedMap(pendingSave);
 
 
 
@@ -3960,6 +3971,41 @@ Game.boot = async () => {
 
     // Go
     requestAnimationFrame(Game.tick);
+
+    // Black boot cover: ease from black only once async assets (models and
+    // their textures stream in after boot) have gone quiet — revealing on the
+    // first frame showed the world assembling piece by piece. Chained loads
+    // (GLB then its textures) keep resetting the quiet timer; a hard cap
+    // guarantees the cover never sticks on a failed download.
+    {
+        const bl = document.getElementById('bootLoader');
+        if (bl) {
+            const lm = Game.THREE && Game.THREE.DefaultLoadingManager;
+            let busy = false;
+            let quietAt = performance.now();
+            if (lm) {
+                const prevStart = lm.onStart;
+                const prevLoad = lm.onLoad;
+                lm.onStart = (...a) => { busy = true; if (prevStart) prevStart(...a); };
+                lm.onLoad = (...a) => {
+                    busy = false;
+                    quietAt = performance.now();
+                    if (prevLoad) prevLoad(...a);
+                };
+            }
+            const t0 = performance.now();
+            const tryFade = () => {
+                const quiet = !busy && (performance.now() - quietAt > 900);
+                if (quiet || performance.now() - t0 > 15000) {
+                    bl.style.opacity = '0';
+                    setTimeout(() => { bl.style.display = 'none'; }, 1300);
+                } else {
+                    setTimeout(tryFade, 250);
+                }
+            };
+            requestAnimationFrame(() => requestAnimationFrame(tryFade));
+        }
+    }
 };
 
 // ═══════════════════════════════════════════════════════

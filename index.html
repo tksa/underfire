@@ -1096,6 +1096,13 @@
 </head>
 
 <body>
+  <div id="bootLoader"
+    style="position:fixed;inset:0;background:#000;z-index:6000;display:flex;align-items:center;justify-content:center;opacity:1;transition:opacity 1.2s ease;pointer-events:none">
+    <div style="width:46px;height:46px;border:3px solid #22282e;border-top-color:#d8ba7b;border-radius:50%;animation:bootspin 1s linear infinite"></div>
+    <style>
+      @keyframes bootspin { to { transform: rotate(360deg); } }
+    </style>
+  </div>
   <div id="shell">
     <div id="viewport">
       <!-- Three.js canvas is injected here by engine.js -->
@@ -1297,6 +1304,14 @@
       <label>Shadow Blur
         <input type="range" id="dbgShadowBlur" min="0" max="14" step="0.5" value="4">
         <span class="dbg-val" id="dbgShadowBlurVal">4.0</span>
+      </label>
+      <label>Tilt-Shift Focus
+        <input type="range" id="dbgTiltFocus" min="0" max="1" step="0.02" value="0.35">
+        <span class="dbg-val" id="dbgTiltFocusVal">0.35</span>
+      </label>
+      <label>Tilt-Shift Feather
+        <input type="range" id="dbgTiltFeather" min="0" max="1" step="0.02" value="0.25">
+        <span class="dbg-val" id="dbgTiltFeatherVal">0.25</span>
       </label>
       <label>Ambient
         <input type="range" id="dbgAmbient" min="0" max="5" step="0.05" value="2.1">

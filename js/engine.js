@@ -18,7 +18,8 @@ Game.initEngine = () => {
     Game.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     Game.renderer.shadowMap.enabled = true;
     Game.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    Game.renderer.setClearColor(0xcabf9f); // warm hazy horizon
+    Game.OFFMAP_COLOR = 0x14161c;   // dark UI tone beyond the map edge
+    Game.renderer.setClearColor(Game.OFFMAP_COLOR);
     container.insertBefore(Game.renderer.domElement, container.firstChild);
 
     // Scene
@@ -331,8 +332,8 @@ Game.setupPostFX = () => {
         const tiltShift = new PF.TiltShiftEffect({
             offset: 0.0,
             rotation: 0.0,
-            focusArea: 0.6,    // sharp band over the playfield; blur top/bottom edges
-            feather: 0.3,
+            focusArea: 0.35,   // sharp band over the playfield; blur top/bottom edges
+            feather: 0.25,     // (0.6/0.3 blurred only the outer ~5% - invisible)
             kernelSize: PF.KernelSize.LARGE,   // SMALL was imperceptible — needs a real blur radius
         });
         const hueSat = new PF.HueSaturationEffect({ hue: -0.06, saturation: 0.05 });
@@ -358,7 +359,7 @@ Game.setupPostFX = () => {
         Game.postfxState = {
             upscaleFactor: Game.upscaleFactor,
             bloomIntensity: 0.4, bloomThreshold: 0.65,
-            tiltFocusArea: 0.6, tiltFeather: 0.3,
+            tiltFocusArea: 0.35, tiltFeather: 0.25,
             saturation: 0.05, hue: -0.06,
             brightness: 0.01, contrast: 0.12,
             vignetteOffset: 0.62, vignetteDarkness: 0.67,
