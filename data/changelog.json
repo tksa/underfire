@@ -1,8 +1,18 @@
 {
  "version": "v0.10.1",
- "build": "602d50f",
+ "build": "5eeb163",
  "generated": "2026-07-05",
  "commits": [
+  {
+   "hash": "5eeb163",
+   "date": "2026-07-05",
+   "subject": "black boot loader with asset-aware fade, dark off-map, visible tilt-shift"
+  },
+  {
+   "hash": "f4ccf27",
+   "date": "2026-07-05",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "602d50f",
    "date": "2026-07-05",
@@ -62,16 +72,6 @@
    "hash": "5639c40",
    "date": "2026-06-30",
    "subject": "infantry RUN out of a tank's way"
-  },
-  {
-   "hash": "a80a16f",
-   "date": "2026-06-30",
-   "subject": "tanks crush through forests"
-  },
-  {
-   "hash": "5a05a1a",
-   "date": "2026-06-30",
-   "subject": "supply/fuel trucks ignore attack-move (they can't fight)"
   }
  ]
 }
