@@ -1,8 +1,18 @@
 {
  "version": "v0.10.1",
- "build": "5eeb163",
+ "build": "059ca8b",
  "generated": "2026-07-05",
  "commits": [
+  {
+   "hash": "059ca8b",
+   "date": "2026-07-05",
+   "subject": "true dark off-map, tilt-shift as final pass, HUD fold, no start selection"
+  },
+  {
+   "hash": "98fc58f",
+   "date": "2026-07-05",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "5eeb163",
    "date": "2026-07-05",
@@ -62,16 +72,6 @@
    "hash": "3d6a461",
    "date": "2026-06-30",
    "subject": "attack-move HALTS trucks (not just excludes them)"
-  },
-  {
-   "hash": "7ba5d5b",
-   "date": "2026-06-30",
-   "subject": "infantry slide AROUND a stopped tank instead of grinding its rear"
-  },
-  {
-   "hash": "5639c40",
-   "date": "2026-06-30",
-   "subject": "infantry RUN out of a tank's way"
   }
  ]
 }
