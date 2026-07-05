@@ -1743,6 +1743,10 @@ Game.updateFogOfWar = (dt) => {
     Game._fogTimer = (Game._fogTimer || 0) - (dt || 0.016);
     if (Game._fogTimer > 0) return;
     Game._fogTimer = Game.FOG_UPDATE_INTERVAL;
+    if (Game._fogDisabled) {
+        // debug: full light, whole map visible
+        Game.fogGrid.fill(1);
+    } else {
     // Decay visible to explored
     for (let i = 0; i < Game.fogGrid.length; i++) {
         if (Game.fogGrid[i] > 0.5) Game.fogGrid[i] = 0.5;
@@ -1769,6 +1773,7 @@ Game.updateFogOfWar = (dt) => {
             }
         }
     });
+    }
 
     // Render fog overlay to canvas
     if (Game._fogCtx) {
@@ -1990,11 +1995,1246 @@ Game.updateLighting = (dt) => {
 
 // Toggle debug panel with backtick key
 document.addEventListener('keydown', (e) => {
+    const _t = e.target;
+    if (_t && (_t.tagName === 'INPUT' || _t.tagName === 'TEXTAREA' || _t.tagName === 'SELECT' || _t.isContentEditable)) return;
     if (e.key === '`') {
         const panel = document.getElementById('debugPanel');
         if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
     }
 });
+
+// Reference mode: strip the view down to bare terrain plus walls/fences for
+// clean reference shots. Hides units, effects, fog of war, buildings, trees,
+// bridges, props and the top-left menu button; toggling off restores each
+// object's exact previous visibility (some are legitimately hidden already,
+// e.g. the procedural bridge fallback). Annotation markers, fixed screen
+// size at any zoom: bright purple dot = tree, bright blue dot = bush,
+// bright red = terrain damage (circles = craters sized by dot, triangles =
+// small shell/round impacts).
+Game._buildRefMarkers = () => {
+    const THREE = Game.THREE;
+    if (!THREE || !Game.scene) return null;
+    const sprite = (draw) => {
+        // white shape, tinted by the material color
+        const c = document.createElement('canvas');
+        c.width = c.height = 32;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        draw(ctx);
+        ctx.fill();
+        return new THREE.CanvasTexture(c);
+    };
+    if (!Game._refDotTex) Game._refDotTex = sprite((ctx) => ctx.arc(16, 16, 15, 0, Math.PI * 2));
+    if (!Game._refTriTex) Game._refTriTex = sprite((ctx) => {
+        ctx.moveTo(16, 2);
+        ctx.lineTo(30, 28);
+        ctx.lineTo(2, 28);
+        ctx.closePath();
+    });
+    const layer = (spots, color, name, px, tex) => {
+        if (!spots || !spots.length) return null;
+        const pos = new Float32Array(spots.length * 3);
+        spots.forEach((s, i) => {
+            pos[i * 3] = s.x;
+            pos[i * 3 + 1] = (Game.getHeight ? Game.getHeight(s.x, s.z) : 0) + 0.3;
+            pos[i * 3 + 2] = s.z;
+        });
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        const mat = new THREE.PointsMaterial({
+            color,
+            map: tex || Game._refDotTex,
+            // px on screen at any zoom (gl_PointSize is in device pixels)
+            size: (px || 5) * (Game.renderer ? Game.renderer.getPixelRatio() : 1),
+            sizeAttenuation: false,
+            transparent: true,
+            alphaTest: 0.5,
+            depthTest: false,
+            depthWrite: false,
+        });
+        const pts = new THREE.Points(geo, mat);
+        pts.name = name;
+        pts.renderOrder = 1000;
+        pts.raycast = () => { };
+        Game.scene.add(pts);
+        return pts;
+    };
+    const made = [
+        layer(Game.treeSpots, 0xbf00ff, 'ref-tree-markers', 5),
+        layer(Game.shrubSpots, 0x00aaff, 'ref-bush-markers', 5),
+    ];
+    // damage spots vary in size, and PointsMaterial has one size per
+    // material, so bucket them by shape + pixel size
+    const dmgGroups = {};
+    const dmgSrc = Game._refCleanDamage ? (Game.runtimeDamageSpots || []) : (Game.damageSpots || []);
+    for (const s of dmgSrc) {
+        const k = s.shape + ':' + s.px;
+        (dmgGroups[k] = dmgGroups[k] || []).push(s);
+    }
+    for (const k in dmgGroups) {
+        const g = dmgGroups[k];
+        made.push(layer(g, 0xff2222, 'ref-damage-' + k, g[0].px,
+            g[0].shape === 'triangle' ? Game._refTriTex : Game._refDotTex));
+    }
+    // Bright pink AREA marker over the town footprint (yard squares plus
+    // house/wall tiles): same idea as the dots but for a region — wherever
+    // the generator sees pink it renders cobbled village ground. (Was yellow,
+    // but generators confused wheat/stubble fields with the marker.) One quad
+    // per tile, merged; sits just above the terrain so dividers still occlude
+    // it, while the screen-fixed dot markers draw on top.
+    {
+        const T = Game.TILE;
+        const verts = [];
+        const yAt = (x, z) => (Game.getHeight ? Game.getHeight(x, z) : 0) + 0.15;
+        for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
+            for (let tx = 0; tx < Game.MAP_COLS; tx++) {
+                const t = Game.terrain[ty] && Game.terrain[ty][tx];
+                if (!t || (t.type !== 'yard' && t.type !== 'house' && t.type !== 'wall')) continue;
+                const x0 = tx * T, z0 = ty * T, x1 = x0 + T, z1 = z0 + T;
+                verts.push(
+                    x0, yAt(x0, z0), z0, x0, yAt(x0, z1), z1, x1, yAt(x1, z0), z0,
+                    x1, yAt(x1, z0), z0, x0, yAt(x0, z1), z1, x1, yAt(x1, z1), z1,
+                );
+            }
+        }
+        if (verts.length) {
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+            const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+                color: 0xff69b4, fog: false, side: THREE.DoubleSide,
+            }));
+            mesh.name = 'ref-town-overlay';
+            mesh.raycast = () => { };
+            Game.scene.add(mesh);
+            made.push(mesh);
+        }
+    }
+    const out = made.filter(Boolean);
+    return out.length ? out : null;
+};
+
+// Reference mode: tip a random minority of wall/fence pieces over and tint
+// them red, marking collapsed dividers as terrain damage. Reuses the tank
+// knock-down transform (tilt about the piece's base along the run axis).
+// The random pick is made once per map so repeated toggles annotate the
+// same pieces; pieces a tank already crushed in-game are left alone.
+Game._setRefFallenDividers = (on) => {
+    const THREE = Game.THREE;
+    if (!THREE || !Game.foliageKD) return;
+    const clean = !!Game._refCleanDamage;   // neural captures: no invented damage
+    if (on && (!Game._refFallen || Game._refFallen.src !== Game.foliageKD
+        || Game._refFallen.clean !== clean)) {
+        const sel = [];
+        if (!clean) {
+            for (const r of Game.foliageKD) {
+                const nm = (r.leaves && r.leaves.name) || '';
+                if (!nm.startsWith('divider-') || nm === 'divider-pierrier') continue;
+                if (Math.random() > 0.18) continue;
+                sel.push({ r, side: Math.random() < 0.5 ? 1 : -1, ang: Game.rand(1.5, 1.75) });
+            }
+        }
+        // n = registry size at pick time, so the enforcement sweep can tell
+        // when async-loaded pieces registered after this pick
+        Game._refFallen = { src: Game.foliageKD, sel, n: Game.foliageKD.length, clean };
+    }
+    if (!Game._refFallen) return;
+    const pos = new THREE.Vector3(), scl = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0), axis = new THREE.Vector3();
+    const qY = new THREE.Quaternion(), qT = new THREE.Quaternion();
+    const mat = new THREE.Matrix4(), col = new THREE.Color();
+    const dirty = new Set();
+    for (const f of Game._refFallen.sel) {
+        const r = f.r;
+        if (r.triggered) continue;   // crushed in-game — already fallen, skip
+        pos.set(r.x, r.y, r.z);
+        qY.setFromAxisAngle(up, r.rotY);
+        scl.set(r.s, r.sy != null ? r.sy : r.s, r.sz != null ? r.sz : r.s);
+        if (on) {
+            // tip sideways: rotate about the piece's long axis at its base
+            axis.set(Math.cos(r.rotY), 0, -Math.sin(r.rotY));
+            qT.setFromAxisAngle(axis, f.side * f.ang).multiply(qY);
+            mat.compose(pos, qT, scl);
+        } else {
+            mat.compose(pos, qY, scl);
+        }
+        r.leaves.setMatrixAt(r.idx, mat);
+        if (r.leaves.instanceColor) {
+            if (on && f.tint == null) {
+                r.leaves.getColorAt(r.idx, col);
+                f.tint = col.getHex();
+            }
+            r.leaves.setColorAt(r.idx, col.setHex(on ? 0xff2222 : f.tint));
+        }
+        dirty.add(r.leaves);
+    }
+    dirty.forEach(m => {
+        m.instanceMatrix.needsUpdate = true;
+        if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    });
+};
+
+// What stays visible in reference mode. Shared by the enable sweep and the
+// per-frame enforcement below.
+Game._refKeep = (o) => o === Game.terrainMesh
+    || o.name === 'water-surface'
+    || (o.name && o.name.startsWith('divider-'));
+
+// Models attach through async loader callbacks (dividers, bridge, windmill),
+// so a single sweep at enable time misses whatever lands afterwards — e.g.
+// right after a capture-mode map regen. Ticked every frame while reference
+// mode is on: hides late arrivals and extends the fallen-divider pick when
+// new wall/fence pieces register.
+Game._refEnforceSweep = () => {
+    const saved = Game._refSaved;
+    if (!saved) return;
+    for (const child of (Game.terrainGroup ? Game.terrainGroup.children : [])) {
+        if (!Game._refKeep(child) && !saved.has(child)) {
+            saved.set(child, child.visible);
+            child.visible = false;
+        }
+    }
+    const kd = Game.foliageKD;
+    if (kd && Game._refFallen && Game._refFallen.src === kd && kd.length > Game._refFallen.n) {
+        Game._setRefFallenDividers(false);
+        Game._refFallen = null;
+        Game._setRefFallenDividers(true);
+    }
+};
+
+Game.setReferenceMode = (on) => {
+    on = !!on;
+    if (on === !!Game._refMode) return;
+    Game._refMode = on;
+    if (on) {
+        const saved = Game._refSaved = new Map();
+        const hide = (o) => {
+            if (o && !saved.has(o)) { saved.set(o, o.visible); o.visible = false; }
+        };
+        for (const child of (Game.terrainGroup ? Game.terrainGroup.children : [])) {
+            if (!Game._refKeep(child)) hide(child);
+        }
+        hide(Game.unitsGroup);
+        hide(Game.effectsGroup);
+        hide(Game._fogMesh);
+        Game._refMarkers = Game._buildRefMarkers();
+        Game._setRefFallenDividers(true);
+    } else {
+        for (const [obj, vis] of Game._refSaved || []) obj.visible = vis;
+        Game._refSaved = null;
+        for (const m of Game._refMarkers || []) {
+            Game.scene.remove(m);
+            m.geometry.dispose();
+            m.material.dispose();
+        }
+        Game._refMarkers = null;
+        Game._setRefFallenDividers(false);
+    }
+    const menuBtn = document.getElementById('btnMenu');
+    if (menuBtn) menuBtn.style.display = on ? 'none' : '';
+    const hudBar = document.getElementById('hudBar');
+    if (hudBar) hudBar.style.display = on ? 'none' : '';
+    const refCb = document.getElementById('dbgRefMode');
+    if (refCb) refCb.checked = on;
+};
+
+document.getElementById('dbgRefMode')?.addEventListener('change', (e) => {
+    Game.setReferenceMode(e.target.checked);
+});
+
+// ── Reference capture: batches of annotated stills across fresh maps ──
+// Start Capture asks once for an output folder (Chrome/Edge File System
+// Access API), then loops unattended: frame a random spot at a random zoom,
+// render, save a JPEG, and after every "per map" images tear the world down
+// and generate a brand-new procedural map. JPEG q0.92 keeps files ~10x
+// smaller than PNG with no visible loss on these renders; names carry a
+// timestamp + random hash so parallel runs into one folder never collide.
+// The game is paused for the duration so nothing drifts between shots.
+Game._refCap = null;
+
+Game._refCapShot = () => new Promise((resolve, reject) => {
+    // render right before reading — the WebGL buffer is only valid for a
+    // synchronous read in the same task (preserveDrawingBuffer is off)
+    Game.renderScene();
+    Game.renderer.domElement.toBlob(
+        (b) => b ? resolve(b) : reject(new Error('canvas capture failed')),
+        'image/jpeg', 0.92);
+});
+
+// Top-down orthographic capture for the ortho dataset: a 1718x915 reference
+// image at the bake's pixel density (NEURAL_BAKE_PPU), centred on (cx, cz).
+// Reference mode must already be on. Row 0 = north, exactly like the bake, so
+// a model trained on these sees the same distribution the bake feeds it.
+Game._refCapShotOrtho = (cx, cz, w, h) => {
+    const THREE = Game.THREE;
+    const PPU = Game.NEURAL_BAKE_PPU || 21.6;
+    const W = w || 1718, H = h || 915;
+    const hw = W / PPU / 2, hh = H / PPU / 2;
+    const cam = new THREE.OrthographicCamera(-hw, hw, hh, -hh, 1, 500);
+    cam.position.set(cx, 250, cz);
+    cam.up.set(0, 0, -1);
+    cam.lookAt(cx, 0, cz);
+    cam.updateMatrixWorld();
+    const rt = new THREE.WebGLRenderTarget(W, H, { samples: 4, colorSpace: THREE.SRGBColorSpace });
+    const fog = Game.scene.fog, bg = Game.scene.background;
+    Game.scene.fog = null;
+    Game.scene.background = null;
+    Game.renderer.setRenderTarget(rt);
+    Game.renderer.render(Game.scene, cam);
+    const px = new Uint8Array(W * H * 4);
+    Game.renderer.readRenderTargetPixels(rt, 0, 0, W, H, px);
+    Game.renderer.setRenderTarget(null);
+    Game.scene.fog = fog;
+    Game.scene.background = bg;
+    rt.dispose();
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(W, H);
+    for (let y = 0; y < H; y++) {
+        img.data.set(px.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
+    }
+    ctx.putImageData(img, 0, 0);
+    return new Promise((resolve, reject) => c.toBlob(
+        (b) => b ? resolve(b) : reject(new Error('ortho capture failed')), 'image/jpeg', 0.92));
+};
+
+Game._refCapMetaOrtho = (image, cap, cx, cz) => {
+    const PPU = Game.NEURAL_BAKE_PPU || 21.6;
+    const W = 1718, H = 915;
+    const x0 = cx - W / PPU / 2, z0 = cz - H / PPU / 2;
+    const toPx = (s) => ({
+        wx: +s.x.toFixed(2), wz: +s.z.toFixed(2),
+        ix: Math.round((s.x - x0) * PPU), iy: Math.round((s.z - z0) * PPU),
+    });
+    const inside = (p) => p.ix >= -40 && p.iy >= -40 && p.ix <= W + 40 && p.iy <= H + 40;
+    return {
+        image, map: cap.mapHash, mapIndex: cap.map, ortho: true, ppu: PPU,
+        canvas: { w: W, h: H },
+        bounds: { x0: +x0.toFixed(2), z0: +z0.toFixed(2) },
+        trees: (Game.treeSpots || []).map(toPx).filter(inside),
+        bushes: (Game.shrubSpots || []).map(toPx).filter(inside),
+        damage: (Game.damageSpots || []).map(s => ({ ...toPx(s), shape: s.shape, px: s.px })).filter(inside),
+    };
+};
+
+Game._refCapRegen = async () => {
+    // Free the outgoing map's GPU resources first. Three.js only releases
+    // buffers on explicit dispose, and a long capture run rebuilds the world
+    // hundreds of times — without this the context eventually dies. Disposed
+    // shared assets (tree protos etc.) re-upload on next use.
+    const seen = new Set();
+    const disposeMat = (m) => {
+        if (!m || seen.has(m)) return;
+        seen.add(m);
+        for (const k in m) {
+            const v = m[k];
+            if (v && v.isTexture && !seen.has(v)) { seen.add(v); v.dispose(); }
+        }
+        m.dispose();
+    };
+    Game.terrainGroup.traverse((o) => {
+        if (o.geometry && !seen.has(o.geometry)) { seen.add(o.geometry); o.geometry.dispose(); }
+        if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(disposeMat);
+    });
+    Game._beginMapSeed((Math.random() * 0xffffffff) >>> 0);
+    await Game.loadHeightmap();
+    Game.generateMap();
+    Game.buildTerrainMeshes();
+    Game._endMapSeed();
+    // Walls/fences attach via async loader callbacks, and they are the one
+    // thing that must be in every reference shot — wait until at least one
+    // divider batch registered and the registry has stopped growing (capped,
+    // in case a map genuinely has none).
+    let last = -1;
+    for (let i = 0; i < 25; i++) {
+        await new Promise((r) => setTimeout(r, 300));
+        const kd = Game.foliageKD || [];
+        const hasDividers = kd.some((r) => r.leaves && r.leaves.name && r.leaves.name.startsWith('divider-'));
+        if (hasDividers && kd.length === last) return;
+        last = kd.length;
+    }
+};
+
+// Sidecar metadata for one capture: exact camera, canvas size, and every
+// annotated spot in both world and image coordinates (spots near the view
+// only). The training pipeline can then crop, split by map, and re-render
+// markers or per-pixel label maps at any resolution, instead of recovering
+// 5px dots from a compressed JPEG. Image coords are in JPEG pixels (the
+// canvas drawing buffer, i.e. CSS pixels x dpr).
+Game._refCapMeta = (image, cap) => {
+    const THREE = Game.THREE;
+    const cw = Game.renderer.domElement.width, ch = Game.renderer.domElement.height;
+    const v = new THREE.Vector3();
+    const proj = (x, z) => {
+        v.set(x, (Game.getHeight ? Game.getHeight(x, z) : 0) + 0.3, z).project(Game.camera);
+        if (v.z < -1 || v.z > 1) return null;
+        const sx = (v.x + 1) / 2 * cw, sy = (1 - v.y) / 2 * ch;
+        if (sx < -40 || sy < -40 || sx > cw + 40 || sy > ch + 40) return null;
+        return [Math.round(sx), Math.round(sy)];
+    };
+    const pack = (spots, extra) => {
+        const out = [];
+        for (const s of spots || []) {
+            const p = proj(s.x, s.z);
+            if (!p) continue;
+            const rec = { wx: +s.x.toFixed(2), wz: +s.z.toFixed(2), ix: p[0], iy: p[1] };
+            if (extra) Object.assign(rec, extra(s));
+            out.push(rec);
+        }
+        return out;
+    };
+    return {
+        image,
+        map: cap.mapHash,
+        mapIndex: cap.map,
+        canvas: { w: cw, h: ch, dpr: Game.renderer.getPixelRatio() },
+        camera: {
+            x: +Game.cam.x.toFixed(2), z: +Game.cam.z.toFixed(2),
+            zoom: +Game.cam.zoom.toFixed(2), yawDeg: Game.camYawDeg || 0,
+        },
+        trees: pack(Game.treeSpots),
+        bushes: pack(Game.shrubSpots),
+        damage: pack(Game.damageSpots, (s) => ({ shape: s.shape, px: s.px })),
+        fallen: pack((Game._refFallen ? Game._refFallen.sel : []).map((f) => f.r),
+            (s) => ({ rotY: +s.rotY.toFixed(3) })),
+    };
+};
+
+Game.startRefCapture = async (perMap, total) => {
+    if (Game._refCap) return;
+    const status = document.getElementById('dbgCapStatus');
+    const btn = document.getElementById('dbgCapBtn');
+    const say = (t) => { if (status) status.textContent = t; };
+    if (!window.showDirectoryPicker) {
+        say('needs Chrome/Edge (folder access API)');
+        return;
+    }
+    let dir;
+    try {
+        dir = await window.showDirectoryPicker({ mode: 'readwrite' });
+    } catch (e) {
+        say('no folder picked');
+        return;
+    }
+    perMap = Math.max(1, perMap | 0);
+    total = Math.max(1, total | 0);
+    const raf = () => new Promise((r) => requestAnimationFrame(r));
+    const hex = () => {
+        const a = new Uint8Array(4);
+        crypto.getRandomValues(a);
+        return Array.from(a, (b) => b.toString(16).padStart(2, '0')).join('');
+    };
+    // mapHash groups every image taken on one generated map. Training splits
+    // must go by map, not by image — different shots of the same map are
+    // near-duplicates and leak across train/val otherwise.
+    const ortho = !!document.getElementById('dbgCapOrtho')?.checked;
+    const cap = Game._refCap = { stop: false, saved: 0, map: 1, mapHash: hex() };
+    if (btn) btn.textContent = 'Stop Capture';
+    const wasPaused = Game._paused;
+    Game._paused = true;
+    Game.setReferenceMode(true);
+    try {
+        while (cap.saved < total && !cap.stop) {
+            if (cap.saved > 0 && cap.saved % perMap === 0) {
+                say(`map ${cap.map + 1}: generating...`);
+                Game.setReferenceMode(false);   // restore before teardown so the sweep state stays clean
+                await Game._refCapRegen();
+                Game.setReferenceMode(true);
+                cap.map++;
+                cap.mapHash = hex();
+            }
+            const name = `ref_m${cap.mapHash}_${Date.now()}_${hex()}.jpg`;
+            let blob, meta;
+            if (ortho) {
+                // top-down shot fully inside the map (no off-map white edges)
+                const PPU = Game.NEURAL_BAKE_PPU || 21.6;
+                const hw = 1718 / PPU / 2, hh = 915 / PPU / 2;
+                const ocx = Game.rand(hw, Game.WORLD_W - hw);
+                const ocz = Game.rand(hh, Game.WORLD_H - hh);
+                await raf();   // let the reference sweep settle
+                blob = await Game._refCapShotOrtho(ocx, ocz);
+                meta = Game._refCapMetaOrtho(name, cap, ocx, ocz);
+            } else {
+                Game.cam.x = Game.rand(0, Game.WORLD_W);
+                Game.cam.z = Game.rand(0, Game.WORLD_H);
+                // Fixed camera height for the whole dataset: one consistent ground
+                // scale (the generation prompt assumes a fixed altitude, and marker
+                // sizes are screen-fixed). Default = the game's starting zoom, so
+                // training pairs match what players actually see. Override with
+                // Game.REF_CAP_ZOOM in the console before starting a run.
+                Game.cam.zoom = Game.cam.targetZoom = Game.REF_CAP_ZOOM || 20;
+                await raf(); await raf();   // let updateCamera clamp + place the rig
+                blob = await Game._refCapShot();
+                meta = Game._refCapMeta(name, cap);
+            }
+            const fh = await dir.getFileHandle(name, { create: true });
+            const w = await fh.createWritable();
+            await w.write(blob);
+            await w.close();
+            const mh = await dir.getFileHandle(name.replace(/\.jpg$/, '.json'), { create: true });
+            const mw = await mh.createWritable();
+            await mw.write(new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+            await mw.close();
+            cap.saved++;
+            say(`${cap.saved}/${total} · map ${cap.map}`);
+        }
+        say(cap.stop ? `stopped at ${cap.saved}/${total}` : `done: ${cap.saved} images`);
+    } catch (e) {
+        console.error('reference capture failed:', e);
+        say('error: ' + e.message);
+    }
+    Game._refCap = null;
+    Game._paused = wasPaused;
+    if (btn) btn.textContent = 'Start Capture';
+};
+
+Game.stopRefCapture = () => {
+    if (Game._refCap) Game._refCap.stop = true;
+};
+
+document.getElementById('dbgCapBtn')?.addEventListener('click', () => {
+    if (Game._refCap) { Game.stopRefCapture(); return; }
+    const perMap = parseInt(document.getElementById('dbgCapPerMap')?.value || '20', 10);
+    const total = parseInt(document.getElementById('dbgCapTotal')?.value || '100', 10);
+    Game.startRefCapture(perMap, total);
+});
+
+// ── Dataset stage 2: reference -> realistic, via the local sidecar ──
+// The button talks to scripts/ref-pipeline.mjs on localhost:8742, which holds
+// the OpenAI key (from .env) and does the actual image generation. The key
+// stays out of the browser on purpose: anything the page can read, devtools
+// and extensions can read too. Start the sidecar with:
+//   node scripts/ref-pipeline.mjs
+{
+    const btn = document.getElementById('dbgGenBtn');
+    const status = document.getElementById('dbgGenStatus');
+    const base = 'http://127.0.0.1:8742';
+    const say = (t) => { if (status) status.textContent = t; };
+    const offline = () => say('sidecar not running: node scripts/ref-pipeline.mjs');
+    let timer = null;
+    const poll = async () => {
+        try {
+            const s = await (await fetch(base + '/status')).json();
+            say((s.running ? `generating ${s.done + s.failed + 1}/${s.total}` : `idle, ${s.pending} pending`)
+                + (s.failed ? `, ${s.failed} failed` : '')
+                + (s.dry ? ' (dry)' : ''));
+            if (!s.running && timer) { clearInterval(timer); timer = null; }
+        } catch (e) {
+            offline();
+            if (timer) { clearInterval(timer); timer = null; }
+        }
+    };
+    btn?.addEventListener('click', async () => {
+        try {
+            await fetch(base + '/generate', { method: 'POST' });
+            if (!timer) timer = setInterval(poll, 2000);
+            poll();
+        } catch (e) { offline(); }
+    });
+}
+
+// ── Deterministic map seeds + named map saves ──
+// Map generation is driven by Math.random; seeding it for the generation
+// window means one integer replays the IDENTICAL map — heightmap, tiles,
+// village, ponds, every tree. Saves live in IndexedDB (the baked texture is
+// far too big for localStorage).
+Game._mulberry32 = (seed) => {
+    let s = seed >>> 0;
+    return () => {
+        s = (s + 0x6D2B79F5) | 0;
+        let t = Math.imul(s ^ (s >>> 15), 1 | s);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+};
+Game._beginMapSeed = (seed) => {
+    Game.mapSeed = seed >>> 0;
+    Game._origRandom = Math.random;
+    Math.random = Game._mulberry32(Game.mapSeed);
+};
+Game._endMapSeed = () => {
+    if (Game._origRandom) {
+        Math.random = Game._origRandom;
+        Game._origRandom = null;
+    }
+};
+
+Game._mapDB = () => new Promise((res, rej) => {
+    const rq = indexedDB.open('uf-maps', 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore('maps', { keyPath: 'name' });
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+});
+Game._mapStorePut = async (rec) => {
+    const db = await Game._mapDB();
+    return new Promise((res, rej) => {
+        const tx = db.transaction('maps', 'readwrite');
+        tx.objectStore('maps').put(rec);
+        tx.oncomplete = res;
+        tx.onerror = () => rej(tx.error);
+    });
+};
+Game._mapStoreGet = async (name) => {
+    const db = await Game._mapDB();
+    return new Promise((res, rej) => {
+        const rq = db.transaction('maps').objectStore('maps').get(name);
+        rq.onsuccess = () => res(rq.result);
+        rq.onerror = () => rej(rq.error);
+    });
+};
+Game._mapStoreList = async () => {
+    const db = await Game._mapDB();
+    return new Promise((res, rej) => {
+        const rq = db.transaction('maps').objectStore('maps').getAllKeys();
+        rq.onsuccess = () => res(rq.result || []);
+        rq.onerror = () => rej(rq.error);
+    });
+};
+Game._mapStoreDelete = async (name) => {
+    const db = await Game._mapDB();
+    return new Promise((res, rej) => {
+        const tx = db.transaction('maps', 'readwrite');
+        tx.objectStore('maps').delete(name);
+        tx.oncomplete = res;
+        tx.onerror = () => rej(tx.error);
+    });
+};
+
+// ── Neural live mode: terrain via the trained ControlNet, models stay 3D ──
+// Toggled from the debug panel. Each cycle renders ONE invisible reference-
+// style frame (the conditioning the model was trained on), ships it to the
+// 5090, and puts the generated terrain up as the scene background. The
+// terrain mesh becomes an invisible depth+shadow catcher, so hills still
+// occlude units and shadows still land, while units/trees/buildings render
+// as normal 3D on top. Things the model paints INTO the terrain (water,
+// walls/fences, bushes, ground decor) are hidden to avoid doubling.
+// Start the server on the training box with:
+//   cd ~/uf-train && .venv/bin/python infer_server.py
+// Inference server: players run their own locally (scripts/infer_server.py).
+// A personal override can be set once per browser via:
+//   localStorage.setItem('uf_neural_url', 'http://your-server:8788')
+Game.NEURAL_URL = localStorage.getItem('uf_neural_url') || 'http://127.0.0.1:8788';
+Game.NEURAL_STEPS = 20;   // denoising steps for the live loop (speed vs quality)
+Game.NEURAL_GUIDANCE = 5;  // guidance scale; lower (3-4) tames overtrained checkpoints
+Game.NEURAL_SEED = 7;      // change for a different "take" on the same terrain
+Game.NEURAL_CNSCALE = 1;   // how hard the reference layout steers (try 1.2-1.5 on pretty checkpoints)
+Game.NEURAL_REFINE = 0.3;  // bake second-pass img2img strength (0 = off)
+Game.NEURAL_UPSCALE = 2;   // bake Real-ESRGAN upscale factor (1 = off)
+Game.NEURAL_DETAIL = 0.2;  // hi-res detail pass strength after upscale (0 = off)
+Game.NEURAL_WATER = 0.45;  // water overlay opacity in bake mode (ripples + colour assist)
+Game.NEURAL_STYLE = '';    // optional prompt suffix, e.g. 'lush summer, golden hour'
+Game.NEURAL_PROMPT = '';   // FULL prompt override (empty = built-in trained caption)
+Game.NEURAL_NEG = '';      // FULL negative override (empty = built-in default)
+{
+    const btn = document.getElementById('dbgNeuralBtn');
+    const status = document.getElementById('dbgNeuralStatus');
+    const say = (t) => { if (status) status.textContent = t; };
+    const HIDE_NAMES = new Set(['water-surface', 'river-wash-stones', 'forest-undergrowth-blades']);
+    const HIDE_RE = /^(divider-)/;   // bushes stay real 3D, like trees
+    const N = Game._neural = { on: false, frame: 0, saved: null, ghost: null, mat: null, tex: null };
+
+    const applyDisplay = () => {
+        if (N.saved) return;
+        N.saved = [];
+        for (const o of Game.terrainGroup.children) {
+            if (o.visible && (HIDE_NAMES.has(o.name) || HIDE_RE.test(o.name))) {
+                o.visible = false;
+                N.saved.push(o);
+            }
+        }
+        if (Game.terrainMesh) {
+            N.mat = Game.terrainMesh.material;
+            if (!N.ghost) {
+                N.ghost = new Game.THREE.ShadowMaterial({ opacity: 0.35 });
+                N.ghost.depthWrite = true;
+            }
+            Game.terrainMesh.material = N.ghost;
+        }
+        if (N.tex) Game.scene.background = N.tex;
+    };
+    const restoreDisplay = () => {
+        for (const o of N.saved || []) o.visible = true;
+        N.saved = null;
+        if (Game.terrainMesh && N.mat) { Game.terrainMesh.material = N.mat; N.mat = null; }
+        Game.scene.background = null;
+    };
+    const captureConditioning = () => {
+        // flip to reference visuals, render, snapshot, flip back and repaint —
+        // all in one task, so the compositor never presents the reference frame
+        restoreDisplay();
+        Game._refCleanDamage = true;   // only real battle damage in conditioning
+        Game.setReferenceMode(true);
+        Game.renderScene();
+        const p = new Promise((resolve, reject) => Game.renderer.domElement.toBlob(
+            (b) => b ? resolve(b) : reject(new Error('capture failed')), 'image/jpeg', 0.92));
+        Game.setReferenceMode(false);
+        Game._refCleanDamage = false;
+        applyDisplay();
+        Game.renderScene();
+        return p;
+    };
+
+    const loop = async () => {
+        while (N.on) {
+            try {
+                N.frame++;
+                // the model only knows the training ground scale
+                Game.cam.zoom = Game.cam.targetZoom = Game.REF_CAP_ZOOM || 20;
+                const t0 = performance.now();
+                const blob = await captureConditioning();
+                const res = await fetch(`${Game.NEURAL_URL}/render?mode=full&steps=${Game.NEURAL_STEPS}&guidance=${Game.NEURAL_GUIDANCE}&seed=${Game.NEURAL_SEED}&cnscale=${Game.NEURAL_CNSCALE}&prompt=${encodeURIComponent(Game.NEURAL_PROMPT || '')}&neg=${encodeURIComponent(Game.NEURAL_NEG || '')}`, {
+                    method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob,
+                });
+                if (!res.ok) { say('server error ' + res.status); break; }
+                const infer = +res.headers.get('X-Infer-Ms') || 0;
+                const out = await res.blob();
+                const img = new Image();
+                const url = URL.createObjectURL(out);
+                img.src = url;
+                await img.decode();
+                URL.revokeObjectURL(url);
+                if (!N.on) break;
+                const tex = new Game.THREE.Texture(img);
+                tex.colorSpace = Game.THREE.SRGBColorSpace;
+                tex.needsUpdate = true;
+                const old = N.tex;
+                N.tex = tex;
+                Game.scene.background = tex;
+                if (old) old.dispose();
+                const total = Math.round(performance.now() - t0);
+                say(`live · frame ${N.frame} · gpu ${infer}ms · ${total}ms/frame (${(1000 / total).toFixed(2)} fps)`);
+            } catch (e) {
+                say('failed: ' + e.message + ' (is infer_server.py running on vde?)');
+                break;
+            }
+        }
+        restoreDisplay();
+        if (N.tex) { N.tex.dispose(); N.tex = null; }
+        N.on = false;
+        if (btn) btn.textContent = 'Neural Render';
+    };
+
+    btn?.addEventListener('click', () => {
+        if (N.on) { N.on = false; say('stopping after this frame...'); return; }
+        N.on = true;
+        N.frame = 0;
+        btn.textContent = 'Stop Neural';
+        say('starting...');
+        loop();
+    });
+}
+
+// ── Neural map bake: the whole map through the model ONCE, applied as the
+// terrain texture. Zero runtime lag, camera fully free, units/trees/buildings
+// composite naturally because it IS the terrain material. The map is rendered
+// top-down orthographic in reference style at the training pixel density,
+// generated tile-by-tile on the 5090 (~1-2 min), stitched server-side, and
+// swapped into terrainMesh.material.map. Second click restores the original.
+Game.NEURAL_BAKE_PPU = 21.6;   // px per world unit ~= training pixel density
+{
+    const btn = document.getElementById('dbgBakeBtn');
+    const status = document.getElementById('dbgBakeStatus');
+    const say = (t) => { if (status) status.textContent = t; };
+    const HIDE_NAMES = new Set(['river-wash-stones', 'forest-undergrowth-blades']);
+    const HIDE_RE = /^(divider-)/;   // bushes stay real 3D, like trees
+    // Water in bake mode: the model paints the water COLOUR into the texture,
+    // but paint is dead still. Keep the water plane with a ripple-only
+    // material: near-transparent, so the painted water shows through, with
+    // the animated normal map for subtle moving glints. The baked colour+
+    // alpha map is reused purely as the shoreline mask, and updateWaterFX
+    // keeps scrolling the shared normal texture.
+    const neuralWaterMat = (src) => new Game.THREE.MeshStandardMaterial({
+        map: src.map,
+        normalMap: src.normalMap,
+        normalScale: new Game.THREE.Vector2(0.14, 0.1),
+        transparent: true,
+        depthWrite: false,
+        opacity: Game.NEURAL_WATER ?? 0.45,
+        roughness: 0.12,
+        metalness: 0.05,
+    });
+    const B = Game._neuralBake = { applied: false, busy: false, oldMap: null, hidden: null, tex: null };
+
+    // staged loading overlay ("...generating proceduals...")
+    const showLoading = () => {
+        let ov = document.getElementById('neuralBakeLoading');
+        if (!ov) {
+            ov = document.createElement('div');
+            ov.id = 'neuralBakeLoading';
+            ov.style.cssText = 'position:fixed;inset:0;background:rgba(8,10,12,.9);z-index:5000;'
+                + 'display:flex;align-items:center;justify-content:center;flex-direction:column;gap:18px;';
+            ov.innerHTML = '<div style="width:44px;height:44px;border:3px solid #2c343c;'
+                + 'border-top-color:#d8ba7b;border-radius:50%;animation:nbspin 1s linear infinite"></div>'
+                + '<div id="neuralBakeMsg" style="color:#cfd8df;font:13px monospace;letter-spacing:1px"></div>'
+                + '<style>@keyframes nbspin{to{transform:rotate(360deg)}}</style>';
+            document.body.appendChild(ov);
+        }
+        ov.style.display = 'flex';
+        const msg = document.getElementById('neuralBakeMsg');
+        const t0 = performance.now();
+        const stages = ['Generating procedurals...', 'Loading models...'];
+        let i = 0;
+        msg.textContent = stages[0];
+        const timer = setInterval(() => {
+            i++;
+            msg.textContent = i < stages.length ? stages[i]
+                : `Rendering neural terrain... ${Math.round((performance.now() - t0) / 1000)}s`;
+        }, 900);
+        return () => { clearInterval(timer); ov.style.display = 'none'; };
+    };
+
+    // top-down orthographic reference render of the whole map, row 0 = north
+    const captureMapImage = async () => {
+        const THREE = Game.THREE;
+        const W = Game.WORLD_W, H = Game.WORLD_H;
+        const maxTex = Game.renderer.capabilities.maxTextureSize || 8192;
+        const SW = Math.min(Math.round(W * Game.NEURAL_BAKE_PPU), maxTex, 8192);
+        const SH = Math.min(Math.round(H * Game.NEURAL_BAKE_PPU), maxTex, 8192);
+        const cam = new THREE.OrthographicCamera(-W / 2, W / 2, H / 2, -H / 2, 1, 500);
+        cam.position.set(W / 2, 250, H / 2);
+        cam.up.set(0, 0, -1);
+        cam.lookAt(W / 2, 0, H / 2);
+        cam.updateMatrixWorld();
+        const rt = new THREE.WebGLRenderTarget(SW, SH, { samples: 4, colorSpace: THREE.SRGBColorSpace });
+        const fog = Game.scene.fog;
+        const bg = Game.scene.background;
+        Game.scene.fog = null;
+        Game.scene.background = null;
+        Game._refCleanDamage = true;   // pristine ground: damage only from battle
+        Game.setReferenceMode(true);
+        Game.renderer.setRenderTarget(rt);
+        Game.renderer.render(Game.scene, cam);
+        const px = new Uint8Array(SW * SH * 4);
+        Game.renderer.readRenderTargetPixels(rt, 0, 0, SW, SH, px);
+        Game.renderer.setRenderTarget(null);
+        Game.setReferenceMode(false);
+        Game._refCleanDamage = false;
+        Game.scene.fog = fog;
+        Game.scene.background = bg;
+        rt.dispose();
+        Game.renderScene();
+        // GL rows are bottom-up; texture row 0 must be the north edge
+        const c = document.createElement('canvas');
+        c.width = SW; c.height = SH;
+        const ctx = c.getContext('2d');
+        const img = ctx.createImageData(SW, SH);
+        for (let y = 0; y < SH; y++) {
+            img.data.set(px.subarray((SH - 1 - y) * SW * 4, (SH - y) * SW * 4), y * SW * 4);
+        }
+        ctx.putImageData(img, 0, 0);
+        return new Promise((resolve, reject) => c.toBlob(
+            (b) => b ? resolve(b) : reject(new Error('map capture failed')), 'image/jpeg', 0.92));
+    };
+
+    const restore = () => {
+        if (!B.applied) return;
+        if (Game.terrainMesh && B.oldMap) {
+            Game.terrainMesh.material.map = B.oldMap;
+            Game.terrainMesh.material.needsUpdate = true;
+        }
+        if (B.waterSwap) {
+            B.waterSwap.mesh.material.dispose();   // textures are shared, not disposed
+            B.waterSwap.mesh.material = B.waterSwap.mat;
+            B.waterSwap = null;
+        }
+        for (const o of B.hidden || []) o.visible = true;
+        if (B.tex) B.tex.dispose();
+        B.oldMap = null; B.hidden = null; B.tex = null; B.applied = false;
+        if (btn) btn.textContent = 'Bake Neural Map';
+        say('restored');
+    };
+
+    // apply a full-map texture image (fresh bake or a saved one) to the world
+    const applyBakeImage = (img) => {
+        const THREE = Game.THREE;
+        // canvas-backed so battle-damage patches can be composited later
+        B.canvas = document.createElement('canvas');
+        B.canvas.width = img.width;
+        B.canvas.height = img.height;
+        B.ctx = B.canvas.getContext('2d');
+        B.ctx.drawImage(img, 0, 0);
+        const tex = new THREE.CanvasTexture(B.canvas);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = Game.renderer.capabilities.getMaxAnisotropy();
+        B.oldMap = Game.terrainMesh.material.map;
+        Game.terrainMesh.material.map = tex;
+        Game.terrainMesh.material.needsUpdate = true;
+        B.tex = tex;
+        // hide the things the model painted INTO the texture; water
+        // stays visible but swaps to the subtle ripple-only material
+        B.hidden = [];
+        B.waterSwap = null;
+        for (const o of Game.terrainGroup.children) {
+            if (o.name === 'water-surface' && o.visible) {
+                B.waterSwap = { mesh: o, mat: o.material };
+                o.material = neuralWaterMat(o.material);
+                continue;
+            }
+            if (o.visible && (HIDE_NAMES.has(o.name) || HIDE_RE.test(o.name))) {
+                o.visible = false;
+                B.hidden.push(o);
+            }
+        }
+        B.applied = true;
+        if (btn) btn.textContent = 'Restore Terrain';
+    };
+
+    Game.neuralBakeMap = async () => {
+        if (B.busy) return;
+        if (Game._neural && Game._neural.on) { say('stop live neural mode first'); return; }
+        if (B.applied) { restore(); return; }
+        B.busy = true;
+        const hideLoading = showLoading();
+        try {
+            const t0 = performance.now();
+            const blob = await captureMapImage();
+            say('generating on the 5090...');
+            const res = await fetch(`${Game.NEURAL_URL}/render?mode=bake&steps=${Game.NEURAL_STEPS}&guidance=${Game.NEURAL_GUIDANCE}&seed=${Game.NEURAL_SEED}&cnscale=${Game.NEURAL_CNSCALE}&refine=${Game.NEURAL_REFINE}&upscale=${Game.NEURAL_UPSCALE}&detail=${Game.NEURAL_DETAIL}&style=${encodeURIComponent(Game.NEURAL_STYLE || '')}&prompt=${encodeURIComponent(Game.NEURAL_PROMPT || '')}&neg=${encodeURIComponent(Game.NEURAL_NEG || '')}`, {
+                method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob,
+            });
+            if (!res.ok) throw new Error('server error ' + res.status);
+            const out = await res.blob();
+            const img = new Image();
+            const url = URL.createObjectURL(out);
+            img.src = url;
+            await img.decode();
+            URL.revokeObjectURL(url);
+            applyBakeImage(img);
+            say(`baked in ${Math.round((performance.now() - t0) / 1000)}s`);
+        } catch (e) {
+            say('failed: ' + e.message + ' (is infer_server.py running on vde?)');
+        } finally {
+            hideLoading();
+            B.busy = false;
+        }
+    };
+
+    btn?.addEventListener('click', () => { Game.neuralBakeMap(); });
+
+    // ── Bake View: quick preview — only the camera's area, same pipeline ──
+    // Captures a canonical-frame region (1718x915 at bake density) around the
+    // camera, runs it through generate/refine/upscale/detail with the current
+    // panel settings, and feathers the result into the terrain texture. With
+    // no full bake active it patches a COPY of the original texture and keeps
+    // every 3D object visible: a pure in-context texture preview.
+    const captureRegion = async (cx, cz, W, H) => {
+        // conditioning always wants the ORIGINAL procedural look
+        let neuralMap = null;
+        if (B.applied && Game.terrainMesh && B.oldMap) {
+            neuralMap = Game.terrainMesh.material.map;
+            Game.terrainMesh.material.map = B.oldMap;
+            Game.terrainMesh.material.needsUpdate = true;
+            for (const o of B.hidden || []) o.visible = true;
+            if (B.waterSwap) B.waterSwap.mesh.material = B.waterSwap.mat;
+        }
+        Game._refCleanDamage = true;
+        Game.setReferenceMode(true);
+        const blobP = Game._refCapShotOrtho(cx, cz, W, H);
+        Game.setReferenceMode(false);
+        Game._refCleanDamage = false;
+        if (neuralMap) {
+            Game.terrainMesh.material.map = neuralMap;
+            Game.terrainMesh.material.needsUpdate = true;
+            for (const o of B.hidden || []) o.visible = false;
+            if (B.waterSwap) B.waterSwap.mesh.material = neuralWaterMat(B.waterSwap.mat);
+        }
+        Game.renderScene();
+        return blobP;
+    };
+
+    Game.neuralBakeView = async () => {
+        if (B.busy) { say('busy with another bake'); return; }
+        B.busy = true;
+        const t0 = performance.now();
+        const tick = setInterval(() => say(`baking view... ${Math.round((performance.now() - t0) / 1000)}s`), 1000);
+        try {
+            const THREE = Game.THREE;
+            const PPU = Game.NEURAL_BAKE_PPU || 21.6;
+            const W = 1718, H = 915;
+            const hw = W / PPU / 2, hh = H / PPU / 2;
+            const cx = Game.clamp(Game.cam.x, hw, Game.WORLD_W - hw);
+            const cz = Game.clamp(Game.cam.z, hh, Game.WORLD_H - hh);
+            const blob = await captureRegion(cx, cz, W, H);
+            const res = await fetch(`${Game.NEURAL_URL}/render?mode=full&steps=${Game.NEURAL_STEPS}`
+                + `&guidance=${Game.NEURAL_GUIDANCE}&seed=${Game.NEURAL_SEED}&cnscale=${Game.NEURAL_CNSCALE}`
+                + `&refine=${Game.NEURAL_REFINE}&upscale=${Game.NEURAL_UPSCALE}&detail=${Game.NEURAL_DETAIL}`
+                + `&style=${encodeURIComponent(Game.NEURAL_STYLE || '')}`
+                + `&prompt=${encodeURIComponent(Game.NEURAL_PROMPT || '')}&neg=${encodeURIComponent(Game.NEURAL_NEG || '')}`, {
+                method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob,
+            });
+            if (!res.ok) throw new Error('server error ' + res.status);
+            const img = new Image();
+            const url = URL.createObjectURL(await res.blob());
+            img.src = url;
+            await img.decode();
+            URL.revokeObjectURL(url);
+            if (!B.applied) {
+                // patch a copy of the original texture; 3D stays untouched
+                const cur = Game.terrainMesh.material.map;
+                B.canvas = document.createElement('canvas');
+                B.canvas.width = cur.image.width;
+                B.canvas.height = cur.image.height;
+                B.ctx = B.canvas.getContext('2d');
+                B.ctx.drawImage(cur.image, 0, 0);
+                const tex = new THREE.CanvasTexture(B.canvas);
+                tex.colorSpace = THREE.SRGBColorSpace;
+                tex.anisotropy = Game.renderer.capabilities.getMaxAnisotropy();
+                B.oldMap = cur;
+                Game.terrainMesh.material.map = tex;
+                Game.terrainMesh.material.needsUpdate = true;
+                B.tex = tex;
+                B.hidden = [];
+                B.waterSwap = null;
+                B.applied = true;
+                if (btn) btn.textContent = 'Restore Terrain';
+            }
+            // rectangular feather so the preview melts into its surroundings
+            const pc = document.createElement('canvas');
+            pc.width = img.width;
+            pc.height = img.height;
+            const pctx = pc.getContext('2d');
+            pctx.drawImage(img, 0, 0);
+            pctx.globalCompositeOperation = 'destination-in';
+            const F = Math.max(8, Math.round(img.width * 0.03));
+            const feather = (x0, y0, x1, y1) => {
+                const g = pctx.createLinearGradient(x0, y0, x1, y1);
+                g.addColorStop(0, 'rgba(0,0,0,0)');
+                g.addColorStop(1, 'rgba(0,0,0,1)');
+                pctx.fillStyle = g;
+                pctx.fillRect(0, 0, pc.width, pc.height);
+            };
+            feather(0, 0, F, 0);
+            feather(pc.width, 0, pc.width - F, 0);
+            feather(0, 0, 0, F);
+            feather(0, pc.height, 0, pc.height - F);
+            const scale = B.canvas.width / Game.WORLD_W;
+            B.ctx.drawImage(pc, (cx - hw) * scale, (cz - hh) * scale, hw * 2 * scale, hh * 2 * scale);
+            B.tex.needsUpdate = true;
+            say(`view baked in ${Math.round((performance.now() - t0) / 1000)}s`);
+        } catch (e) {
+            say('failed: ' + e.message);
+        }
+        clearInterval(tick);
+        B.busy = false;
+    };
+
+    document.getElementById('dbgBakeViewBtn')?.addEventListener('click', () => { Game.neuralBakeView(); });
+
+    // ── Named map saves: seed + baked texture + look settings ──
+    const mapList = document.getElementById('dbgMapList');
+    const refreshMapList = async () => {
+        if (!mapList) return;
+        try {
+            const names = await Game._mapStoreList();
+            mapList.innerHTML = '';
+            for (const n of names) {
+                const o = document.createElement('option');
+                o.value = n;
+                o.textContent = n;
+                mapList.appendChild(o);
+            }
+        } catch (e) { /* store unavailable */ }
+    };
+
+    Game.saveCurrentMap = async (name) => {
+        name = (name || '').trim();
+        if (!name) { say('enter a map name first'); return; }
+        const rec = {
+            name,
+            seed: Game.mapSeed >>> 0,
+            when: Date.now(),
+            water: Game.NEURAL_WATER,
+            tints: JSON.parse(JSON.stringify(Game._foliageTint || {})),
+            editor: Game.editorSerialize ? Game.editorSerialize() : null,
+            bake: null,
+        };
+        if (B.applied && B.canvas) {
+            rec.bake = await new Promise((r) => B.canvas.toBlob(r, 'image/jpeg', 0.92));
+        }
+        await Game._mapStorePut(rec);
+        say(`saved "${name}"${rec.bake ? ' (with bake)' : ' (no bake yet)'}`);
+        refreshMapList();
+    };
+
+    Game._applySavedMap = async (rec) => {
+        try {
+            if (rec.water != null) Game.NEURAL_WATER = rec.water;
+            if (rec.tints) {
+                Game._foliageTint = rec.tints;
+                for (const k in rec.tints) Game.applyFoliageTint(k);
+            }
+            if (rec.bake || rec._bakeUrl) {
+                const img = new Image();
+                const url = rec.bake ? URL.createObjectURL(rec.bake) : rec._bakeUrl;
+                img.src = url;
+                await img.decode();
+                if (rec.bake) URL.revokeObjectURL(url);
+                applyBakeImage(img);
+            }
+            say(`loaded map "${rec.name}"`);
+        } catch (e) {
+            say('saved map apply failed: ' + e.message);
+        }
+    };
+
+    document.getElementById('dbgMapSave')?.addEventListener('click', () => {
+        Game.saveCurrentMap(document.getElementById('dbgMapName')?.value);
+    });
+    document.getElementById('dbgMapLoad')?.addEventListener('click', () => {
+        if (!mapList || !mapList.value) { say('no saved map selected'); return; }
+        localStorage.setItem('uf_loadMap', mapList.value);
+        location.reload();
+    });
+    document.getElementById('dbgMapDel')?.addEventListener('click', async () => {
+        if (!mapList || !mapList.value) return;
+        await Game._mapStoreDelete(mapList.value);
+        say('deleted ' + mapList.value);
+        refreshMapList();
+    });
+    // Export the selected save as bundle files (maps/default/ in the repo):
+    // map.json (seed + painted layers, base64) and bake.jpg (the texture)
+    document.getElementById('dbgMapExport')?.addEventListener('click', async () => {
+        if (!mapList || !mapList.value) { say('select a saved map first'); return; }
+        const rec = await Game._mapStoreGet(mapList.value).catch(() => null);
+        if (!rec) { say('could not read save'); return; }
+        const enc = (u8) => {
+            let out = '';
+            const CH = 0x8000;
+            for (let i = 0; i < u8.length; i += CH) {
+                out += String.fromCharCode.apply(null, u8.subarray(i, Math.min(i + CH, u8.length)));
+            }
+            return btoa(out);
+        };
+        const meta = {
+            name: rec.name, seed: rec.seed, when: rec.when,
+            water: rec.water, tints: rec.tints,
+        };
+        if (rec.editor) {
+            meta.editor = { blank: rec.editor.blank, types: rec.editor.types,
+                ovW: rec.editor.ovW, ovH: rec.editor.ovH };
+            if (rec.editor.tiles) meta.editor.tilesB64 = enc(rec.editor.tiles instanceof Uint8Array ? rec.editor.tiles : new Uint8Array(rec.editor.tiles));
+            if (rec.editor.ov) meta.editor.ovB64 = enc(rec.editor.ov instanceof Uint8Array ? rec.editor.ov : new Uint8Array(rec.editor.ov));
+        }
+        if (rec.fluff || (rec.editor && rec.editor.fluff)) {
+            const fl = rec.fluff || rec.editor.fluff;
+            meta.fluff = { cfg: fl.cfg, masksB64: {} };
+            for (const sp in fl.masks || {}) {
+                const m = fl.masks[sp];
+                meta.fluff.masksB64[sp] = enc(m instanceof Uint8Array ? m : new Uint8Array(m));
+            }
+        }
+        const dl = (blob, fname) => {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = fname;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        };
+        dl(new Blob([JSON.stringify(meta)], { type: 'application/json' }), 'map.json');
+        if (rec.bake) dl(rec.bake, 'bake.jpg');
+        say('exported map.json' + (rec.bake ? ' + bake.jpg' : ' (no bake in this save)'));
+    });
+    // fresh procedural map on demand (the bundled map is the default now)
+    document.getElementById('dbgNewProc')?.addEventListener('click', () => {
+        localStorage.setItem('uf_forceProcedural', '1');
+        location.reload();
+    });
+    refreshMapList();
+}
+
+// ── Neural debug controls: settings, prompt suffix, model hot-swap ──
+// The inputs mirror the Game.NEURAL_* knobs (bake/live read those at click
+// time); the model dropdown lists the server's checkpoints and swaps them
+// in place without a restart.
+{
+    const $ = (id) => document.getElementById(id);
+    const bind = (id, key, parse) => {
+        const el = $(id);
+        if (!el) return;
+        el.value = Game[key];
+        el.addEventListener('change', () => {
+            const v = parse ? parse(el.value) : parseFloat(el.value);
+            if (!Number.isNaN(v)) Game[key] = v;
+        });
+    };
+    bind('dbgNeuSteps', 'NEURAL_STEPS', (v) => parseInt(v, 10));
+    bind('dbgNeuGuidance', 'NEURAL_GUIDANCE');
+    bind('dbgNeuCn', 'NEURAL_CNSCALE');
+    bind('dbgNeuSeed', 'NEURAL_SEED', (v) => parseInt(v, 10));
+    bind('dbgNeuRefine', 'NEURAL_REFINE');
+    bind('dbgNeuDetail', 'NEURAL_DETAIL');
+    const up = $('dbgNeuUpscale');
+    if (up) {
+        up.checked = (Game.NEURAL_UPSCALE | 0) === 2;
+        up.addEventListener('change', () => { Game.NEURAL_UPSCALE = up.checked ? 2 : 1; });
+    }
+    const promptEl = $('dbgNeuPrompt');
+    if (promptEl) {
+        promptEl.value = Game.NEURAL_PROMPT || '';
+        promptEl.addEventListener('change', () => { Game.NEURAL_PROMPT = promptEl.value.trim(); });
+    }
+    const negEl = $('dbgNeuNeg');
+    if (negEl) {
+        negEl.value = Game.NEURAL_NEG || '';
+        negEl.addEventListener('change', () => { Game.NEURAL_NEG = negEl.value.trim(); });
+    }
+
+    const urlEl = $('dbgNeuUrl');
+    if (urlEl) {
+        urlEl.value = Game.NEURAL_URL;
+        urlEl.addEventListener('change', () => {
+            const v = urlEl.value.trim().replace(/\/$/, '');
+            if (!v) return;
+            Game.NEURAL_URL = v;
+            localStorage.setItem('uf_neural_url', v);
+            setTimeout(refresh, 100);
+        });
+    }
+    const sel = $('dbgNeuModel');
+    const st = $('dbgNeuModelStatus');
+    const say = (t) => { if (st) st.textContent = t; };
+    const short = (c) => c.replace('runs/', '');
+    const refresh = async () => {
+        try {
+            const r = await (await fetch(Game.NEURAL_URL + '/checkpoints')).json();
+            if (!sel) return;
+            sel.innerHTML = '';
+            for (const c of r.checkpoints) {
+                const o = document.createElement('option');
+                o.value = c;
+                o.textContent = short(c);
+                if (c === r.current) o.selected = true;
+                sel.appendChild(o);
+            }
+            say('serving: ' + short(r.current));
+        } catch (e) {
+            say('inference server offline');
+        }
+    };
+    $('dbgNeuModelLoad')?.addEventListener('click', async () => {
+        if (!sel || !sel.value) return;
+        say('loading ' + short(sel.value) + '...');
+        try {
+            const r = await fetch(Game.NEURAL_URL + '/checkpoint?path=' + encodeURIComponent(sel.value),
+                { method: 'POST' });
+            const j = await r.json();
+            say(j.ok ? 'serving: ' + short(j.current) : 'failed: ' + (j.error || r.status));
+        } catch (e) {
+            say('failed: ' + e.message);
+        }
+    });
+    setTimeout(refresh, 1500);
+
+    // fog of war off: reveal everything, in full light, until re-enabled
+    const fogCb = $('dbgFogOff');
+    fogCb?.addEventListener('change', () => {
+        Game._fogDisabled = fogCb.checked;
+        Game._fogTimer = 0;
+        // the update loop skips while paused (map maker pauses) — apply now
+        if (Game.updateFogOfWar) Game.updateFogOfWar(0.02);
+    });
+}
 
 // Height scale slider
 const dbgHeight = document.getElementById('dbgHeight');
@@ -2095,10 +3335,96 @@ if (dbgFlatShade) {
     });
 }
 
+// ── Foliage colour controls: per-species leaf tint (HSL over originals) ──
+// Leaves are InstancedMeshes with per-instance colours; adjustments rebuild
+// each instance colour from a saved copy of the originals, so sliders are
+// non-destructive and revert cleanly at 0/1/1. Resets on map regeneration.
+Game._foliageTint = {
+    oak: { h: 0, s: 1, l: 1 },
+    pine: { h: 0, s: 1, l: 1 },
+    birch: { h: 0, s: 1, l: 1 },
+    shrub: { h: 0, s: 1, l: 1 },
+};
+Game._foliagePrefix = {
+    oak: 'tree-leaves',
+    pine: 'tree-pine-leaves',
+    birch: 'tree-birch-leaves',
+    shrub: 'hedge-shrub-leaves',
+};
+Game.applyFoliageTint = (sp) => {
+    const t = Game._foliageTint[sp];
+    const pref = Game._foliagePrefix[sp];
+    if (!t || !pref || !Game.terrainGroup) return;
+    const c = new Game.THREE.Color();
+    const hsl = { h: 0, s: 0, l: 0 };
+    for (const o of Game.terrainGroup.children) {
+        if (!o.name || !o.name.startsWith(pref) || !o.instanceColor) continue;
+        if (!o.userData._origColors || o.userData._origColors.length !== o.instanceColor.array.length) {
+            o.userData._origColors = o.instanceColor.array.slice();
+        }
+        const orig = o.userData._origColors;
+        for (let i = 0; i < o.count; i++) {
+            c.setRGB(orig[i * 3], orig[i * 3 + 1], orig[i * 3 + 2]);
+            c.getHSL(hsl);
+            c.setHSL((hsl.h + t.h + 1) % 1,
+                Game.clamp(hsl.s * t.s, 0, 1),
+                Game.clamp(hsl.l * t.l, 0, 1));
+            o.instanceColor.setXYZ(i, c.r, c.g, c.b);
+        }
+        o.instanceColor.needsUpdate = true;
+    }
+};
+{
+    const sel = document.getElementById('dbgFolSpecies');
+    const rows = [
+        ['dbgFolHue', 'dbgFolHueVal', 'h', 2],
+        ['dbgFolSat', 'dbgFolSatVal', 's', 2],
+        ['dbgFolLight', 'dbgFolLightVal', 'l', 2],
+    ];
+    const load = () => {
+        const t = Game._foliageTint[sel.value];
+        for (const [id, vid, key, dp] of rows) {
+            const el = document.getElementById(id);
+            const val = document.getElementById(vid);
+            if (el) el.value = t[key];
+            if (val) val.textContent = (+t[key]).toFixed(dp);
+        }
+    };
+    if (sel) {
+        sel.addEventListener('change', load);
+        for (const [id, vid, key, dp] of rows) {
+            const el = document.getElementById(id);
+            el?.addEventListener('input', () => {
+                const v = parseFloat(el.value);
+                const val = document.getElementById(vid);
+                if (val) val.textContent = v.toFixed(dp);
+                Game._foliageTint[sel.value][key] = v;
+                Game.applyFoliageTint(sel.value);
+            });
+        }
+        load();
+    }
+}
+
 // ── Lighting controls ──
 _dbgSlider('dbgSun', 'dbgSunVal', v => {
     Game._dbgSunBase = v;
     if (Game.sun) Game.sun.intensity = v;
+});
+
+_dbgSlider('dbgShadowDark', 'dbgShadowDarkVal', v => {
+    // shadow.intensity scales how dark ALL cast shadows read (foliage dominates)
+    if (Game.sun && Game.sun.shadow && Game.sun.shadow.intensity !== undefined) {
+        Game.sun.shadow.intensity = v;
+        if (Game.renderer) Game.renderer.shadowMap.needsUpdate = true;
+    }
+});
+
+_dbgSlider('dbgShadowBlur', 'dbgShadowBlurVal', v => {
+    if (Game.sun && Game.sun.shadow) {
+        Game.sun.shadow.radius = v;
+        if (Game.renderer) Game.renderer.shadowMap.needsUpdate = true;
+    }
 });
 
 _dbgSlider('dbgAmbient', 'dbgAmbientVal', v => {
@@ -2381,6 +3707,8 @@ Game.dbgScanTank = () => {
 
 // Populate tanks when debug panel is toggled
 document.addEventListener('keydown', (e) => {
+    const _t = e.target;
+    if (_t && (_t.tagName === 'INPUT' || _t.tagName === 'TEXTAREA' || _t.tagName === 'SELECT' || _t.isContentEditable)) return;
     if (e.key === '`') Game.dbgPopulateTanks();
 });
 
@@ -2445,6 +3773,9 @@ Game.tick = (now) => {
     // Garrison labels + enter affordance (runs while paused so you can read/queue)
     if (Game.updateGarrisonUI) Game.updateGarrisonUI();
     if (Game.updateFoliage) Game.updateFoliage(dt);
+
+    // Reference mode: keep hiding whatever async loaders attach late
+    if (Game._refMode && Game._refEnforceSweep) Game._refEnforceSweep();
 
     // VALOR finishing pass: animate grain + sync haze tint (runs while paused too)
     if (Game.updateValor) Game.updateValor(dt);
@@ -2527,17 +3858,70 @@ Game.boot = async () => {
     // before anything spawns. Falls back to the built-in roster if unavailable.
     if (Game.loadUnitsCSV) await Game.loadUnitsCSV();
 
+    // Named map loads: the debug Load button stores a name and reloads;
+    // replaying that save's seed rebuilds the identical map.
+    let pendingSave = null;
+    const pendingName = localStorage.getItem('uf_loadMap');
+    if (pendingName) {
+        localStorage.removeItem('uf_loadMap');
+        pendingSave = await Game._mapStoreGet(pendingName).catch(() => null);
+    }
+    // Default map: the bundled baked map (maps/default/) unless the player
+    // explicitly asked for a fresh procedural one from the debug panel.
+    const forceProc = localStorage.getItem('uf_forceProcedural');
+    if (forceProc) localStorage.removeItem('uf_forceProcedural');
+    if (!pendingSave && !forceProc) {
+        try {
+            const r = await fetch('maps/default/map.json');
+            if (r.ok) {
+                pendingSave = await r.json();
+                const dec = (b64) => {
+                    const bin = atob(b64);
+                    const u = new Uint8Array(bin.length);
+                    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+                    return u;
+                };
+                if (pendingSave && pendingSave.editor) {
+                    const e = pendingSave.editor;
+                    if (e.tilesB64) e.tiles = dec(e.tilesB64);
+                    if (e.ovB64) e.ov = dec(e.ovB64);
+                }
+                if (pendingSave && pendingSave.fluff && pendingSave.fluff.masksB64) {
+                    const masks = {};
+                    for (const sp in pendingSave.fluff.masksB64) {
+                        masks[sp] = dec(pendingSave.fluff.masksB64[sp]);
+                    }
+                    // fluff rides inside editor so _applyEditorTiles restores it
+                    pendingSave.editor = pendingSave.editor || {};
+                    pendingSave.editor.fluff = { cfg: pendingSave.fluff.cfg, masks };
+                }
+                if (pendingSave) pendingSave._bakeUrl = 'maps/default/bake.jpg';
+            }
+        } catch (e) { /* no bundled map: fall through to procedural */ }
+    }
+    Game._beginMapSeed(pendingSave ? pendingSave.seed : (Math.random() * 0xffffffff) >>> 0);
+
     // Load heightmap from depth image (async)
     await Game.loadHeightmap();
 
-    // Generate tile-based map data
-    Game.generateMap();
+    // Generate tile-based map data (or an editor blank canvas), then lay any
+    // painted tiles from the save over it before the world builds
+    if (pendingSave && pendingSave.editor && pendingSave.editor.blank && Game.generateBlankMap) {
+        Game.generateBlankMap();
+    } else {
+        Game.generateMap();
+    }
+    if (pendingSave && pendingSave.editor && Game._applyEditorTiles) {
+        Game._applyEditorTiles(pendingSave.editor);
+    }
 
     // Build 3D terrain meshes (uses heightmap)
     Game.buildTerrainMeshes();
 
     // Spawn scenario
     Game.spawnScenario();
+    Game._endMapSeed();
+    if (pendingSave && Game._applySavedMap) Game._applySavedMap(pendingSave);
 
 
 

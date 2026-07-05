@@ -31,6 +31,7 @@ Game.TILE_COLORS = {
     house: 0x8a7560,
     water: 0x4a6e74,        // river
     swamp: 0x5a5e44,
+    wash: 0x9b937d,         // river shingle / gravel wash (paint-only, not a tile type)
 };
 
 // Field types eligible for hedgerow borders / treelines.
@@ -194,8 +195,11 @@ Game.generateMap = () => {
     Game.church = null;
     Game.windmill = null;
     Game.river = { tiles: [], minZ: ROWS, maxZ: 0 };
+    Game.ponds = [];
+    Game.pondTiles = [];
     Game.bridgeTiles = [];
     Game._waterRibbonCache = null;
+    Game._waterD = null;   // depth field follows the new water tiles
     Game._terrainPaint = null;   // per-texel paint classification follows the new tiles
 
     for (let y = 0; y < ROWS; y++) {
@@ -206,7 +210,12 @@ Game.generateMap = () => {
     // ── Reserved zones ──
     // Village core (the hamlet around the square / church) and the French
     // deployment staging in the NW are kept free of hedgerow mazes.
-    const VX0 = 33, VX1 = 45, VY0 = 9, VY1 = 21;
+    // The hamlet's anchor wanders map to map (layout + dataset variety); every
+    // village/farmstead/windmill coordinate below hangs off this one offset,
+    // and mission.js shifts the German garrison to match.
+    const vdx = Game.randi(-6, 14), vdy = Game.randi(-4, 16);
+    Game.villageOfs = { dx: vdx, dy: vdy };
+    const VX0 = 33 + vdx, VX1 = 45 + vdx, VY0 = 9 + vdy, VY1 = 21 + vdy;
     const inVillage = (tx, ty) => tx >= VX0 && tx <= VX1 && ty >= VY0 && ty <= VY1;
     const inStaging = (tx, ty) => tx < 15 && ty < 17;
 
@@ -270,8 +279,17 @@ Game.generateMap = () => {
     // ═══════════════════════════════════════════════════
     //  2. RIVER (winds across the south, away from the fight)
     // ═══════════════════════════════════════════════════
+    const riverCz = [];   // channel centre per column, for pond clearance below
     for (let x = 0; x < COLS; x++) {
-        const cz = Math.round(74 + Math.sin(x * 0.11) * 5 + Math.sin(x * 0.41 + 1.3) * 1.6);
+        // Proper meander: primary bends near the classic 10-14x channel-width
+        // wavelength, a slow drift, secondary wiggles and noise so no two bends
+        // repeat. (The old two-sine course read as a near-straight band.)
+        const cz = Math.round(74
+            + Math.sin(x * 0.155) * 5.5
+            + Math.sin(x * 0.052 + 0.7) * 3.5
+            + Math.sin(x * 0.34 + 2.1) * 1.7
+            + (Game._fbm2 ? (Game._fbm2(x * 0.09 + 11.1, 4.2) - 0.5) * 3 : 0));
+        riverCz[x] = cz;
         for (let dz = -1; dz <= 1; dz++) {
             const z = cz + dz;
             if (z >= 0 && z < ROWS) {
@@ -284,16 +302,16 @@ Game.generateMap = () => {
     }
 
     // ═══════════════════════════════════════════════════
-    //  3. ROADS radiating from the village square (~38,15)
+    //  3. ROADS radiating from the village square (base ~38,15 + offset)
     // ═══════════════════════════════════════════════════
-    const SQX = 38, SQY = 15;
+    const SQX = 38 + vdx, SQY = 15 + vdy;
     Game.carveRoadHorizontal(SQY, 2);     // main E-W high street
     Game.carveRoadVertical(SQX, 2);       // main N-S road (crosses the river)
-    Game.carveRoadLine(36, 13, 17, 5, 1); // lane NW toward the French approach
-    Game.carveRoadLine(42, 13, 60, 8, 1); // lane NE toward the windmill
-    Game.carveRoadLine(43, 17, 57, 27, 1);// lane SE toward outlying fields
-    Game.carveRoadLine(35, 18, 21, 29, 1);// lane SW
-    Game.carveRoadLine(43, 16, 50, 21, 1);// short spur to the farmstead
+    Game.carveRoadLine(36 + vdx, 13 + vdy, 17 + vdx, 5 + vdy, 1); // lane NW toward the French approach
+    Game.carveRoadLine(42 + vdx, 13 + vdy, 60 + vdx, 8 + vdy, 1); // lane NE toward the windmill
+    Game.carveRoadLine(43 + vdx, 17 + vdy, 57 + vdx, 27 + vdy, 1);// lane SE toward outlying fields
+    Game.carveRoadLine(35 + vdx, 18 + vdy, 21 + vdx, 29 + vdy, 1);// lane SW
+    Game.carveRoadLine(43 + vdx, 16 + vdy, 50 + vdx, 21 + vdy, 1);// short spur to the farmstead
 
     // Bridge deck: wherever the N-S road crosses the river, keep it as road and
     // record the span so a stone arch bridge can be built over the water.
@@ -317,11 +335,11 @@ Game.generateMap = () => {
     // ═══════════════════════════════════════════════════
     //  4. THE HAMLET — square, church, clustered stone houses
     // ═══════════════════════════════════════════════════
-    Game.setPatch(35, 13, 8, 5, 'yard');  // the open village square ("place")
+    Game.setPatch(35 + vdx, 13 + vdy, 8, 5, 'yard');  // the open village square ("place")
 
     // Church on the north side of the square, spire over the rooftops
-    Game.setPatch(37, 10, 3, 4, 'house');
-    Game.church = { tx: 37, ty: 10, tw: 3, th: 4 };
+    Game.setPatch(37 + vdx, 10 + vdy, 3, 4, 'house');
+    Game.church = { tx: 37 + vdx, ty: 10 + vdy, tw: 3, th: 4 };
 
     // Houses ringing the square + along the high street (jumbled, tight)
     const houseSpots = [
@@ -330,33 +348,95 @@ Game.generateMap = () => {
         [40, 18, 2, 2], [43, 18, 2, 2], [30, 15, 2, 2], [46, 15, 2, 2],
         [35, 19, 2, 2], [39, 11, 2, 2],
     ];
-    houseSpots.forEach(([x, y, w, h]) => { if (!(x === 37 && y === 10)) Game.addBuilding(x, y, w, h); });
+    houseSpots.forEach(([x, y, w, h]) => { if (!(x === 37 && y === 10)) Game.addBuilding(x + vdx, y + vdy, w, h); });
 
     // Low stone garden walls around the square
-    Game.addWall(34, 12, 1, 5);
-    Game.addWall(43, 12, 1, 5);
-    Game.addWall(35, 12, 3, 1);
-    Game.addWall(40, 17, 4, 1);
+    Game.addWall(34 + vdx, 12 + vdy, 1, 5);
+    Game.addWall(43 + vdx, 12 + vdy, 1, 5);
+    Game.addWall(35 + vdx, 12 + vdy, 3, 1);
+    Game.addWall(40 + vdx, 17 + vdy, 4, 1);
 
     // ═══════════════════════════════════════════════════
     //  5. FARMSTEAD with haystacks (east of the village)
     // ═══════════════════════════════════════════════════
-    Game.setPatch(49, 20, 9, 7, 'yard');
-    Game.addBuilding(50, 21, 3, 2);          // long barn
-    Game.addBuilding(54, 21, 2, 3);          // farmhouse
-    Game.addBuilding(50, 25, 2, 2);          // shed
-    Game.addWall(53, 24, 4, 1);
+    Game.setPatch(49 + vdx, 20 + vdy, 9, 7, 'yard');
+    Game.addBuilding(50 + vdx, 21 + vdy, 3, 2);          // long barn
+    Game.addBuilding(54 + vdx, 21 + vdy, 2, 3);          // farmhouse
+    Game.addBuilding(50 + vdx, 25 + vdy, 2, 2);          // shed
+    Game.addWall(53 + vdx, 24 + vdy, 4, 1);
     for (let i = 0; i < 7; i++) {
-        const hx = (51 + Game.rand(0, 4)) * T;
-        const hz = (24 + Game.rand(0, 2)) * T;
+        const hx = (51 + vdx + Game.rand(0, 4)) * T;
+        const hz = (24 + vdy + Game.rand(0, 2)) * T;
         Game.haystacks.push({ x: hx, z: hz, r: Game.rand(1.0, 1.5), h: Game.rand(1.6, 2.3) });
     }
 
     // ═══════════════════════════════════════════════════
     //  6. WINDMILL landmark (open rise NE of the village)
     // ═══════════════════════════════════════════════════
-    Game.setPatch(59, 8, 3, 3, 'yard');
-    Game.windmill = { x: 60.5 * T, z: 9.5 * T };
+    Game.setPatch(59 + vdx, 8 + vdy, 3, 3, 'yard');
+    Game.windmill = { x: (60.5 + vdx) * T, z: (9.5 + vdy) * T };
+
+    // ═══════════════════════════════════════════════════
+    //  6.5 PONDS — still-water mares dug into low fields
+    // ═══════════════════════════════════════════════════
+    // The water surface is one shared sheet at the absolute WATER_LEVEL, so
+    // ponds go on the lowest ground available (candidates ranked by height)
+    // and _applyWaterBedDepth pulls each bowl below the waterline.
+    {
+        const pondClear = (cx, cz, r) => {
+            const R = Math.ceil(r * 1.6) + 2;   // stretched pond + 2-tile buffer
+            if (cx - R < 4 || cx + R > COLS - 5 || cz - R < 4 || cz + R > ROWS - 5) return false;
+            if (Math.abs(cz - riverCz[cx]) < r * 1.3 + 12) return false;   // stay off the river's ribbon
+            for (let y = cz - R; y <= cz + R; y++) {
+                for (let x = cx - R; x <= cx + R; x++) {
+                    if (inVillage(x, y) || inStaging(x, y)) return false;
+                    const t = Game.terrain[y][x];
+                    if (!t || t.type === 'road' || t.type === 'water' || t.type === 'yard'
+                        || t.type === 'house' || t.type === 'wall') return false;
+                }
+            }
+            return true;
+        };
+        const want = Game.randi(1, 3);
+        const cands = [];
+        for (let i = 0; i < 90 && cands.length < want * 6; i++) {
+            const r = Game.rand(2.0, 5.5);   // small mare up to a big field pond
+            const cx = Game.randi(8, COLS - 9), cz = Game.randi(8, ROWS - 9);
+            if (!pondClear(cx, cz, r)) continue;
+            cands.push({ cx, cz, r, h: Game.getHeight((cx + 0.5) * T, (cz + 0.5) * T) });
+        }
+        cands.sort((a, b) => a.h - b.h);   // lowest ground first
+        for (const c of cands) {
+            if (Game.ponds.length >= want) break;
+            if (Game.ponds.some(p => Math.hypot(p.tx - c.cx, p.tz - c.cz) < (p.r + c.r) * 1.3 + 8)) continue;
+            // rough circle, not a perfect one: a random egg/squeeze stretch on
+            // a random axis, on top of the fbm shore wobble below
+            const asp = Game.rand(1.05, 1.55);
+            const th = Game.rand(0, Math.PI);
+            const ct = Math.cos(th), st = Math.sin(th);
+            const sx = Math.sqrt(asp), sy = 1 / Math.sqrt(asp);
+            const R = Math.ceil(c.r * sx) + 1;
+            for (let y = c.cz - R; y <= c.cz + R; y++) {
+                for (let x = c.cx - R; x <= c.cx + R; x++) {
+                    // fbm wobble so the shore meanders instead of stamping an
+                    // outline — low frequency, so it varies in lobes a few
+                    // tiles wide rather than single-tile notches. _pondAt
+                    // samples the SAME fields so the visual waterline agrees.
+                    const wob = Game._fbm2 ? 0.72 + 0.55 * Game._fbm2(x * 0.19 + c.cx * 1.7, y * 0.19 - c.cz * 1.3) : 1;
+                    const dx = x - c.cx, dy = y - c.cz;
+                    const ex = (dx * ct + dy * st) / sx;
+                    const ey = (-dx * st + dy * ct) / sy;
+                    if (Math.hypot(ex, ey) >= c.r * wob) continue;
+                    Game.terrain[y][x] = Game.makeTile('water');
+                    Game.pondTiles.push({ tx: x, ty: y });
+                }
+            }
+            Game.ponds.push({
+                tx: c.cx, tz: c.cz, r: c.r, ct, st, sx, sy,
+                wx: (c.cx + 0.5) * T, wz: (c.cz + 0.5) * T, wr: c.r * T,
+            });
+        }
+    }
 
     // ═══════════════════════════════════════════════════
     //  7. APPLY HEDGEROWS + a few treelined field corners
@@ -371,13 +451,18 @@ Game.generateMap = () => {
     // ═══════════════════════════════════════════════════
     //  8. Battlefield craters (subtle)
     // ═══════════════════════════════════════════════════
-    for (let i = 0; i < 5; i++) {
-        Game.craters.push({
-            x: Game.rand(4, Game.WORLD_W - 4),
-            z: Game.rand(2, 60),
-            r: Game.rand(0.5, 1.2)
-        });
+    // Only during dataset capture: normal games start on pristine ground and
+    // ALL craters come from battle (the neural pipeline re-renders each one).
+    if (Game._refCap) {
+        for (let i = 0; i < 5; i++) {
+            Game.craters.push({
+                x: Game.rand(4, Game.WORLD_W - 4),
+                z: Game.rand(2, 60),
+                r: Game.rand(0.5, 1.2)
+            });
+        }
     }
+    Game.runtimeDamageSpots = [];   // battle damage markers, fed by combat
 
     // Objective = the village square (German defenders hold the hamlet)
     Game.missionState.objectiveX = (SQX + 1) * T;
@@ -578,6 +663,29 @@ Game._waterRibbonProfile = () => {
         c.halfWidth = Math.max(T * 0.65, (c.max - c.min + 1) * T * 0.5);
     });
 
+    // Smooth the per-column centreline and width (2 light passes) so bends
+    // curve instead of notching where the tile path steps a row, and steep
+    // sections don't spike the width.
+    const n = maxTx - minTx + 1;
+    if (n >= 3) {
+        for (let pass = 0; pass < 2; pass++) {
+            const cz = [], hw = [];
+            for (let tx = minTx; tx <= maxTx; tx++) {
+                const c = columns[tx];
+                cz.push(c ? c.cz : null);
+                hw.push(c ? c.halfWidth : null);
+            }
+            for (let k = 0; k < n; k++) {
+                const c = columns[minTx + k];
+                if (!c) continue;
+                const a = cz[k - 1] ?? cz[k], b = cz[k + 1] ?? cz[k];
+                const ha = hw[k - 1] ?? hw[k], hb = hw[k + 1] ?? hw[k];
+                c.cz = cz[k] * 0.5 + (a + b) * 0.25;
+                c.halfWidth = hw[k] * 0.5 + (ha + hb) * 0.25;
+            }
+        }
+    }
+
     Game._waterRibbonCache = { count: tiles.length, columns, minTx, maxTx };
     return Game._waterRibbonCache;
 };
@@ -593,7 +701,7 @@ Game._nearestWaterColumn = (columns, tx, minTx, maxTx) => {
     return null;
 };
 
-Game._waterRibbonAt = (wx, wz) => {
+Game._waterRibbonAt = (wx, wz, reachTiles) => {
     const profile = Game._waterRibbonProfile();
     if (!profile) return null;
     const T = Game.TILE;
@@ -604,12 +712,17 @@ Game._waterRibbonAt = (wx, wz) => {
     const tx0 = Math.floor(clamped);
     const tx1 = Math.min(profile.maxTx, tx0 + 1);
     const f = Game.clamp(clamped - tx0, 0, 1);
+    const fs = f * f * (3 - 2 * f);   // eased: no kink at column boundaries
     const a = Game._nearestWaterColumn(profile.columns, tx0, profile.minTx, profile.maxTx);
     const b = Game._nearestWaterColumn(profile.columns, tx1, profile.minTx, profile.maxTx) || a;
     if (!a || !b) return null;
 
-    const centerZ = Game.lerp(a.cz, b.cz, f);
-    const halfWidth = Game.lerp(a.halfWidth, b.halfWidth, f);
+    const centerZ = Game.lerp(a.cz, b.cz, fs);
+    const halfWidth = Game.lerp(a.halfWidth, b.halfWidth, fs);
+    // The ribbon models the RIVER only — far from the channel any water is a
+    // pond, and those texels belong to the coverage-based fallbacks. Callers
+    // probing the channel itself (wz=0 scans) pass Infinity.
+    if (Math.abs(wz - centerZ) > halfWidth + (reachTiles ?? 8) * T) return null;
     return {
         centerZ,
         halfWidth,
@@ -617,13 +730,53 @@ Game._waterRibbonAt = (wx, wz) => {
     };
 };
 
+// Analytic pond shoreline — the pond counterpart of the river's ribbon mask,
+// so pond banks meander exactly like the riverbank instead of stair-stepping
+// tile by tile. Returns { signed, wr } (world units, signed positive = in the
+// water) for the nearest pond, or null. The rim wobble samples the SAME fbm
+// field as the tile carve in generateMap, so the visual waterline tracks the
+// water tiles the game logic uses.
+Game._pondAt = (wx, wz) => {
+    const ponds = Game.ponds;
+    if (!ponds || !ponds.length) return null;
+    const T = Game.TILE;
+    const u = wx / T - 0.5, v = wz / T - 0.5;
+    let best = null;
+    for (const p of ponds) {
+        const dx = u - p.tx, dz = v - p.tz;   // tile units, like the carve
+        if (Math.hypot(dx, dz) > p.r * 1.7 + 6) continue;   // beyond any influence
+        // same egg/squeeze metric + fbm wobble as the tile carve
+        const ex = (dx * (p.ct ?? 1) + dz * (p.st ?? 0)) / (p.sx ?? 1);
+        const ez = (-dx * (p.st ?? 0) + dz * (p.ct ?? 1)) / (p.sy ?? 1);
+        const wob = Game._fbm2 ? 0.72 + 0.55 * Game._fbm2(u * 0.19 + p.tx * 1.7, v * 0.19 - p.tz * 1.3) : 1;
+        const signed = (p.r * wob - Math.hypot(ex, ez)) * T;
+        if (!best || signed > best.signed) best = { signed, wr: p.wr };
+    }
+    return best;
+};
+
 Game._waterDepth01At = (wx, wz) => {
     const ribbon = Game._waterRibbonAt(wx, wz);
-    if (ribbon) return Game.clamp(ribbon.signed / Math.max(0.001, ribbon.halfWidth * 0.78), 0, 1);
+    if (ribbon) {
+        // cross-channel falloff scaled by the pool/riffle factor, so shallows
+        // stay pale/translucent even mid-stream and pools go dark early
+        const cross = Game.clamp(ribbon.signed / Math.max(0.001, ribbon.halfWidth * 0.78), 0, 1);
+        const pool = Game._waterPool01 ? Game._waterPool01(wx, ribbon.centerZ) : 0.5;
+        return Game.clamp(cross * (0.35 + 1.05 * pool), 0, 1);
+    }
+
+    const pool = Game._waterPool01 ? Game._waterPool01(wx, wz) : 0.5;
+    const pond = Game._pondAt ? Game._pondAt(wx, wz) : null;
+    if (pond) {
+        // bowl profile with pool/riffle noise: depth varies across the pond
+        const d = Game.clamp(pond.signed / Math.max(0.001, pond.wr * 0.6), 0, 1);
+        return Game.clamp(d * (0.45 + 0.9 * pool), 0, 1);
+    }
 
     const threshold = Game.WATER_SHORE_THRESHOLD ?? 0.24;
     const coverage = Game._waterCoverage ? Game._waterCoverage(wx, wz) : 1;
-    return Game.clamp((coverage - threshold) / Math.max(0.001, 1 - threshold), 0, 1);
+    const d = Game.clamp((coverage - threshold) / Math.max(0.001, 1 - threshold), 0, 1);
+    return Game.clamp(d * (0.45 + 0.9 * pool), 0, 1);
 };
 
 Game._waterEdgeAlphaAt = (wx, wz) => {
@@ -638,6 +791,16 @@ Game._waterEdgeAlphaAt = (wx, wz) => {
         return Game.clamp(Game._waterSmoothstep(-overflow, shoreSoft, signed), 0, 1);
     }
 
+    const pond = Game._pondAt ? Game._pondAt(wx, wz) : null;
+    if (pond) {
+        // same jittered-signed-distance treatment as the riverbank, so pond
+        // waterlines meander identically instead of stepping tile to tile
+        const pj = Game._waterSignedJittered(wx, wz, pond);
+        if (pj < -overflow) return 0;
+        const shoreSoft = Math.max(0.05, Game._waterShoreSoftness() * Game.TILE);
+        return Game.clamp(Game._waterSmoothstep(-overflow, shoreSoft, pj), 0, 1);
+    }
+
     const signed = Game._waterSignedDistance(wx, wz);
     if (signed < -overflow) return 0;
 
@@ -649,6 +812,35 @@ Game._waterEdgeAlphaAt = (wx, wz) => {
     const coverageFade = Game._waterSmoothstep(threshold - softness, threshold + softness, coverage);
     const overflowFade = signed >= 0 ? 1 : Game._waterSmoothstep(-overflow, 0, signed);
     return Game.clamp(coverageFade * overflowFade, 0, 1);
+};
+
+// Along-river pool/riffle factor: 0 = gravelly shallow riffle, 1 = deep pool.
+// Sampled at (wx, centerZ) so one value holds across the whole channel section.
+Game._waterPool01 = (wx, centerZ) => {
+    if (!Game._fbm2) return 0.5;
+    return Game.clamp((Game._fbm2(wx * 0.016 + 3.7, centerZ * 0.016 - 8.9) - 0.2) / 0.6, 0, 1);
+};
+
+// The shoreline's jittered signed distance — the ONE formula shared by the bed
+// carve, the bank paint and the surface mask, so every layer agrees where the
+// waterline meanders (positive = in the water).
+Game._waterSignedJittered = (wx, wz, rib) => {
+    const jitAmp = (Game.WATER_SHORE_JITTER || 0.25) * Game.TILE * 2;
+    const j = Game._fbm2 ? (Game._fbm2(wx * 0.055 + 19.3, wz * 0.055 - 7.1) - 0.5) : 0;
+    return rib.signed + j * jitAmp;
+};
+
+// Gravel-wash mask (0..1): shingle bars straddling the waterline — too high
+// for water, too stony for grass. Concentrated on riffle stretches (point
+// bars); occasional patches reach further up the bank (storm wash).
+Game._waterWashAt = (wx, wz, rib, signed) => {
+    const T = Game.TILE;
+    if (signed > T * 0.22 || signed < -T * 1.9 || !Game._fbm2) return 0;
+    const washN = Game._fbm2(wx * 0.03 + 91.2, wz * 0.03 + 37.8);
+    const pool = Game._waterPool01(wx, rib.centerZ);
+    const far = Game.clamp((-signed - T * 0.9) / T, 0, 1);   // rarer high up the bank
+    const thr = 0.62 - (1 - pool) * 0.16 + far * 0.16;
+    return washN > thr ? Game.clamp((washN - thr) / 0.08, 0, 1) : 0;
 };
 
 Game._captureWaterBedBaseHeightmap = () => {
@@ -694,10 +886,12 @@ Game._applyWaterBedDepth = () => {
     Game._waterBedApplied = false;
     if (!Game._waterD) Game._computeWaterDepthField();
 
-    const maxSink = Math.max(0, Game.WATER_BED_DEPTH ?? 0.9);
-    const edgeSink = Math.max(0, Game.WATER_BED_EDGE ?? 0.22);
+    const T = Game.TILE;
+    const WL = Game.WATER_LEVEL ?? 0.55;
+    const maxSink = Math.max(0, Game.WATER_BED_DEPTH ?? 0.55);   // pool depth below the waterline
+    const edgeSink = Math.max(0, Game.WATER_BED_EDGE ?? 0.18);   // depth right at the shore
     const slope = Game.clamp(Game.WATER_BED_SLOPE ?? 1.15, 0.2, 4);
-    const variation = Game.clamp(Game.WATER_BED_VARIATION ?? 0.22, 0, 1);
+    const floodW = Math.max(0.5, Game.WATER_FLOOD_TILES ?? 2.6) * T;
     if (maxSink <= 0 && edgeSink <= 0) return;
 
     const W = Game.heightW, H = Game.heightH;
@@ -706,15 +900,82 @@ Game._applyWaterBedDepth = () => {
         const wz = (py / Math.max(1, H - 1)) * Game.WORLD_H;
         for (let px = 0; px < W; px++) {
             const wx = (px / Math.max(1, W - 1)) * Game.WORLD_W;
-            const edge = Game._waterEdgeAlphaAt ? Game._waterEdgeAlphaAt(wx, wz) : 0;
-            if (edge <= 0.001) continue;
-
-            const depth = Game._waterDepth01At ? Game._waterDepth01At(wx, wz) : edge;
-            const depthCurve = Math.pow(Game.clamp(depth, 0, 1), slope);
-            const noise = Game._fbm2 ? Game._fbm2(wx * 0.045 + 41.7, wz * 0.045 - 13.2) : 0.5;
-            const varied = 1 + (noise - 0.5) * 2 * variation;
-            const sink = edge * (edgeSink + maxSink * depthCurve * varied);
-            Game.heightData[py * W + px] = base[py * W + px] - sink / HS;
+            const i = py * W + px;
+            const rib = Game._waterRibbonAt ? Game._waterRibbonAt(wx, wz) : null;
+            if (!rib) {
+                // No ribbon here: pond water. The shared surface plane sits at
+                // the absolute WATER_LEVEL, so the bowl must be carved below it
+                // (a relative sink would leave high-ground beds poking out) and
+                // the meadow ramps down to a low rim, like the floodplain.
+                // Same jittered signed distance as the waterline/bank paint, so
+                // all pond layers agree where the shore meanders.
+                const pond = Game._pondAt ? Game._pondAt(wx, wz) : null;
+                if (pond) {
+                    const signed = Game._waterSignedJittered(wx, wz, pond);
+                    const rampW = floodW * 1.7;
+                    if (signed <= -rampW) continue;
+                    const tt = Game.getTile((wx / T) | 0, (wz / T) | 0);
+                    if (tt && (tt.type === 'yard' || tt.type === 'house' || tt.type === 'wall')) continue;
+                    const baseH = base[i] * HS;
+                    const rim = WL + 0.16;
+                    let target;
+                    if (signed >= 0) {
+                        const depth = Game.clamp(signed / Math.max(0.001, pond.wr * 0.6), 0, 1);
+                        target = WL - (edgeSink + maxSink * Math.pow(depth, slope));
+                    } else {
+                        // approach ramp: ease the field down toward the rim
+                        target = Game.lerp(rim, baseH, Math.pow(Game.clamp(-signed / rampW, 0, 1), 1.4));
+                    }
+                    if (target < baseH) Game.heightData[i] = target / HS;
+                    continue;
+                }
+                // hand-painted water (map maker) or a degenerate river:
+                // same absolute below-waterline bowl as ponds, keyed off the
+                // tile-based shore mask
+                const edge = Game._waterEdgeAlphaAt ? Game._waterEdgeAlphaAt(wx, wz) : 0;
+                if (edge <= 0.001) continue;
+                const tt2 = Game.getTile((wx / T) | 0, (wz / T) | 0);
+                if (tt2 && (tt2.type === 'yard' || tt2.type === 'house' || tt2.type === 'wall')) continue;
+                const baseH2 = base[i] * HS;
+                const depth = Game._waterDepth01At ? Game._waterDepth01At(wx, wz) : edge;
+                const sink2 = edgeSink + maxSink * Math.pow(depth, slope);
+                const target2 = Game.lerp(WL + 0.16, WL - sink2, Game._waterSmoothstep(0.02, 0.85, edge));
+                if (target2 < baseH2) Game.heightData[i] = target2 / HS;
+                continue;
+            }
+            const signed = Game._waterSignedJittered(wx, wz, rib);
+            if (signed <= -floodW * 1.5) continue;
+            const baseH = base[i] * HS;
+            if (signed >= 0) {
+                // channel bed: ABSOLUTE depth below the waterline (the old
+                // base-relative sink left the bed poking above the surface in
+                // places), varied along the river — riffles shallow, pools deep
+                const pool = Game._waterPool01(wx, rib.centerZ);
+                const cross = Math.pow(Game.clamp(signed / Math.max(0.001, rib.halfWidth * 0.85), 0, 1), slope);
+                const depth = edgeSink + maxSink * cross * (0.3 + 1.1 * pool);
+                Game.heightData[i] = Math.min(baseH, WL - depth) / HS;
+            } else {
+                // floodplain: the meadow eases down to a low lip just above the
+                // water instead of a trench wall; a noise-picked minority of
+                // banks stays high (undercut banks). Structures keep their pad.
+                const tt = Game.getTile((wx / T) | 0, (wz / T) | 0);
+                if (tt && (tt.type === 'yard' || tt.type === 'house' || tt.type === 'wall')) continue;
+                // slope steepness wanders: short steep cut banks alternate
+                // with long gentle ramps
+                const fw = floodW * (0.55 + 0.95 * Game._fbm2(wx * 0.031 + 41.5, wz * 0.031 + 9.2));
+                if (signed <= -fw) continue;
+                const lipN = Game._fbm2 ? Game._fbm2(wx * 0.021 + 77.7, wz * 0.021 - 31.4) : 0.5;
+                const lipF = Game._fbm2 ? Game._fbm2(wx * 0.085 - 3.1, wz * 0.085 + 27.6) : 0.5;
+                const lip = Math.max(0.06, 0.1 + lipN * lipN * 0.85 + (lipF - 0.5) * 0.3);
+                const t = Math.pow(Game.clamp(-signed / fw, 0, 1), 1.5);
+                let target = Game.lerp(WL + lip, baseH, t);
+                // hummocks: low mounds and hollows mid-slope so the floodplain
+                // isn't one uniform ramp (envelope is zero at both ends, so the
+                // waterline lip and the field join stay put)
+                const hum = Game._fbm2(wx * 0.062 + 15.9, wz * 0.062 - 58.4) - 0.45;
+                target += hum * 1.1 * (t * (1 - t) * 4);
+                if (target < baseH) Game.heightData[i] = target / HS;
+            }
         }
     }
     Game._waterBedApplied = true;
@@ -760,14 +1021,19 @@ Game._makeWaterNormalTex = () => {
 
 Game._buildWaterSurface = () => {
     Game._waterFX = null;
-    if (!Game.river || !Game.river.tiles.length || !Game._waterEdgeAlphaAt) return;
+    // scan the tile map so hand-painted water (map maker) gets a surface too
+    if (!Game._waterEdgeAlphaAt) return;
     const T = Game.TILE;
     const pad = 2 * T;
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-    Game.river.tiles.forEach(({ tx, ty }) => {
-        minX = Math.min(minX, tx * T); maxX = Math.max(maxX, (tx + 1) * T);
-        minZ = Math.min(minZ, ty * T); maxZ = Math.max(maxZ, (ty + 1) * T);
-    });
+    for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
+        for (let tx = 0; tx < Game.MAP_COLS; tx++) {
+            if (!Game._isWaterSurfaceTile(tx, ty)) continue;
+            minX = Math.min(minX, tx * T); maxX = Math.max(maxX, (tx + 1) * T);
+            minZ = Math.min(minZ, ty * T); maxZ = Math.max(maxZ, (ty + 1) * T);
+        }
+    }
+    if (!Number.isFinite(minX)) return;
     minX = Math.max(0, minX - pad); maxX = Math.min(Game.WORLD_W, maxX + pad);
     minZ = Math.max(0, minZ - pad); maxZ = Math.min(Game.WORLD_H, maxZ + pad);
     const w = maxX - minX, hSpan = maxZ - minZ;
@@ -782,7 +1048,8 @@ Game._buildWaterSurface = () => {
     const ctx = c.getContext('2d');
     const img = ctx.createImageData(CW, CH);
     const d = img.data;
-    const shallow = [92, 122, 116], deep = [24, 52, 66];
+    const shallow = [88, 126, 108], deep = [22, 50, 64];
+    const foamC = [178, 192, 182];
     for (let y = 0; y < CH; y++) {
         const wz = minZ + (y + 0.5) / CH * hSpan;
         for (let x = 0; x < CW; x++) {
@@ -791,10 +1058,17 @@ Game._buildWaterSurface = () => {
             const i = (y * CW + x) * 4;
             if (a <= 0.003) { d[i + 3] = 0; continue; }
             const depth = Game._waterDepth01At ? Game._waterDepth01At(wx, wz) : a;
-            d[i] = shallow[0] + (deep[0] - shallow[0]) * depth;
-            d[i + 1] = shallow[1] + (deep[1] - shallow[1]) * depth;
-            d[i + 2] = shallow[2] + (deep[2] - shallow[2]) * depth;
-            d[i + 3] = Math.round(a * (150 + 70 * depth));   // shallow edges show the bed
+            let r = shallow[0] + (deep[0] - shallow[0]) * depth;
+            let g = shallow[1] + (deep[1] - shallow[1]) * depth;
+            let b = shallow[2] + (deep[2] - shallow[2]) * depth;
+            // faint waterline lap: a light fringe where the surface thins out
+            const foam = Math.max(0, 1 - depth * 3.5) * Math.max(0, 1 - Math.abs(a - 0.45) * 2.6) * 0.5;
+            r += (foamC[0] - r) * foam;
+            g += (foamC[1] - g) * foam;
+            b += (foamC[2] - b) * foam;
+            d[i] = r; d[i + 1] = g; d[i + 2] = b;
+            // riffles nearly see-through (gravel bed shows), pools near-opaque
+            d[i + 3] = Math.round(a * (108 + 106 * depth));
         }
     }
     ctx.putImageData(img, 0, 0);
@@ -836,6 +1110,57 @@ Game.updateWaterFX = (dt) => {
         0.45 + 0.12 * Math.sin(fx.t * 0.9),
         0.32 + 0.09 * Math.sin(fx.t * 1.3 + 1.0)
     );
+};
+
+// Scattered cobbles on the gravel-wash bars (instanced, purely visual). Uses
+// the same wash mask as the paint, so the stones sit on the shingle patches.
+Game._addRiverWashStones = () => {
+    const THREE = Game.THREE;
+    const prof = Game._waterRibbonProfile && Game._waterRibbonProfile();
+    if (!prof || !Game._waterWashAt) return;
+    const T = Game.TILE;
+    const pts = [];
+    for (let txf = prof.minTx; txf <= prof.maxTx && pts.length < 420; txf += 0.34) {
+        const wx = (txf + 0.5) * T;
+        const rib = Game._waterRibbonAt(wx, 0, Infinity);   // wz only matters for .signed
+        if (!rib) continue;
+        for (let k = 0; k < 6; k++) {
+            const wz = rib.centerZ + Game.rand(-(rib.halfWidth + 2.2 * T), rib.halfWidth + 2.2 * T);
+            // rib.signed was measured at the probe wz — redo it for this sample
+            const at = { signed: rib.halfWidth - Math.abs(wz - rib.centerZ) };
+            const signed = Game._waterSignedJittered(wx, wz, at);
+            const wash = Game._waterWashAt(wx, wz, rib, signed);
+            if (wash <= 0 || Math.random() > wash * 0.55) continue;
+            pts.push({ x: wx + Game.rand(-0.5, 0.5), z: wz });
+        }
+    }
+    if (!pts.length) return;
+    const geo = new THREE.DodecahedronGeometry(1, 0);
+    const mat = new THREE.MeshStandardMaterial({
+        map: Game._makeDarkStoneTexture ? Game._makeDarkStoneTexture() : null,
+        roughness: 0.95, metalness: 0.0,
+    });
+    const inst = new THREE.InstancedMesh(geo, mat, pts.length);
+    inst.name = 'river-wash-stones';
+    inst.castShadow = true;
+    inst.receiveShadow = true;
+    const dummy = new THREE.Object3D();
+    const icol = new THREE.Color();
+    pts.forEach((p, i) => {
+        const s = Game.rand(0.08, 0.26);
+        dummy.position.set(p.x, Game.getHeight(p.x, p.z) + s * 0.3, p.z);
+        dummy.rotation.set(Game.rand(0, Math.PI), Game.rand(0, Math.PI), Game.rand(0, Math.PI));
+        dummy.scale.set(s, s * 0.65, s);
+        dummy.updateMatrix();
+        inst.setMatrixAt(i, dummy.matrix);
+        icol.setScalar(Game.rand(1.05, 1.6));   // river shingle reads paler than fieldstone
+        inst.setColorAt(i, icol);
+    });
+    inst.instanceMatrix.needsUpdate = true;
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+    inst.computeBoundingSphere();
+    inst.raycast = () => {};   // purely visual — never blocks picking
+    Game.terrainGroup.add(inst);
 };
 
 /**
@@ -951,6 +1276,26 @@ Game.loadHeightmap = () => {
     const range = Math.max(0.0001, max - min);
     for (let i = 0; i < w * h; i++) {
         Game.heightData[i] = (Game.heightData[i] - min) / range;
+    }
+
+    // Mid-scale rolling swell: the heavy smoothing above leaves little more
+    // than one map-wide gradient, so whole stretches read dead flat. Layer a
+    // gentle fbm undulation (wavelengths roughly 10-25 tiles) over it — subtle
+    // rolling farmland, not hills. Roads/buildings are re-flattened later in
+    // shapeHeightmap, and the river bed is carved to absolute depth, so
+    // neither is disturbed.
+    if (Game._fbm2) {
+        const amp = Game.TERRAIN_SWELL_AMP != null ? Game.TERRAIN_SWELL_AMP : 0.11;
+        for (let py = 0; py < h; py++) {
+            const wz = py / h * Game.WORLD_H;
+            for (let px = 0; px < w; px++) {
+                const wx = px / w * Game.WORLD_W;
+                const n = (Game._fbm2(wx * 0.013 + 3.3, wz * 0.013 - 6.6)
+                    + 0.55 * Game._fbm2(wx * 0.031 - 14.2, wz * 0.031 + 8.4)) / 1.55;
+                const i = py * w + px;
+                Game.heightData[i] = Game.clamp(Game.heightData[i] + (n - 0.5) * amp * 2, 0, 1);
+            }
+        }
     }
 
     // Localized ditches/hills over ~30% of the map (the rest stays flat), placed on
@@ -1423,12 +1768,28 @@ Game._getTerrainPaint = () => {
         rivY1 = Math.min(H, (Game.river.maxZ + 5) * px);
     }
     const mudIdx = typeIndexOf['mud'];
-    const bankW = TT * 0.55;   // muddy bank strip beyond the waterline
+    const washIdx = idxFor('wash');   // paint-only: gravel shingle straddling the waterline
+    const grassIdx = idxFor('grass');
+    // row crops stop short of the bank — a riparian meadow strip runs along the
+    // river (ploughing to the waterline loses the crop to every flood)
+    const CROP_ROW = new Set(['wheat', 'stubble', 'plowed', 'vineyard', 'garden'].map(n => typeIndexOf[n]).filter(v => v !== undefined));
+    Game._edOvMap = (Game.EDITOR_TYPES || []).map(t => typeIndexOf[t] ?? typeIndexOf.grass ?? 0);
+    const bankW = TT * 0.55;   // muddy bank strip beyond the waterline (mean width, wanders)
     const jitAmp = (Game.WATER_SHORE_JITTER || 0.25) * TT * 2;
     for (let y = 0; y < H; y++) {
         const inBand = y >= rivY0 && y < rivY1;
         for (let x = 0; x < W; x++) {
             const i = y * W + x;
+            // Map maker freeform brush: texel-resolution override wins over
+            // tile classification (255 = untouched)
+            if (Game._terrainPaintOverride && Game._terrainPaintOverride[i] !== 255 && Game._edOvMap) {
+                let otx = ((x + 0.5) / px) | 0, oty = ((y + 0.5) / px) | 0;
+                if (otx >= COLS) otx = COLS - 1;
+                if (oty >= ROWS) oty = ROWS - 1;
+                typeIdx[i] = Game._edOvMap[Game._terrainPaintOverride[i]];
+                regionIdx[i] = regionTile[oty * COLS + otx];
+                continue;
+            }
             let tx = ((x + 0.5) / px + lat(latU, x, y)) | 0;
             let ty = ((y + 0.5) / px + lat(latV, x, y)) | 0;
             if (tx < 0) tx = 0; else if (tx >= COLS) tx = COLS - 1;
@@ -1441,13 +1802,22 @@ Game._getTerrainPaint = () => {
                     // same jitter as _waterEdgeAlphaAt so bed, bank and surface agree
                     const signed = rib.signed
                         + (Game._fbm2(wx * 0.055 + 19.3, wz * 0.055 - 7.1) - 0.5) * jitAmp;
-                    if (signed > -bankW) {
-                        // inside the meandering bed/bank: always mud
-                        const czTy = Game.clamp((rib.centerZ / TT) | 0, 0, ROWS - 1);
-                        const cI = czTy * COLS + tx;
-                        typeIdx[i] = mudIdx;
-                        regionIdx[i] = regionTile[isWater[cI] ? cI : tI];
-                        continue;
+                    // bank width wanders; gravel-wash bars replace mud in patches
+                    const bankWv = bankW * (0.55 + 1.1 * Game._fbm2(wx * 0.024 - 55.1, wz * 0.024 + 12.9));
+                    const wash = Game._waterWashAt ? Game._waterWashAt(wx, wz, rib, signed) : 0;
+                    if (wash > 0 || signed > -bankWv) {
+                        // dither the outer edge into the field so the bank
+                        // feathers out instead of ending on a hard painted line
+                        const edge01 = Game.clamp((signed + bankWv) / (bankWv * 0.5), 0, 1);
+                        if (wash > 0 || edge01 >= 1 || Game._hash2(x * 1.31 + 7.7, y * 2.17 - 3.3) < edge01) {
+                            // inside the meandering bed/bank: mud, or shingle where washed
+                            const czTy = Game.clamp((rib.centerZ / TT) | 0, 0, ROWS - 1);
+                            const cI = czTy * COLS + tx;
+                            typeIdx[i] = (wash > 0 && signed < TT * 0.18) ? washIdx : mudIdx;
+                            regionIdx[i] = regionTile[isWater[cI] ? cI : tI];
+                            continue;
+                        }
+                        // dithered out: falls through as field (grass strip below)
                     }
                     if (isWater[tI]) {
                         // water tile beyond the smooth bank: hand the texel to
@@ -1458,6 +1828,20 @@ Game._getTerrainPaint = () => {
                             if (nty < 0 || nty >= ROWS) break;
                             const nI = nty * COLS + tx;
                             if (!isWater[nI]) { tI = nI; break; }
+                        }
+                    }
+                    // riparian meadow: row crops give way to grass on the
+                    // floodplain strip. Width pinches and bulges (pow-skewed
+                    // noise) and the outer edge dithers into the crop rows so
+                    // the strip doesn't read as a uniform green ribbon.
+                    const greenN = Game._fbm2(wx * 0.055 + 5.5, wz * 0.055 - 44.2);
+                    const greenW = TT * (0.8 + 2.6 * Math.pow(greenN, 1.6));
+                    if (signed > -greenW && CROP_ROW.has(tileT[tI])) {
+                        const g01 = Game.clamp((signed + greenW) / (TT * 0.9), 0, 1);
+                        if (g01 >= 1 || Game._hash2(x * 1.71 - 4.9, y * 1.13 + 8.8) < g01) {
+                            typeIdx[i] = grassIdx;
+                            regionIdx[i] = regionTile[tI];
+                            continue;
                         }
                     }
                 }
@@ -1494,6 +1878,7 @@ Game.buildTerrainTexture = () => {
     const px = Game.TERRAIN_TEXELS_PER_TILE || 20;
     const W = Game.MAP_COLS * px;
     const H = Game.MAP_ROWS * px;
+    Game._terrainPaintDims = { W, H, px };
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
@@ -1543,6 +1928,7 @@ Game.buildTerrainTexture = () => {
         const rowAmp = names.map(n => AMP[n] || 0);
         const woods = names.map(n => n === 'forest' || n === 'dense_forest');
         const flat = names.map(n => n === 'yard');
+        const washT = names.map(n => n === 'wash');
         const TAU = Math.PI * 2;
         for (let y = 0; y < H; y++) {
             for (let x = 0; x < W; x++) {
@@ -1562,6 +1948,9 @@ Game.buildTerrainTexture = () => {
                 } else if (woods[ti]) {
                     // clumpy canopy mottling instead of random squares
                     f *= 1 - 0.26 * Math.max(0, paint.hi(x, y) - 0.45) * (1 / 0.55);
+                } else if (washT[ti]) {
+                    // coarse two-tone shingle contrast on gravel-wash bars
+                    f *= 0.8 + 0.45 * paint.hi(x, y);
                 }
                 r *= f; g *= f; b *= f;
                 const o = i * 4;
@@ -1578,7 +1967,9 @@ Game.buildTerrainTexture = () => {
         //    Game.TERRAIN_SEAM_DEPTH.
         const seamA = Game.TERRAIN_SEAM_DEPTH != null ? Game.TERRAIN_SEAM_DEPTH : 0.22;
         if (seamA > 0.001) {
-            const skip = names.map(n => n === 'yard');   // no hard outline around the village square
+            // no hard outline around the village square, and none along the
+            // river bank (the mud/wash band feathers into the fields instead)
+            const skip = names.map(n => n === 'yard' || n === 'mud' || n === 'wash');
             const darken = (o, a) => {
                 d0[o] += (28 - d0[o]) * a;
                 d0[o + 1] += (22 - d0[o + 1]) * a;
@@ -1606,6 +1997,23 @@ Game.buildTerrainTexture = () => {
             }
         }
         ctx.putImageData(img0, 0, 0);
+
+        // 2.5 Pebble speckle on the gravel-wash bars: light/dark shingle dots so
+        //     the bars read stony at close zoom, not just a pale strip.
+        const washI = names.indexOf('wash');
+        if (washI >= 0) {
+            const pebbles = ['#b7ae95', '#8d8672', '#635c4d', '#a29a83'];
+            for (let y = 0; y < H; y += 2) {
+                for (let x = 0; x < W; x += 2) {
+                    if (paint.typeIdx[y * W + x] !== washI || Math.random() > 0.16) continue;
+                    ctx.fillStyle = pebbles[Game.randi(0, pebbles.length - 1)];
+                    ctx.globalAlpha = Game.rand(0.35, 0.8);
+                    const s = Game.rand(0.8, 2.0);
+                    ctx.fillRect(x + Game.rand(-1, 1), y + Game.rand(-1, 1), s, s);
+                }
+            }
+            ctx.globalAlpha = 1;
+        }
     }
 
     // 3. Per-type interior detail (rows, furrows and canopy mottling moved into
@@ -1627,8 +2035,37 @@ Game.buildTerrainTexture = () => {
                 for (let k = 0; k < 2; k++) {
                     fillCircle(x0 + Game.rand(2, px - 2), y0 + Game.rand(2, px - 2), Game.rand(1.6, 4.0), `rgba(42,38,31,${Game.rand(0.16, 0.28)})`);
                 }
-            } else if (type === 'yard') {
-                for (let k = 0; k < 6; k++) {
+            } else if (type === 'yard' || type === 'house' || type === 'wall') {
+                // Cobbled village ground: sett stones on a jittered grid
+                // anchored to GLOBAL texel coords (not the tile), so the
+                // pattern runs seamlessly across tile borders. Worn patches
+                // (fbm mask) let the dust base show through, and the dust
+                // also reads as the joints between stones. House footprints
+                // cobble too — buildings sit on top in-game, and reference
+                // captures need the whole town to read as paved.
+                const pitch = px * 0.3;
+                const i0 = Math.floor(x0 / pitch), i1 = Math.ceil((x0 + px) / pitch);
+                const j0 = Math.floor(y0 / pitch), j1 = Math.ceil((y0 + px) / pitch);
+                for (let j = j0; j <= j1; j++) {
+                    for (let i = i0; i <= i1; i++) {
+                        // deterministic per-stone hash: border stones come out
+                        // identical when the neighbouring tile draws them again
+                        const h1 = Math.sin(i * 127.1 + j * 311.7) * 43758.5453;
+                        const r1 = h1 - Math.floor(h1);
+                        const h2 = Math.sin(i * 269.5 + j * 183.3) * 28001.83;
+                        const r2 = h2 - Math.floor(h2);
+                        if (Game._fbm2(i * 0.5, j * 0.5) < 0.34) continue;   // worn to dust
+                        const cx = (i + 0.5 + (r1 - 0.5) * 0.55) * pitch;
+                        const cy = (j + 0.5 + (r2 - 0.5) * 0.55) * pitch;
+                        if (cx < x0 - 1 || cx > x0 + px + 1 || cy < y0 - 1 || cy > y0 + px + 1) continue;
+                        // grey granite setts with the odd limestone-beige one
+                        const g = 116 + Math.round(r2 * 42);
+                        const beige = r1 > 0.82;
+                        fillCircle(cx, cy, pitch * (0.34 + r1 * 0.1),
+                            beige ? `rgb(${g + 26},${g + 16},${g - 4})` : `rgb(${g},${g - 3},${g - 12})`);
+                    }
+                }
+                for (let k = 0; k < 3; k++) {
                     fillCircle(x0 + Game.rand(1, px - 1), y0 + Game.rand(1, px - 1), Game.rand(0.3, 1.1), `rgba(88,76,56,${Game.rand(0.12, 0.28)})`);
                 }
             } else if (type === 'plowed') {
@@ -1714,16 +2151,43 @@ Game.buildTerrainTexture = () => {
         const shallow = [80, 103, 101];
         const deep = [36, 65, 78];
 
+        const wet = [70, 56, 40];   // saturated dark mud right at the waterline
         for (let py = 0; py < waterImg.height; py++) {
             for (let pxl = 0; pxl < waterImg.width; pxl++) {
                 const wx = ((ix0 + pxl + 0.5) / px) * Game.TILE;
                 const wz = ((iy0 + py + 0.5) / px) * Game.TILE;
                 const edge = Game._waterEdgeAlphaAt(wx, wz);
-                if (edge <= 0.002) continue;
+                const i = (py * waterImg.width + pxl) * 4;
+                if (edge <= 0.002) {
+                    // above the waterline: a moisture gradient darkens the bank
+                    // toward the water so mud, shingle and grass blend into one
+                    // damp shore instead of meeting on painted lines
+                    const rib = Game._waterRibbonAt ? Game._waterRibbonAt(wx, wz) : null;
+                    let signed;
+                    if (rib) {
+                        signed = Game._waterSignedJittered(wx, wz, rib);
+                    } else {
+                        // pond banks get the same damp ring, off the pond mask;
+                        // hand-painted water falls back to tile signed distance
+                        const pond = Game._pondAt ? Game._pondAt(wx, wz) : null;
+                        if (pond) {
+                            signed = Game._waterSignedJittered(wx, wz, pond);
+                        } else {
+                            signed = Game._waterSignedDistance ? Game._waterSignedDistance(wx, wz) : -Infinity;
+                            if (!Number.isFinite(signed)) continue;
+                        }
+                    }
+                    const reach = Game.TILE * (1.05 + 0.85 * Game._fbm2(wx * 0.05 + 8.8, wz * 0.05 + 61.2));
+                    if (signed <= -reach || signed > 0) continue;
+                    const a = Math.pow(1 + signed / reach, 1.7) * 0.5;
+                    data[i] = Game.clamp(Math.round(Game.lerp(data[i], wet[0], a)), 0, 255);
+                    data[i + 1] = Game.clamp(Math.round(Game.lerp(data[i + 1], wet[1], a)), 0, 255);
+                    data[i + 2] = Game.clamp(Math.round(Game.lerp(data[i + 2], wet[2], a)), 0, 255);
+                    continue;
+                }
                 const depth = Game._waterDepth01At ? Game._waterDepth01At(wx, wz) : edge;
                 const fleck = Game._fbm2 ? (Game._fbm2(wx * 0.32 + 5.1, wz * 0.32 - 2.4) - 0.5) * 16 : 0;
                 const blend = edge * (0.58 + depth * 0.22);
-                const i = (py * waterImg.width + pxl) * 4;
                 const tr = shallow[0] + (deep[0] - shallow[0]) * depth + fleck;
                 const tg = shallow[1] + (deep[1] - shallow[1]) * depth + fleck * 0.6;
                 const tb = shallow[2] + (deep[2] - shallow[2]) * depth + fleck * 0.45;
@@ -1875,7 +2339,7 @@ Game.buildTerrainMaterialMaps = () => {
         plowed: [214, 184], vineyard: [224, 204], garden: [222, 202], orchard: [228, 210],
         forest: [236, 178], dense_forest: [242, 154], road: [206, 202], mud: [128, 164],
         yard: [212, 214], hedge: [238, 172], wall: [220, 210], house: [220, 212],
-        water: [72, 255], swamp: [136, 150],
+        water: [72, 255], swamp: [136, 150], wash: [226, 208],
     };
 
     // Base roughness/AO follow the same warped classification as the colour map
@@ -2095,7 +2559,18 @@ Game._addFieldDividers = () => {
                     : Game.rand(1.22, 1.45);           // lighter grey
         })(),
     });
-    const pieces = [];   // {x, z, rotY, kind, variant, tint, c1, c2}
+    // Wetness (guide sec 6.3/16.2): closeness to the river suppresses stone
+    // walls — wet meadow edges get rails/planks or stay open, not dry-stone
+    // masonry. 1 at the shoreline, fading to 0 four tiles out.
+    const wetAt = (wx, wz) => {
+        if (!Game._waterRibbonAt) return 0;
+        const rib = Game._waterRibbonAt(wx, wz);
+        if (!rib) return 0;
+        return Game.clamp(1 + rib.signed / (4 * T), 0, 1);
+    };
+    const LIVESTOCK = new Set(['pasture', 'grass']);
+    const pieces = [];   // {x, z, rotY, kind, variant, tint, hMul, c1, c2}
+    const piles = [];    // pierrier stone piles (guide sec 19.1) at corners/collapses
     for (const run of runs) {
         const yardRun = run.cls === 'yard';
         if (run.len < 2) continue;
@@ -2104,36 +2579,76 @@ Game._addFieldDividers = () => {
         const midT = run.start + run.len / 2;
         const ctx = run.vert ? run.k : midT;
         const cty = run.vert ? midT : run.k;
-        // Organic edges get no divider (nobody fences a wandering boundary);
-        // yard walls are deliberate structures, so they ignore the mask.
-        if (!yardRun && roughAt(ctx, cty) > 0.7) continue;
-        // Context: walls around yards + near the village square + around
-        // garden-type plots, wooden stock fences out in the open fields.
         const wx = ctx * T, wz = cty * T;
+        const rough = yardRun ? 0 : roughAt(ctx, cty);
+        // Fully organic joins stay open — nobody walls a wandering boundary.
+        if (rough > 0.85) continue;
+        const wet = wetAt(wx, wz);
         const dVillage = Math.hypot(wx - Game.missionState.objectiveX, wz - Game.missionState.objectiveY);
-        const wallP = yardRun ? 0.95
-            : (WALLY.has(run.a) || WALLY.has(run.b)) ? 0.85
-                : (dVillage < 60 ? 0.7 : 0.45);
-        const kind = Math.random() < wallP ? 'wall' : 'fence';
+        const farmNear = Game.clamp(1 - dVillage / 130, 0, 1);
+        const cropProt = (WALLY.has(run.a) || WALLY.has(run.b)) ? 1 : 0;      // garden/orchard/vineyard
+        const pastureEdge = (LIVESTOCK.has(run.a) || LIVESTOCK.has(run.b)) ? 1 : 0;
+
+        // Boundary-type selection (guide sec 11): additive context scores and
+        // a soft weighted pick — never a hard argmax, real landscapes are
+        // inconsistent. 'open' = legal parcel edge with no physical barrier
+        // (guide sec 3.9) — concentrated on remote/arable/wet/organic edges.
+        const sWall = 0.15 + 1.15 * farmNear + 0.95 * cropProt + 0.5 * pastureEdge
+            + (yardRun ? 2.6 : 0) - 1.7 * wet - 0.6 * rough;
+        const sFence = 0.05 + 0.85 * farmNear + 0.75 * pastureEdge + 0.25 * cropProt
+            - 0.25 * wet - 0.4 * rough;
+        const sOpen = 0.1 + 1.3 * rough + 0.45 * (1 - farmNear) + 0.9 * wet
+            - (yardRun ? 2.0 : 0) - 0.5 * cropProt;
+        const temp = 0.55;
+        const eW = Math.exp(sWall / temp), eF = Math.exp(sFence / temp), eO = Math.exp(sOpen / temp);
+        const roll = Math.random() * (eW + eF + eO);
+        if (roll >= eW + eF) continue;   // open boundary
+        const kind = roll < eW ? 'wall' : 'fence';
         // Wall style comes from the ENCLOSURE (see styleFor above): same model
         // + same grey all the way around a plot, never mixed mid-run.
-        let variant = 0, tint = 1;
+        let variant = 0, tint = 1, st = null;
         if (kind === 'wall') {
             const my = midT | 0;
             const aRid = rt ? rt[run.vert ? my * COLS + (run.k - 1) : (run.k - 1) * COLS + my] : 0;
             const bRid = rt ? rt[run.vert ? my * COLS + run.k : run.k * COLS + my] : 0;
             const areaOf = (rid) => (paint && paint.regions[rid]) ? paint.regions[rid].area || 1e9 : 1e9;
-            const st = styleFor(areaOf(aRid) <= areaOf(bRid) ? aRid : bRid);
+            st = styleFor(areaOf(aRid) <= areaOf(bRid) ? aRid : bRid);
             variant = st.variant;
             tint = st.tint;
         }
-        // Partial coverage: trim the ends a little, and cut a gateway into
-        // longer runs so fields stay entered (and it reads as farm access).
-        const s = run.start + (Math.random() < 0.25 ? 1 : 0);
-        const e = run.start + run.len - (Math.random() < 0.25 ? 1 : 0);
-        const gapAt = (e - s) >= 6 && Math.random() < 0.5 ? Game.randi(s + 2, e - 3) : -99;
+        // Condition (guide sec 12.4/18.3): maintenance falls with remoteness.
+        // Worn walls lose height; low condition also drops pieces (collapses).
+        const cond = (yardRun || kind === 'fence') ? 1
+            : Game.clamp(0.45 + 0.75 * farmNear + Game.rand(-0.2, 0.2), 0, 1);
+        // Partial coverage: trim the ends a little.
+        let s = run.start + (Math.random() < 0.25 ? 1 : 0);
+        let e = run.start + run.len - (Math.random() < 0.25 ? 1 : 0);
+        // Fences come in SHORT working segments (guide sec 14.3), not endless
+        // ranch lines — cap the span and let the rest of the edge go open.
+        if (kind === 'fence' && (e - s) > 4) {
+            const r = Math.random();
+            const cap = r < 0.3 ? 3 : r < 0.65 ? 5 : r < 0.9 ? 8 : 13;
+            if ((e - s) > cap) {
+                const off = Game.randi(0, (e - s) - cap);
+                s += off;
+                e = s + cap;
+            }
+        }
+        // Gates/access gaps (guide sec 15.3): long runs get a cart gap, and
+        // every walled enclosure keeps at least one way in.
+        let gapAt = -99;
+        if ((e - s) >= 6 && Math.random() < 0.5) gapAt = Game.randi(s + 2, e - 3);
+        else if (st && !st.hasGate && (e - s) >= 4) gapAt = Game.randi(s + 1, e - 2);
+        if (gapAt >= 0 && st) st.hasGate = true;
         for (let i = s; i < e; i++) {
             if (i === gapAt || i === gapAt + 1) continue;
+            const px2 = run.vert ? run.k * T : (i + 0.5) * T;
+            const pz2 = run.vert ? (i + 0.5) * T : run.k * T;
+            if (cond < 0.55 && Math.random() < (0.55 - cond) * 0.55) {
+                // collapsed stretch: the stone spills as a low pierrier
+                if (Math.random() < 0.35) piles.push({ x: px2, z: pz2, big: false });
+                continue;
+            }
             // Jitter only PERPENDICULAR to the run — along-axis jitter opened
             // visible gaps between pieces (they also overscale ~12%, below).
             const jp = Game.rand(-0.08, 0.08);
@@ -2142,9 +2657,21 @@ Game._addFieldDividers = () => {
                 z: run.vert ? (i + 0.5) * T : run.k * T + jp,
                 rotY: (run.vert ? Math.PI / 2 : 0) + Game.rand(-0.02, 0.02),
                 kind, variant, tint,
+                // worn walls sag: reduced height, stronger dip at low condition
+                hMul: cond < 0.55 ? Game.rand(0.62 + cond * 0.5, 1.0) : 1,
                 // Edge endpoints on the tile-corner grid, for junction checks
                 c1: run.vert ? (i * (COLS + 1) + run.k) : (run.k * (COLS + 1) + i),
                 c2: run.vert ? ((i + 1) * (COLS + 1) + run.k) : (run.k * (COLS + 1) + i + 1),
+            });
+        }
+        // Corner detail (guide sec 19.1): occasional clearance-stone pile at a
+        // wall run's end, more likely on remote (low-condition) boundaries.
+        if (kind === 'wall' && Math.random() < 0.35 - cond * 0.22) {
+            const endI = Math.random() < 0.5 ? s : e;
+            piles.push({
+                x: run.vert ? run.k * T : endI * T,
+                z: run.vert ? endI * T : run.k * T,
+                big: true,
             });
         }
     }
@@ -2181,11 +2708,15 @@ Game._addFieldDividers = () => {
                 if (!st || !FIELD.has(st.type)) continue;
                 // coherent stretches (~45% of eligible roadside), not salt-and-pepper
                 if (Game._fbm2(mx * 0.045 + side * 37.7, mz * 0.045 - side * 11.3) < 0.5) continue;
+                // wet riverside verges stay clear; damp ones only get rails
+                const wet = wetAt(sx, sz);
+                if (wet > 0.6) continue;
                 const tw = Game.tileAtWorld(sx, sz);
                 const rid = rt ? rt[tw.ty * COLS + tw.tx] : 0;
                 const dVillage = Math.hypot(mx - Game.missionState.objectiveX, mz - Game.missionState.objectiveY);
                 // deterministic per (fronted region, side): one stretch, one look
-                const wall = Game._hash2(rid * 0.37 + side * 13.7, rid * 0.11) < (dVillage < 55 ? 0.7 : 0.3);
+                const wall = wet < 0.35
+                    && Game._hash2(rid * 0.37 + side * 13.7, rid * 0.11) < (dVillage < 55 ? 0.7 : 0.3);
                 const stl = wall ? styleFor(rid) : null;
                 pieces.push({
                     x: sx, z: sz,
@@ -2240,7 +2771,6 @@ Game._addFieldDividers = () => {
             // in height/thickness (they read oversized at full scale).
             const scale = (T * 1.12) / Math.max(0.001, bb.max.x - bb.min.x);
             const bulk = kind === 'wall' ? scale * 0.8 : scale;
-            const lift = -bb.min.y * bulk - 0.07;                     // base on the ground, slight sink for slopes
             const mat = src.material;
             mat.roughness = 0.95; mat.metalness = 0.0;
             if (kind === 'wall') {
@@ -2257,10 +2787,11 @@ Game._addFieldDividers = () => {
             const dummy = new THREE.Object3D();
             const icol = new THREE.Color();
             mine.forEach((p, i) => {
-                const y = Game.getHeight(p.x, p.z) + lift;
+                const hm = p.hMul || 1;                // worn walls sag (guide sec 18.3)
+                const y = Game.getHeight(p.x, p.z) + (-bb.min.y * bulk * hm - 0.07);
                 dummy.position.set(p.x, y, p.z);
                 dummy.rotation.set(0, p.rotY, 0);
-                dummy.scale.set(p.sMul ? scale * p.sMul : scale, bulk, bulk);
+                dummy.scale.set(p.sMul ? scale * p.sMul : scale, bulk * hm, bulk);
                 dummy.updateMatrix();
                 inst.setMatrixAt(i, dummy.matrix);
                 icol.setScalar(p.tint || 1);           // per-enclosure lighter/darker grey
@@ -2272,7 +2803,7 @@ Game._addFieldDividers = () => {
                     Game.foliageKD.push({
                         leaves: inst, branches: inst, idx: i,
                         x: p.x, y, z: p.z, rotY: p.rotY,
-                        s: p.sMul ? scale * p.sMul : scale, sy: bulk, sz: bulk,
+                        s: p.sMul ? scale * p.sMul : scale, sy: bulk * hm, sz: bulk,
                         rrMul: 0.8, rrAdd: 0.1,
                         dir: 0, fallT: 0, triggered: false,
                     });
@@ -2286,6 +2817,42 @@ Game._addFieldDividers = () => {
     };
     Game.DIVIDER_MODELS.wall.forEach((u, i) => place(u, byKind.wall, i, 'wall'));
     Game.DIVIDER_MODELS.fence.forEach((u, i) => place(u, byKind.fence, i, 'fence'));
+
+    // Pierriers (guide sec 3.3/19.1): low clearance-stone piles at wall-run
+    // ends and where collapsed walls spilled. Procedural — squashed rock
+    // instances in the same dark fieldstone as the walls.
+    if (piles.length) {
+        const rockGeo = new THREE.DodecahedronGeometry(1, 0);
+        const rockMat = new THREE.MeshStandardMaterial({
+            map: Game._makeDarkStoneTexture(),
+            roughness: 1.0, metalness: 0.0,
+        });
+        let n = 0;
+        piles.forEach(p => { n += p.big ? 4 : 3; });
+        const inst = new THREE.InstancedMesh(rockGeo, rockMat, n);
+        inst.name = 'divider-pierrier';
+        inst.castShadow = true;
+        inst.receiveShadow = true;
+        const dummy = new THREE.Object3D();
+        let i = 0;
+        piles.forEach(p => {
+            const count = p.big ? 4 : 3;
+            const base = p.big ? 0.34 : 0.24;
+            for (let k = 0; k < count; k++) {
+                const rx = p.x + Game.rand(-0.55, 0.55);
+                const rz = p.z + Game.rand(-0.55, 0.55);
+                const sr = base * Game.rand(0.7, 1.3);
+                dummy.position.set(rx, Game.getHeight(rx, rz) + sr * 0.35, rz);
+                dummy.rotation.set(Game.rand(0, Math.PI), Game.rand(0, Math.PI), Game.rand(0, Math.PI));
+                dummy.scale.set(sr, sr * 0.6, sr);   // squashed: settled heap, not boulders
+                dummy.updateMatrix();
+                inst.setMatrixAt(i++, dummy.matrix);
+            }
+        });
+        inst.instanceMatrix.needsUpdate = true;
+        inst.computeBoundingSphere();
+        Game.terrainGroup.add(inst);
+    }
 };
 
 // Procedural dark-grey fieldstone texture for the divider walls: irregular
@@ -3158,7 +3725,90 @@ Game.buildTerrainMeshes = () => {
                 }
             }
         }
+        // Riparian scrub: bushes clump along the river banks — the damp
+        // floodplain strip never gets ploughed and fresh water is steps away,
+        // so scrub flourishes. Two bands: dense SMALL bushes right at the
+        // waterline, a looser band of full-size bushes up the floodplain.
+        if (Game._waterRibbonAt && Game.river && Game.river.tiles.length >= 8) {
+            const WLr = Game.WATER_LEVEL ?? -999;
+            const nearBridge = (x, z) => (Game.bridges || []).some(b =>
+                Math.abs(x - b.cx) < 4.5 * T && Math.abs(z - b.cz) < 4.5 * T);
+            const BANK_OK = new Set(['grass', 'pasture', 'wheat', 'stubble', 'plowed', 'vineyard', 'garden', 'mud']);
+            const tryBush = (x, z, hMin, hMax, sMin, sMax, minAboveWL) => {
+                if (nearBridge(x, z)) return;
+                const tile = Game.getTileAtWorld(x, z);
+                if (!tile || !BANK_OK.has(tile.type)) return;
+                if (Game.getHeight(x, z) < WLr + minAboveWL) return;   // not in the water
+                shrubPositions.push({
+                    x, z,
+                    height: Game.rand(hMin, hMax),
+                    scale: Game.rand(sMin, sMax),
+                    sink: 0.22,
+                });
+            };
+            for (let txf = 0; txf < Game.MAP_COLS; txf += 0.22) {
+                const wx = (txf + 0.5) * T;
+                const rib = Game._waterRibbonAt(wx, 0, Infinity);   // channel probe: bypass the pond cutoff
+                if (!rib) continue;
+                for (const side of [-1, 1]) {
+                    // clumping noise: stretches of scrub alternate with open bank
+                    const clump = Game._fbm2(wx * 0.05 + side * 31.7, side * 77.3 + 4.4);
+                    if (clump < 0.42) continue;
+                    // waterline band: small dense bushes with their feet nearly
+                    // in the river (1-2 per sample in strong clumps)
+                    if (Math.random() < 0.6) {
+                        const n = clump > 0.6 ? 2 : 1;
+                        for (let k = 0; k < n; k++) {
+                            tryBush(
+                                wx + Game.rand(-0.9, 0.9),
+                                rib.centerZ + side * (rib.halfWidth + Game.rand(0.3, 1.5)),
+                                0.32, 0.68, 0.55, 0.95, 0.06);
+                        }
+                    }
+                    // floodplain band: full-size bushes, looser
+                    if (Math.random() < 0.45) {
+                        tryBush(
+                            wx + Game.rand(-1.1, 1.1),
+                            rib.centerZ + side * (rib.halfWidth + Game.rand(1.1, 3.6) * (0.6 + clump)),
+                            0.55, 1.15, 0.7, 1.2, 0.12);
+                    }
+                }
+            }
+
+            // Pond fringe scrub: bushes ring the mares. The smaller the pond
+            // the tighter the ring — big field ponds keep open, grazed banks.
+            (Game.ponds || []).forEach(p => {
+                const steps = Math.max(14, Math.round(p.r * 14));
+                const dense = Game.clamp(1.35 - p.r * 0.14, 0.45, 1.0);
+                for (let k = 0; k < steps; k++) {
+                    const a = (k / steps) * Math.PI * 2 + Game.rand(-0.12, 0.12);
+                    const ca = Math.cos(a), sa = Math.sin(a);
+                    // rim distance along this direction (egg/squeeze metric)
+                    const rimW = p.r * T / Math.hypot(
+                        (ca * (p.ct ?? 1) + sa * (p.st ?? 0)) / (p.sx ?? 1),
+                        (-ca * (p.st ?? 0) + sa * (p.ct ?? 1)) / (p.sy ?? 1));
+                    const clump = Game._fbm2(ca * 2.1 + p.tx, sa * 2.1 + p.tz);
+                    if (clump < 0.34) continue;   // open bank stretches
+                    // waterline band: small dense bushes right at the rim
+                    if (Math.random() < 0.75 * dense) {
+                        const rr = rimW + Game.rand(0.4, 1.6);
+                        tryBush(p.wx + ca * rr, p.wz + sa * rr,
+                            0.32, 0.68, 0.55, 0.95, 0.06);
+                    }
+                    // outer band: full-size bushes, looser
+                    if (Math.random() < 0.4 * dense) {
+                        const rr = rimW + Game.rand(1.6, 4.0);
+                        tryBush(p.wx + ca * rr, p.wz + sa * rr,
+                            0.55, 1.15, 0.7, 1.2, 0.12);
+                    }
+                }
+            });
+        }
         placeFoliage(shrubProtos, shrubPositions, 2.4, 'hedge-shrub', shrubLeafMat);
+
+        // Final bush positions (hedgerows + riparian scrub), kept for
+        // reference mode's markers
+        Game.shrubSpots = shrubPositions.map(p => ({ x: p.x, z: p.z }));
     }
 
     // ── Forest-style instanced undergrowth: one blade mesh, many varied instances ──
@@ -3351,6 +4001,70 @@ Game.buildTerrainMeshes = () => {
             });
         }
 
+        // Riparian trees: lone trees dotted along the banks in small clusters
+        // (oaks read as willows/alders at this scale, plus the odd birch),
+        // set just back from the scrub line.
+        if (Game._waterRibbonAt && Game.river && Game.river.tiles.length >= 8) {
+            const WLr = Game.WATER_LEVEL ?? -999;
+            const nearBridge = (x, z) => (Game.bridges || []).some(b =>
+                Math.abs(x - b.cx) < 5 * T && Math.abs(z - b.cz) < 5 * T);
+            for (let txf = 0; txf < Game.MAP_COLS; txf += 0.9) {
+                const wx = (txf + 0.5) * T;
+                const rib = Game._waterRibbonAt(wx, 0, Infinity);   // channel probe: bypass the pond cutoff
+                if (!rib) continue;
+                for (const side of [-1, 1]) {
+                    const clump = Game._fbm2(wx * 0.043 + side * 12.9, side * 51.1 - 8.7);
+                    // sparse enough that the canopy never closes over the water —
+                    // the dense layer at the river is the scrub, not trees
+                    if (clump < 0.52 || Math.random() > 0.38) continue;
+                    const x = wx + Game.rand(-1.6, 1.6);
+                    const z = rib.centerZ + side * (rib.halfWidth + Game.rand(1.4, 4.5));
+                    if (nearBridge(x, z)) continue;
+                    const tile = Game.getTileAtWorld(x, z);
+                    if (!tile || ['house', 'wall', 'road', 'yard', 'water'].includes(tile.type)) continue;
+                    if (Game.getHeight(x, z) < WLr + 0.15) continue;
+                    // mostly small trees and saplings — a young waterside stand,
+                    // not another oak wood
+                    const sapling = Math.random() < 0.55;
+                    treeList.push({
+                        x, z,
+                        height: sapling ? Game.rand(1.2, 1.8) : Game.rand(1.7, 2.6),
+                        scale: sapling ? Game.rand(0.55, 0.85) : Game.rand(0.7, 1.05),
+                        species: Math.random() < 0.22 ? 'birch' : 'oak',
+                    });
+                }
+            }
+
+            // Pond fringe trees: a waterside clump or two leans over each mare
+            // (oaks read as willows/alders at this scale). Small ponds get the
+            // denser fringe — stock can't graze those banks bare.
+            (Game.ponds || []).forEach(p => {
+                const steps = Math.max(8, Math.round(p.r * 6));
+                const dense = Game.clamp(1.5 - p.r * 0.18, 0.4, 1.1);
+                for (let k = 0; k < steps; k++) {
+                    const a = (k / steps) * Math.PI * 2 + Game.rand(-0.2, 0.2);
+                    const ca = Math.cos(a), sa = Math.sin(a);
+                    const rimW = p.r * T / Math.hypot(
+                        (ca * (p.ct ?? 1) + sa * (p.st ?? 0)) / (p.sx ?? 1),
+                        (-ca * (p.st ?? 0) + sa * (p.ct ?? 1)) / (p.sy ?? 1));
+                    const clump = Game._fbm2(ca * 1.7 - p.tx, sa * 1.7 + p.tz);
+                    if (clump < 0.48 || Math.random() > 0.5 * dense) continue;
+                    const rr = rimW + Game.rand(1.0, 3.6);
+                    const x = p.wx + ca * rr, z = p.wz + sa * rr;
+                    const tile = Game.getTileAtWorld(x, z);
+                    if (!tile || ['house', 'wall', 'road', 'yard', 'water'].includes(tile.type)) continue;
+                    if (Game.getHeight(x, z) < WLr + 0.15) continue;
+                    const sapling = Math.random() < 0.5;
+                    treeList.push({
+                        x, z,
+                        height: sapling ? Game.rand(1.2, 1.8) : Game.rand(1.8, 2.7),
+                        scale: sapling ? Game.rand(0.55, 0.85) : Game.rand(0.75, 1.05),
+                        species: Math.random() < 0.3 ? 'birch' : 'oak',
+                    });
+                }
+            });
+        }
+
         // Global thinning: render ~30% fewer trees overall (forests, treelines,
         // orchards and lone trees alike) — the map read too wooded.
         for (let i = treeList.length - 1; i >= 0; i--) {
@@ -3438,10 +4152,46 @@ Game.buildTerrainMeshes = () => {
             placeFoliage(pineProtos, bySpecies.pine, 1.7, 'tree-pine', null, pineBarkMat);
             placeFoliage([birchProto], bySpecies.birch, 1.7, 'tree-birch', null, birchBarkMat);
         }
+
+        // Final rendered tree positions, kept for reference mode's markers
+        Game.treeSpots = treeList.map(t => ({ x: t.x, z: t.z }));
     }
 
     // ── Animated water surface over the river ──
     if (Game._buildWaterSurface) Game._buildWaterSurface();
+    if (Game._addRiverWashStones) Game._addRiverWashStones();
+
+    // ── Random terrain-damage spots for reference mode's markers ──
+    // Red circles = craters (bigger dot = bigger crater), red triangles =
+    // small sharp impacts (shell hits, tank rounds). Not gameplay craters,
+    // just annotation: clustered "shelled patches" plus stray single hits.
+    {
+        const spots = [];
+        // Only during dataset capture: annotation variety for training. Normal
+        // games keep this empty so neural bakes condition on pristine ground.
+        if (Game._refCap) {
+            const add = (x, z, big) => {
+                if (x < 3 || z < 3 || x > Game.WORLD_W - 3 || z > Game.WORLD_H - 3) return;
+                const t = Game.getTileAtWorld(x, z);
+                if (!t || t.type === 'water' || t.type === 'house' || t.type === 'wall') return;
+                if (big) spots.push({ x, z, shape: 'circle', px: Game.randi(8, 14) });
+                else if (Math.random() < 0.5) spots.push({ x, z, shape: 'triangle', px: Game.randi(4, 7) });
+                else spots.push({ x, z, shape: 'circle', px: Game.randi(4, 7) });
+            };
+            const nClusters = Game.randi(12, 18);
+            for (let c = 0; c < nClusters; c++) {
+                const cx = Game.rand(0, Game.WORLD_W), cz = Game.rand(0, Game.WORLD_H);
+                const n = Game.randi(3, 9), r = Game.rand(3, 8);
+                for (let i = 0; i < n; i++) {
+                    add(cx + Game.rand(-r, r), cz + Game.rand(-r, r), Math.random() < 0.3);
+                }
+            }
+            for (let i = 0; i < 40; i++) {
+                add(Game.rand(0, Game.WORLD_W), Game.rand(0, Game.WORLD_H), Math.random() < 0.25);
+            }
+        }
+        Game.damageSpots = spots;
+    }
 
     // ── Stone arch bridge over the river (on the N-S road) ──
     // The modeled stone bridge (models/bridge_stone.glb) replaces the
@@ -3561,4 +4311,7 @@ Game.buildTerrainMeshes = () => {
     const objY = Game.getHeight(Game.missionState.objectiveX, Game.missionState.objectiveY);
     Game.objectiveRing.position.set(Game.missionState.objectiveX, objY + 0.1, Game.missionState.objectiveY);
     Game.terrainGroup.add(Game.objectiveRing);
+
+    // Fluffy grass layers (editor.js): animated blade cover on grass/wheat
+    if (Game.buildFluffyGrass) Game.buildFluffyGrass();
 };

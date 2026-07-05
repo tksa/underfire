@@ -65,34 +65,41 @@ Game.spawnScenario = () => {
 
     const hold = (x, z) => ({ aiState: 'hold', holdPoint: { x: x * T, z: z * T } });
 
+    // The hamlet's anchor wanders per map (generateMap picks Game.villageOfs);
+    // the German garrison shifts with it. The forward outpost clamps its
+    // westward drift so it never crowds the French staging corner.
+    const vdx = (Game.villageOfs && Game.villageOfs.dx) || 0;
+    const vdy = (Game.villageOfs && Game.villageOfs.dy) || 0;
+    const odx = Math.max(-3, vdx);
+
     // Forward outpost squad at the hedgeline
-    Game.spawnSquad(GERMAN, 21 * T, 6 * T, 'out', hold(21, 6));
-    Game.makeUnit(GERMAN, 'mg34', 24.5 * T, 6.2 * T, hold(24.5, 6.2));
+    Game.spawnSquad(GERMAN, (21 + odx) * T, (6 + vdy) * T, 'out', hold(21 + odx, 6 + vdy));
+    Game.makeUnit(GERMAN, 'mg34', (24.5 + odx) * T, (6.2 + vdy) * T, hold(24.5 + odx, 6.2 + vdy));
 
     // Village defense squad
-    Game.spawnSquad(GERMAN, 28 * T, 10.5 * T, 'vil', hold(28, 10.5));
-    Game.makeUnit(GERMAN, 'hmg', 27 * T, 12 * T, hold(27, 12));
+    Game.spawnSquad(GERMAN, (28 + vdx) * T, (10.5 + vdy) * T, 'vil', hold(28 + vdx, 10.5 + vdy));
+    Game.makeUnit(GERMAN, 'hmg', (27 + vdx) * T, (12 + vdy) * T, hold(27 + vdx, 12 + vdy));
 
     // Support
-    Game.makeUnit(GERMAN, 'mortar_50', 33 * T, 14 * T, hold(33, 14));
-    Game.makeUnit(GERMAN, 'mortar_81', 34 * T, 15.5 * T, hold(34, 15.5));
-    Game.makeUnit(GERMAN, 'pak36', 30 * T, 13 * T, hold(30, 13));
-    Game.makeUnit(GERMAN, 'sniper', 35 * T, 10 * T, hold(35, 10));
+    Game.makeUnit(GERMAN, 'mortar_50', (33 + vdx) * T, (14 + vdy) * T, hold(33 + vdx, 14 + vdy));
+    Game.makeUnit(GERMAN, 'mortar_81', (34 + vdx) * T, (15.5 + vdy) * T, hold(34 + vdx, 15.5 + vdy));
+    Game.makeUnit(GERMAN, 'pak36', (30 + vdx) * T, (13 + vdy) * T, hold(30 + vdx, 13 + vdy));
+    Game.makeUnit(GERMAN, 'sniper', (35 + vdx) * T, (10 + vdy) * T, hold(35 + vdx, 10 + vdy));
 
     // Armor — numerous, lighter (vision doc: German tempo)
-    Game.makeUnit(GERMAN, 'sdkfz', 30.5 * T, 8 * T, {
+    Game.makeUnit(GERMAN, 'sdkfz', (30.5 + vdx) * T, (8 + vdy) * T, {
         aiState: 'patrol', patrol: [
-            { x: 30.5 * T, z: 8 * T }, { x: 34.7 * T, z: 10.5 * T }
+            { x: (30.5 + vdx) * T, z: (8 + vdy) * T }, { x: (34.7 + vdx) * T, z: (10.5 + vdy) * T }
         ]
     });
-    Game.makeUnit(GERMAN, 'panzer1', 33 * T, 9 * T, hold(33, 9));
-    Game.makeUnit(GERMAN, 'panzer2', 35.4 * T, 12.5 * T, { ...hold(35.4, 12.5), veterancy: .08 });
-    Game.makeUnit(GERMAN, 'panzer3', 37 * T, 13.5 * T, { ...hold(37, 13.5), veterancy: .10 });
+    Game.makeUnit(GERMAN, 'panzer1', (33 + vdx) * T, (9 + vdy) * T, hold(33 + vdx, 9 + vdy));
+    Game.makeUnit(GERMAN, 'panzer2', (35.4 + vdx) * T, (12.5 + vdy) * T, { ...hold(35.4 + vdx, 12.5 + vdy), veterancy: .08 });
+    Game.makeUnit(GERMAN, 'panzer3', (37 + vdx) * T, (13.5 + vdy) * T, { ...hold(37 + vdx, 13.5 + vdy), veterancy: .10 });
 
     // Crossroads garrison squad
-    Game.spawnSquad(GERMAN, 37.5 * T, 16 * T, 'cross', hold(37.5, 16));
-    Game.makeUnit(GERMAN, 'mg34', 36.9 * T, 17 * T, hold(36.9, 17));
-    Game.makeUnit(GERMAN, 'grenadier', 32.5 * T, 21 * T, hold(32.5, 21));
+    Game.spawnSquad(GERMAN, (37.5 + vdx) * T, (16 + vdy) * T, 'cross', hold(37.5 + vdx, 16 + vdy));
+    Game.makeUnit(GERMAN, 'mg34', (36.9 + vdx) * T, (17 + vdy) * T, hold(36.9 + vdx, 17 + vdy));
+    Game.makeUnit(GERMAN, 'grenadier', (32.5 + vdx) * T, (21 + vdy) * T, hold(32.5 + vdx, 21 + vdy));
 
     // Auto-select first French squad
     Game.selection.clear();
@@ -129,9 +136,11 @@ Game.updateMission = (dt) => {
     if (!Game.missionState.reinforcementTriggered && Game.missionState.timer > 55) {
         Game.missionState.reinforcementTriggered = true;
         const T = Game.TILE;
-        Game.spawnSquad(Game.TEAM.GERMAN, 46 * T, 9 * T, 'reserve', { aiState: 'attack' });
-        Game.makeUnit(Game.TEAM.GERMAN, 'panzer2', 47 * T, 10 * T, { aiState: 'attack', veterancy: .1 });
-        Game.makeUnit(Game.TEAM.GERMAN, 'panzer4', 48 * T, 11 * T, { aiState: 'attack', veterancy: .1 });
+        const vdx = (Game.villageOfs && Game.villageOfs.dx) || 0;
+        const vdy = (Game.villageOfs && Game.villageOfs.dy) || 0;
+        Game.spawnSquad(Game.TEAM.GERMAN, (46 + vdx) * T, (9 + vdy) * T, 'reserve', { aiState: 'attack' });
+        Game.makeUnit(Game.TEAM.GERMAN, 'panzer2', (47 + vdx) * T, (10 + vdy) * T, { aiState: 'attack', veterancy: .1 });
+        Game.makeUnit(Game.TEAM.GERMAN, 'panzer4', (48 + vdx) * T, (11 + vdy) * T, { aiState: 'attack', veterancy: .1 });
         Game.pushMessage('Enemy reserve elements arriving from the east!', 6);
     }
 };

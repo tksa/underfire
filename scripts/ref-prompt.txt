@@ -1,0 +1,59 @@
+Based on the reference image, transform the scene into an ultra-realistic aerial/drone-style photograph of rural French countryside from a elevated distance of approximately 100 meters.
+
+Preserve the exact camera angle, camera height, framing, terrain layout, object positions, roads, walls, fences, fields, and boundaries. Do not rotate, zoom, crop, recompose, or change the viewpoint. If the reference is a perfectly top-down orthographic view, keep the output perfectly top-down with no perspective tilt, like an aerial survey orthophoto.
+
+Render the scene with neutral daylight lighting, realistic iPhone Pro / drone camera quality, natural colors, believable texture detail, and soft photographic realism.
+
+Respect every existing terrain type and convert it into a realistic version:
+- Dirt roads must remain dirt roads.
+- Grass fields must remain grass fields.
+- Crop fields must remain crop fields.
+- Muddy/wet areas must remain muddy/wet areas.
+- Stone walls must remain stone walls.
+- Wooden fences must remain wooden fences.
+- Craters and impact marks must remain in their marked positions.
+
+Do not remove or ignore any visible terrain type. Do not replace one texture type with another. Blend all terrain transitions naturally, with subtle variation in color, height, density, wear, and growth.
+
+Solid white areas with sharp definition on edges of map. This is area outside the map and should not be filled and rendered. Ignore it.
+
+Roads:
+Make the roads look naturally worn, compacted, muddy or dusty where appropriate, with realistic ruts, tire tracks, soft edges, and smooth believable curves. Keep the road positions exactly the same. Ignore any visible road texture underneath water or mud if it appears flooded.
+
+Grass and vegetation:
+Add realistic lush grass, weeds, small flowers, scrub, and natural ground variation where appropriate. Vegetation should blend into the existing terrain naturally. Do not add any new large objects.
+
+Purple markers:
+The bright purple circles are only placement markers for future trees. Do not render the purple circles. Do not add trees. Instead, render only realistic ground variation suitable for future tree locations, such as darker grass, sparse weeds, slight shadow-like vegetation density, disturbed soil, or low undergrowth.
+
+Blue markers:
+The bright blue circles mark future bushes or foliage. Do not render the blue circles. Add realistic low bushes, shrubs, scrub vegetation, and varied ground growth at these locations, while keeping their positions consistent.
+
+Red markers:
+The red circles indicate craters. Larger red circles mean larger craters. The red triangle indicates a small ground impact. Do not render the red markers. Convert them into realistic battlefield ground damage: disturbed soil, exposed earth, mud, small debris, and natural crater edges.
+
+Stone walls:
+Stone and rock walls should be realistic French countryside dry-stone walls, with uniform height, believable thickness, uneven stones, subtle shadows, and natural blending into grass. Keep their exact positions and lengths. Some appear to be fallen over/been run over, make it look realistic. Red walls are markers to indicate it has been run over/destroyed and should be rendered as such. If a wall is fallen make it appear broken apart with stones scattered.
+
+Wooden fences:
+Wooden fences should look natural, rural, weathered, and correctly scaled. Keep their exact positions. Some appear to be fallen over/been run over, make it look realistic. Red fences/fallen red fences are markers to indicate it has been run over/destroyed and should be rendered as such. Be careful not to keep the red marker color on fallen walls. If a fence is fallen make sure the wood appears broken in the area.
+
+Cobblestones:
+In some areas there will be cobblestones that are marked as bright pink. These are areas where buildings will go on top of/next to. Do not render the pink. Make sure they are rendered as realistic cobblestones. Ensure the edges blend in realistically, avoiding sharp abrupt transitions.
+
+Ponds and bodies of water:
+Render any ponds, rivers, or still water as realistic natural water with calm surfaces, natural banks, and muddy or reedy edges blending into the surrounding grass and vegetation. Keep their exact positions, shapes, and sizes.
+
+Do not add:
+- New trees
+- Buildings
+- Vehicles
+- People
+- Animals
+- Power lines
+- Extra roads
+- Extra walls
+- Random objects
+- Visible marker circles, dots, or triangles
+
+Do not change the camera angle. Do not change the layout. Do not move roads, fields, fences, walls, craters, or vegetation markers. Do not add trees. Do not add buildings, vehicles, people, animals, signs, poles, or modern objects. Do not render colored dots, circles, triangles, markers, UI overlays, outlines, labels, or guide symbols. Avoid painterly style, fantasy style, miniature diorama look, oversaturated colors, excessive blur, fake HDR, and unrealistic terrain patterns.

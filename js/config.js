@@ -120,10 +120,10 @@ Game.WATER_SHORE_KERNEL_TILES = 1.55;
 Game.WATER_SHORE_THRESHOLD = 0.24;
 Game.WATER_SHORE_SOFTNESS = 0.2;
 Game.WATER_SHORE_JITTER = 0.25;   // organic shoreline wiggle (break the tile grid)
-Game.WATER_BED_DEPTH = 0.9;
-Game.WATER_BED_EDGE = 0.22;
+Game.WATER_BED_DEPTH = 0.55;      // channel depth below the waterline in pools
+Game.WATER_BED_EDGE = 0.18;       // depth right at the shore
 Game.WATER_BED_SLOPE = 1.15;
-Game.WATER_BED_VARIATION = 0.22;
+Game.WATER_FLOOD_TILES = 2.6;     // floodplain: meadow eases down to the water over this many tiles
 Game.terrainMesh = null;
 
 // Game starts paused behind the main menu

@@ -18,15 +18,20 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + 
 await page.goto(URL, { waitUntil: 'load' });
 await page.waitForTimeout(2500); // let the scene/assets boot
 
-// Welcome gate (if present): force the click — decorative children of the gate
-// can intercept pointer events and make a plain click flake — then wait for the
-// gate to actually go away before starting the mission.
-const gate = page.locator('#btnEnterGame');
-if (await gate.count()) {
-  await gate.click({ force: true }).catch(() => {});
-  await page.locator('#welcomeGate').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+// The whole map builds behind the menu, and on software-GL runners (CI,
+// headless) the main thread is busy for long stretches — Playwright's input
+// clicks time out waiting for their turn. Poll a DOM-level click from inside
+// the page instead: each poll is tiny and lands in a frame gap.
+const domClick = (sel) => page.waitForFunction((s) => {
+  const b = document.querySelector(s);
+  if (!b || b.offsetParent === null) return false;
+  b.click();
+  return true;
+}, sel, { timeout: 60000, polling: 500 });
+if (await page.locator('#btnEnterGame').count()) {
+  await domClick('#btnEnterGame').catch(() => {});
 }
-await page.click('#btnStartMission', { force: true });
+await domClick('#btnStartMission');
 await page.waitForTimeout(2500);
 
 const info = await page.evaluate(() => ({

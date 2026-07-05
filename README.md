@@ -95,6 +95,77 @@ When reporting a bug, a sentence on what you did, what you expected, and what ha
 
 ---
 
+## Neural terrain (experimental)
+
+Under Fire's terrain can be re-rendered photorealistically by a diffusion
+model trained on this game's own maps. Both the model and its training data
+are published openly:
+
+- **Model**: [tstruk/under-fire-terrain-controlnet](https://huggingface.co/tstruk/under-fire-terrain-controlnet)
+  — a Stable Diffusion 1.5 ControlNet (game render in, aerial photo out)
+- **Dataset**: [tstruk/under-fire-terrain-pairs](https://huggingface.co/datasets/tstruk/under-fire-terrain-pairs)
+  — 600 CC0 training pairs plus the full generation prompt
+
+The default map ships pre-baked, so playing needs no ML setup at all. To bake
+maps yourself you run the small inference server locally (CUDA GPU with ~8 GB
+free recommended):
+
+```bash
+pip install torch diffusers transformers accelerate spandrel pillow numpy
+python scripts/infer_server.py        # downloads the model, serves on :8788
+```
+
+Then in the game: press backtick (`) to open the debug panel — the **Neural
+Terrain** section at the top has everything:
+
+- **New Procedural** generates a fresh random map
+- **Bake Neural Map** re-renders the whole map through the model (~2-4 min);
+  **Bake View** previews just the visible area in ~20 s
+- Prompt, negative prompt, steps, guidance, seed and post-processing knobs are
+  all in the panel; **Map** save/load keeps named maps with their bakes
+### Map Maker
+
+The debug panel's **Map Maker** section is a full in-game terrain editor:
+
+- **New Blank Map** starts an all-grass canvas (with a confirm so you can't
+  lose work by accident); or paint straight over any procedural map
+- **Painting: ON** captures the mouse for the brush: left-drag paints, camera
+  keys still work. In **freeform** mode you paint at texture resolution like a
+  real brush (smooth curves, live preview); **tiles** mode snaps to the game
+  grid. Brush **size**, **circle/square shape**, **soft edge** (organic ragged
+  rim) and **round edges** (melts staircase corners) are all in the panel,
+  plus a **line** tool for straight field boundaries
+- The palette covers every terrain type (crops, forest, water, roads, cobbles,
+  walls) plus **+/- fluff** brushes to place or clear animated grass and wheat
+  cover; the **Fluffy Grass** section tunes density, height, width, lean,
+  patchiness, colours and wind per species
+- **Rebuild World** turns your painted tiles into full 3D: fences and hedges
+  grow along field boundaries, forests fill with trees, water gets its carved
+  bed, banks and animated surface, roads flatten
+- **Undo** steps back per stroke; **Map** save/load keeps named maps (with
+  their bakes) in the browser, and **Export** produces the `map.json` +
+  `bake.jpg` pair used to bundle a map with the game (`maps/default/`)
+
+Painted maps bake through the neural pipeline exactly like procedural ones.
+
+The animated grass/wheat cover is inspired by
+[thebenezer/FluffyGrass](https://github.com/thebenezer/FluffyGrass)
+(reimplemented from scratch for this engine).
+
+Neural terrain stands on:
+
+- [Stable Diffusion 1.5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5)
+  (CreativeML OpenRAIL-M) — the frozen base model our ControlNet steers
+- [ControlNet](https://github.com/lllyasviel/ControlNet) (Zhang et al.) — the
+  conditioning architecture, via [diffusers](https://github.com/huggingface/diffusers)
+- [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) (BSD-3) — the optional
+  2x upscale pass
+- OpenAI `gpt-image-2` — generated the photorealistic training targets
+
+The game looks for the server on `http://127.0.0.1:8788`. To point it at a
+different machine: `localStorage.setItem('uf_neural_url', 'http://host:8788')`
+in the browser console, once.
+
 ## Tech at a glance
 
 - **Three.js** (r0.180, via CDN importmap) for 3D rendering

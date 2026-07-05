@@ -863,6 +863,9 @@ Game.handleInputEvents = () => {
     }, { passive: false });
 
     window.addEventListener('keydown', e => {
+        // typing in a text field (debug prompts etc.) must not fire hotkeys
+        const _t = e.target;
+        if (_t && (_t.tagName === 'INPUT' || _t.tagName === 'TEXTAREA' || _t.tagName === 'SELECT' || _t.isContentEditable)) return;
         Game.keys[e.code] = true;
         if (e.repeat) return;
 

@@ -22,6 +22,9 @@ package-lock.json
 .env
 .env.local
 
+# ML reference dataset (captures + generated counterparts; huge, never commit)
+dataset/
+
 # Private deploy playbook (contains the production server address — never commit)
 deploy.md
 

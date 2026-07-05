@@ -1376,3 +1376,23 @@ Boundaries need interruptions:
 - Military breaches in WWII.
 
 *(Guide truncated here in the original transmission.)*
+
+---
+
+## Appendix: How this guide maps to the code (implemented 2026-07-03)
+
+All boundary logic lives in `Game._addFieldDividers` (js/terrain.js); tuning
+constants sit at the top of that function and in the score block below.
+
+| Guide section | Mechanic in code |
+|---|---|
+| 11 (boundary type selection) | Additive scores per run (`sWall` / `sFence` / `sOpen`) built from context features: `farmNear` (1 - distance-to-village / 130), `cropProt` (garden / orchard / vineyard adjacency), `pastureEdge` (pasture / grass adjacency), `wet` (river-ribbon distance via `wetAt`), `rough` (terrain-paint rough mask). Softmax pick at temperature 0.55; an explicit **open** outcome leaves the edge unenclosed. |
+| 6.3, 16.2 (hydrology) | `wetAt(wx, wz)` derives wetness from the river ribbon (`Game._waterRibbonAt`, ~4-tile falloff). Wet penalizes walls hard (-1.7), fences lightly (-0.25), boosts open (+0.9). Roadside dividers skip entirely at wet > 0.6 and never pick stone at wet >= 0.35. |
+| 14.3 (fence length caps) | Fence runs longer than 4 tiles are capped to 3 / 5 / 8 / 13 tiles (weighted 30 / 35 / 25 / 10%) at a random offset inside the edge; the remainder goes open. Fences cluster near farms via the `farmNear` score term. |
+| 15.3, 19.2 (gates and access gaps) | Long runs (>= 6 tiles) get a 1-tile gap 50% of the time; each enclosure structure (`st`) is guaranteed at least one gate (`st.hasGate`) on any run >= 4 tiles. |
+| 12.4, 18.3 (condition states) | Per-run condition `cond = 0.45 + 0.75 * farmNear + noise` (yard and fence runs always intact). Low-condition walls sag (per-piece `hMul` 0.62-1.0), randomly drop pieces (collapse gaps), and spill stone piles at 35% of collapse points. Village walls stay intact, remote walls read worn. |
+| 19.1 (corners / pierriers) | Stone piles (`divider-pierrier` InstancedMesh, squashed dodecahedra in the wall-stone material): spawned at collapse points and at some low-condition wall ends (probability 0.35 - cond * 0.22). |
+| 5, 15 (roads as boundary magnets) | Pre-existing roadside divider pass (walls / fences follow road contours, offset 0.68 tiles, walls favored near the village), now gated by the wetness rule. |
+| 12, 18 (run-level consistency) | Pre-existing: one wall variant per run, per-enclosure grey tint, 12% piece overlap, fences trimmed into walls at junctions. |
+| 3.4 (hedgerows on earth banks) | **Not yet implemented** — hedge tiles are still flat; banked bocage read is the remaining item. |
+| 13 (terraces), 17 (era modifiers) | Not implemented (map is lowland 1940 France; terraces out of scope for now). |

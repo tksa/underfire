@@ -1107,6 +1107,143 @@
     <div id="debugPanel">
       <div class="dbg-title">Debug Controls (` to toggle)</div>
 
+      <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Neural
+        Terrain</div>
+      <label style="gap:4px">Model
+        <select id="dbgNeuModel"
+          style="flex:1;min-width:0;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px"></select>
+        <button id="dbgNeuModelLoad"
+          style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 8px;cursor:pointer;font-size:11px">Load</button>
+      </label>
+      <label style="gap:4px"><span class="dbg-val" id="dbgNeuModelStatus"
+          style="min-width:0;text-align:left;flex:1"></span></label>
+      <label style="gap:4px">Server
+        <input type="text" id="dbgNeuUrl" placeholder="http://127.0.0.1:8788"
+          style="flex:1;min-width:0;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px;padding:2px 4px">
+      </label>
+      <label style="gap:4px">Prompt
+        <input type="text" id="dbgNeuPrompt"
+          placeholder="ultra realistic aerial photograph of rural french countryside terrain, drone photo, neutral daylight"
+          style="flex:1;min-width:0;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px;padding:2px 4px">
+      </label>
+      <label style="gap:4px">Negative
+        <input type="text" id="dbgNeuNeg"
+          placeholder="blurry, low quality, oversharpened, noisy, grainy, jpeg artifacts, painting, cartoon..."
+          style="flex:1;min-width:0;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px;padding:2px 4px">
+      </label>
+      <label style="gap:4px">Steps
+        <input type="number" id="dbgNeuSteps" min="4" max="50" step="1" style="width:46px;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px">
+        guide
+        <input type="number" id="dbgNeuGuidance" min="1" max="10" step="0.5" style="width:46px;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px">
+        cn
+        <input type="number" id="dbgNeuCn" min="0.2" max="2" step="0.1" style="width:46px;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px">
+        seed
+        <input type="number" id="dbgNeuSeed" min="0" step="1" style="width:46px;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px">
+      </label>
+      <label style="gap:4px">Map
+        <input type="text" id="dbgMapName" placeholder="name"
+          style="width:90px;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px;padding:2px 4px">
+        <button id="dbgMapSave"
+          style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 8px;cursor:pointer;font-size:11px">Save</button>
+        <select id="dbgMapList"
+          style="flex:1;min-width:0;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px"></select>
+        <button id="dbgMapLoad"
+          style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 8px;cursor:pointer;font-size:11px">Load</button>
+        <button id="dbgMapDel"
+          style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 8px;cursor:pointer;font-size:11px">X</button>
+        <button id="dbgMapExport"
+          style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 8px;cursor:pointer;font-size:11px">Export</button>
+        <button id="dbgNewProc"
+          style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 8px;cursor:pointer;font-size:11px">New
+          Procedural</button>
+      </label>
+      <label style="gap:4px"><input type="checkbox" id="dbgFogOff"> Disable fog of war (full light)</label>
+
+      <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Map Maker
+      </div>
+      <label style="gap:4px">
+        <button id="dbgEdBlank" style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 8px;cursor:pointer;font-size:11px">New Blank Map</button>
+        <button id="dbgEdPaint" style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 8px;cursor:pointer;font-size:11px">Painting: OFF</button>
+        <button id="dbgEdUndo" style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 8px;cursor:pointer;font-size:11px">Undo</button>
+        <button id="dbgEdRebuild" style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 8px;cursor:pointer;font-size:11px">Rebuild World</button>
+      </label>
+      <label style="gap:4px">Texture
+        <select id="dbgEdType"
+          style="flex:1;min-width:0;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px"></select>
+        Mode
+        <select id="dbgEdMode"
+          style="background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px">
+          <option value="freeform">freeform</option>
+          <option value="tiles">tiles</option>
+        </select>
+        Shape
+        <select id="dbgEdShape"
+          style="background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px">
+          <option value="circle">circle</option>
+          <option value="square">square</option>
+        </select>
+        Tool
+        <select id="dbgEdTool"
+          style="background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px">
+          <option value="brush">brush</option>
+          <option value="line">line</option>
+        </select>
+      </label>
+      <label style="gap:4px">Brush size
+        <input type="range" id="dbgEdSize" min="1" max="14" step="1" value="3" style="flex:1">
+        <span class="dbg-val" id="dbgEdSizeVal">3</span>
+        <input type="checkbox" id="dbgEdSoft"> soft edge
+        <input type="checkbox" id="dbgEdSmooth" checked> round edges
+      </label>
+      <label style="gap:4px"><span class="dbg-val" id="dbgEdStatus" style="min-width:0;text-align:left;flex:1"></span></label>
+      <label style="gap:4px">Refine
+        <input type="number" id="dbgNeuRefine" min="0" max="0.6" step="0.05" style="width:46px;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px">
+        detail
+        <input type="number" id="dbgNeuDetail" min="0" max="0.5" step="0.05" style="width:46px;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px">
+        <input type="checkbox" id="dbgNeuUpscale" checked> 2x upscale
+      </label>
+      <label style="gap:4px">
+        <button id="dbgBakeBtn"
+          style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 10px;cursor:pointer;font-size:11px">Bake
+          Neural Map</button>
+        <button id="dbgBakeViewBtn"
+          style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 10px;cursor:pointer;font-size:11px">Bake
+          View</button>
+        <span class="dbg-val" id="dbgBakeStatus" style="min-width:0;text-align:left;flex:1"></span>
+      </label>
+      <label style="gap:4px">
+        <button id="dbgNeuralBtn"
+          style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 10px;cursor:pointer;font-size:11px">Neural
+          Render</button>
+        <span class="dbg-val" id="dbgNeuralStatus" style="min-width:0;text-align:left;flex:1"></span>
+      </label>
+
+      <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Reference
+      </div>
+      <label style="gap:4px"><input type="checkbox" id="dbgRefMode"> Reference Mode (terrain + walls/fences
+        only)</label>
+      <label style="gap:4px">Capture: per map
+        <input type="number" id="dbgCapPerMap" min="1" step="1" value="20"
+          style="width:52px;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5)">
+        total
+        <input type="number" id="dbgCapTotal" min="1" step="1" value="100"
+          style="width:70px;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5)">
+      </label>
+      <label style="gap:4px"><input type="checkbox" id="dbgCapOrtho" checked> Top-down capture (ortho, matches
+        bake)</label>
+      <label style="gap:4px">
+        <button id="dbgCapBtn"
+          style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 10px;cursor:pointer;font-size:11px">Start
+          Capture</button>
+        <span class="dbg-val" id="dbgCapStatus" style="min-width:0;text-align:left;flex:1"></span>
+      </label>
+      <label style="gap:4px">
+        <button id="dbgGenBtn"
+          style="background:#2a3138;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);padding:3px 10px;cursor:pointer;font-size:11px">Generate
+          Realistic</button>
+        <span class="dbg-val" id="dbgGenStatus" style="min-width:0;text-align:left;flex:1"></span>
+      </label>
+
       <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Terrain
       </div>
       <label>Height Scale
@@ -1153,6 +1290,14 @@
         <input type="range" id="dbgSun" min="0" max="6" step="0.05" value="5.05">
         <span class="dbg-val" id="dbgSunVal">5.05</span>
       </label>
+      <label>Shadow Darkness
+        <input type="range" id="dbgShadowDark" min="0" max="1" step="0.02" value="1">
+        <span class="dbg-val" id="dbgShadowDarkVal">1.00</span>
+      </label>
+      <label>Shadow Blur
+        <input type="range" id="dbgShadowBlur" min="0" max="14" step="0.5" value="4">
+        <span class="dbg-val" id="dbgShadowBlurVal">4.0</span>
+      </label>
       <label>Ambient
         <input type="range" id="dbgAmbient" min="0" max="5" step="0.05" value="2.1">
         <span class="dbg-val" id="dbgAmbientVal">2.10</span>
@@ -1163,6 +1308,83 @@
       </label>
       <label style="gap:4px"><input type="checkbox" id="dbgDynLight" checked> Dynamic Light</label>
 
+      <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Fluffy
+        Grass</div>
+      <label style="gap:4px"><input type="checkbox" id="dbgFluffOn" checked> enabled
+        <select id="dbgFluffSpecies"
+          style="background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px">
+          <option value="grass">grass</option>
+          <option value="wheat">wheat</option>
+        </select>
+        <span class="dbg-val" style="min-width:0;flex:1;text-align:left">paint via palette: +/- fluff</span>
+      </label>
+      <label>Density
+        <input type="range" id="dbgFluffDensity" min="0" max="200" step="1" value="155" style="flex:1">
+        <span class="dbg-val" id="dbgFluffDensityVal">6</span>
+      </label>
+      <label>Height
+        <input type="range" id="dbgFluffHeight" min="0.05" max="2.5" step="0.05" value="0.28" style="flex:1">
+        <span class="dbg-val" id="dbgFluffHeightVal">0.3</span>
+      </label>
+      <label>Height var
+        <input type="range" id="dbgFluffHVar" min="0" max="1" step="0.05" value="0.45" style="flex:1">
+        <span class="dbg-val" id="dbgFluffHVarVal">0.45</span>
+      </label>
+      <label>Width
+        <input type="range" id="dbgFluffWidth" min="0.2" max="4" step="0.1" value="1" style="flex:1">
+        <span class="dbg-val" id="dbgFluffWidthVal">1</span>
+      </label>
+      <label>Lean
+        <input type="range" id="dbgFluffLean" min="0" max="0.6" step="0.02" value="0.15" style="flex:1">
+        <span class="dbg-val" id="dbgFluffLeanVal">0.15</span>
+      </label>
+      <label>Patchiness
+        <input type="range" id="dbgFluffPatch" min="0" max="0.9" step="0.05" value="0.2" style="flex:1">
+        <span class="dbg-val" id="dbgFluffPatchVal">0.2</span>
+      </label>
+      <label>Color var
+        <input type="range" id="dbgFluffCVar" min="0" max="0.8" step="0.05" value="0.25" style="flex:1">
+        <span class="dbg-val" id="dbgFluffCVarVal">0.25</span>
+      </label>
+      <label>Wave scale
+        <input type="range" id="dbgFluffWave" min="0.02" max="1.5" step="0.02" value="0.32" style="flex:1">
+        <span class="dbg-val" id="dbgFluffWaveVal">0.32</span>
+      </label>
+      <label>Sway speed
+        <input type="range" id="dbgFluffSpeed" min="0" max="3" step="0.1" value="1.2" style="flex:1">
+        <span class="dbg-val" id="dbgFluffSpeedVal">1.2</span>
+      </label>
+      <label>Sway amount
+        <input type="range" id="dbgFluffAmp" min="0" max="0.5" step="0.02" value="0.16" style="flex:1">
+        <span class="dbg-val" id="dbgFluffAmpVal">0.16</span>
+      </label>
+      <label style="gap:8px">Base <input type="color" id="dbgFluffBase" value="#96a07f">
+        Tip <input type="color" id="dbgFluffTip" value="#ffffff">
+        <input type="checkbox" id="dbgFluffMatch" checked> match ground
+      </label>
+      <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Foliage
+        Color</div>
+      <label>Species
+        <select id="dbgFolSpecies"
+          style="flex:1;min-width:0;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px">
+          <option value="oak">Oak trees</option>
+          <option value="pine">Pines</option>
+          <option value="birch">Birches</option>
+          <option value="shrub">Bushes</option>
+        </select>
+      </label>
+      <label>Hue Shift
+        <input type="range" id="dbgFolHue" min="-0.5" max="0.5" step="0.01" value="0">
+        <span class="dbg-val" id="dbgFolHueVal">0.00</span>
+      </label>
+      <label>Saturation
+        <input type="range" id="dbgFolSat" min="0" max="2" step="0.05" value="1">
+        <span class="dbg-val" id="dbgFolSatVal">1.00</span>
+      </label>
+      <label>Lightness
+        <input type="range" id="dbgFolLight" min="0.2" max="1.8" step="0.05" value="1">
+        <span class="dbg-val" id="dbgFolLightVal">1.00</span>
+      </label>
       <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Camera
       </div>
       <label>Tilt (deg)
@@ -1419,6 +1641,11 @@
         <div class="menu-updates" id="menuUpdates"></div>
       </div>
 
+      <div style="max-width:430px;margin:10px auto 2px;padding:8px 12px;border:1px solid rgba(216,186,123,.25);background:rgba(20,24,28,.55);color:#b9c4cc;font-size:12px;line-height:1.45;text-align:left">
+        <b style="color:#d8ba7b">Neural terrain (work in progress):</b> this map's ground is generated by a
+        neural network trained on the game's own maps. It will keep evolving as new models are trained.
+        The model, dataset and how to bake maps yourself are in the README.
+      </div>
       <button class="menu-start" id="btnStartMission" data-i18n="start">Start Mission</button>
       <div class="menu-version" id="menuVersion"></div>
     </div>
@@ -1537,7 +1764,8 @@
         'config', 'i18n', 'utils', 'engine', 'weapons', 'terrain', 'units',
         'pathfinding', 'combat', 'ai', 'camera', 'input', 'renderer', 'audio',
         'mission', 'neural_export', 'unit_modules', 'ai_tactics', 'valor', 'buildings', 'garrison_ui',
-        'soldier_model'
+        'soldier_model',
+        'editor'
       ];
       classic.forEach(function (f) {
         document.write('<script src="js/' + f + '.js?v=' + v + '"><\/script>');
