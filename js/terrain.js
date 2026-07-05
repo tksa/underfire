@@ -1019,6 +1019,53 @@ Game._makeWaterNormalTex = () => {
     return tex;
 };
 
+// Soft sun-glint canvas: sparse bright blobs over black, tiled and drifted
+// slowly across the water as an emissive layer — patches of light with the
+// darker water reading between them.
+Game._waterSparkleCanvas = () => {
+    if (Game._sparkleCanvas) return Game._sparkleCanvas;
+    const N = 256;
+    const c = document.createElement('canvas');
+    c.width = c.height = N;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, N, N);
+    const blob = (x, y, r, a) => {
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, 'rgba(255,248,220,' + a + ')');
+        g.addColorStop(0.4, 'rgba(255,246,214,' + (a * 0.5) + ')');
+        g.addColorStop(1, 'rgba(255,246,214,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    };
+    // hundreds of tiny sharp glints (the "glitter"), a few medium ones
+    for (let i = 0; i < 640; i++) {
+        const x = Math.random() * N, y = Math.random() * N;
+        const r = 0.6 + Math.random() * 1.8;
+        const a = 0.35 + Math.random() * 0.55;
+        for (const dx of [-N, 0, N]) {
+            for (const dy of [-N, 0, N]) blob(x + dx, y + dy, r, a);
+        }
+    }
+    for (let i = 0; i < 30; i++) {
+        const x = Math.random() * N, y = Math.random() * N;
+        const r = 2.5 + Math.random() * 3.5;
+        const a = 0.2 + Math.random() * 0.3;
+        for (const dx of [-N, 0, N]) {
+            for (const dy of [-N, 0, N]) blob(x + dx, y + dy, r, a);
+        }
+    }
+    Game._sparkleCanvas = c;
+    return c;
+};
+Game._waterSparkleTex = () => {
+    const THREE = Game.THREE;
+    const tex = new THREE.CanvasTexture(Game._waterSparkleCanvas());
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+};
+Game.WATER_SPARKLE = { intensity: 1.55, scale: 6, speed: 2.9 };
+
 Game._buildWaterSurface = () => {
     Game._waterFX = null;
     // scan the tile map so hand-painted water (map maker) gets a surface too
@@ -1078,11 +1125,17 @@ Game._buildWaterSurface = () => {
     const normalMap = Game._makeWaterNormalTex();
     normalMap.repeat.set(w / 14, hSpan / 14);   // ripple wavelength a few metres
 
+    const sparkle = Game._waterSparkleTex();
+    const spScale = (Game.WATER_SPARKLE && Game.WATER_SPARKLE.scale) || 6;
+    sparkle.repeat.set(w / spScale, hSpan / spScale);
     const mat = new THREE.MeshStandardMaterial({
         map, normalMap,
         normalScale: new THREE.Vector2(0.5, 0.35),
         transparent: true, depthWrite: false,
         roughness: 0.16, metalness: 0.05,
+        emissive: 0xfff6d6,
+        emissiveMap: sparkle,
+        emissiveIntensity: (Game.WATER_SPARKLE && Game.WATER_SPARKLE.intensity) || 1.55,
     });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, hSpan), mat);
     mesh.rotation.x = -Math.PI / 2;
@@ -1092,24 +1145,52 @@ Game._buildWaterSurface = () => {
     mesh.renderOrder = 1;
     mesh.raycast = () => {};   // purely visual — never blocks picking
     Game.terrainGroup.add(mesh);
-    Game._waterFX = { mat, t: Game.rand(0, 100) };
+    Game._waterFX = { mat, sparkle, w, hSpan, t: Game.rand(0, 100) };
 };
 
 // Scroll the ripple normals along the river each frame (called from the loop).
+Game.WATER_RIPPLE = { speed: 2.2, strength: 1 };   // debug-tunable
+
 Game.updateWaterFX = (dt) => {
     const fx = Game._waterFX;
     if (!fx) return;
-    fx.t += dt;
+    const R = Game.WATER_RIPPLE || { speed: 1, strength: 1 };
+    fx.t += dt * (R.speed != null ? R.speed : 1);
     const nm = fx.mat.normalMap;
     if (nm) {
         nm.offset.x = (fx.t * 0.020) % 1;   // flow along the river (E-W)
         nm.offset.y = (fx.t * 0.008) % 1;
     }
     // soft cross-chop so the glints keep moving
+    const k = R.strength != null ? R.strength : 1;
     fx.mat.normalScale.set(
-        0.45 + 0.12 * Math.sin(fx.t * 0.9),
-        0.32 + 0.09 * Math.sin(fx.t * 1.3 + 1.0)
+        (0.45 + 0.12 * Math.sin(fx.t * 0.9)) * k,
+        (0.32 + 0.09 * Math.sin(fx.t * 1.3 + 1.0)) * k
     );
+    // sun glints drift much slower than the chop, on their own speed control
+    const SP = Game.WATER_SPARKLE || {};
+    const spT = fx.t * (SP.speed != null ? SP.speed : 1);
+    if (fx.sparkle) {
+        fx.sparkle.offset.x = (spT * 0.0045) % 1;
+        fx.sparkle.offset.y = (spT * 0.0028) % 1;
+    }
+    const BS = Game._neuralBake;
+    if (BS && BS.waterSwap) {
+        const em = BS.waterSwap.mesh.material.emissiveMap;
+        if (em) {
+            em.offset.x = (spT * 0.0045) % 1;
+            em.offset.y = (spT * 0.0028) % 1;
+        }
+    }
+    // the neural-bake water overlay shares the scrolling normal texture;
+    // keep its (subtler) chop in step with the same controls
+    const B = Game._neuralBake;
+    if (B && B.waterSwap && B.waterSwap.mesh.material.normalScale) {
+        B.waterSwap.mesh.material.normalScale.set(
+            (0.14 + 0.05 * Math.sin(fx.t * 0.9)) * k,
+            (0.10 + 0.04 * Math.sin(fx.t * 1.3 + 1.0)) * k
+        );
+    }
 };
 
 // Scattered cobbles on the gravel-wash bars (instanced, purely visual). Uses

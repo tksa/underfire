@@ -2638,7 +2638,7 @@ Game.NEURAL_CNSCALE = 1;   // how hard the reference layout steers (try 1.2-1.5 
 Game.NEURAL_REFINE = 0.3;  // bake second-pass img2img strength (0 = off)
 Game.NEURAL_UPSCALE = 2;   // bake Real-ESRGAN upscale factor (1 = off)
 Game.NEURAL_DETAIL = 0.2;  // hi-res detail pass strength after upscale (0 = off)
-Game.NEURAL_WATER = 0.45;  // water overlay opacity in bake mode (ripples + colour assist)
+Game.NEURAL_WATER = 0.30;  // water overlay opacity in bake mode (ripples + colour assist)
 Game.NEURAL_STYLE = '';    // optional prompt suffix, e.g. 'lush summer, golden hour'
 Game.NEURAL_PROMPT = '';   // FULL prompt override (empty = built-in trained caption)
 Game.NEURAL_NEG = '';      // FULL negative override (empty = built-in default)
@@ -2760,16 +2760,31 @@ Game.NEURAL_BAKE_PPU = 21.6;   // px per world unit ~= training pixel density
     // the animated normal map for subtle moving glints. The baked colour+
     // alpha map is reused purely as the shoreline mask, and updateWaterFX
     // keeps scrolling the shared normal texture.
-    const neuralWaterMat = (src) => new Game.THREE.MeshStandardMaterial({
-        map: src.map,
-        normalMap: src.normalMap,
-        normalScale: new Game.THREE.Vector2(0.14, 0.1),
-        transparent: true,
-        depthWrite: false,
-        opacity: Game.NEURAL_WATER ?? 0.45,
-        roughness: 0.12,
-        metalness: 0.05,
-    });
+    const neuralWaterMat = (src) => {
+        const m = new Game.THREE.MeshStandardMaterial({
+            map: src.map,
+            normalMap: src.normalMap,
+            normalScale: new Game.THREE.Vector2(0.14, 0.1),
+            transparent: true,
+            depthWrite: false,
+            opacity: Game.NEURAL_WATER ?? 0.30,
+            roughness: 0.12,
+            metalness: 0.05,
+            emissive: 0xfff6d6,
+            emissiveIntensity: (Game.WATER_SPARKLE && Game.WATER_SPARKLE.intensity) || 1.55,
+        });
+        if (Game._waterSparkleTex) {
+            m.emissiveMap = Game._waterSparkleTex();
+            const spScale = (Game.WATER_SPARKLE && Game.WATER_SPARKLE.scale) || 6;
+            // the bake bounds match the water fx plane; reuse its world dims
+            if (Game._waterFX && Game._waterFX.w) {
+                m.emissiveMap.repeat.set(Game._waterFX.w / spScale, Game._waterFX.hSpan / spScale);
+            } else {
+                m.emissiveMap.repeat.set(300 / spScale, 300 / spScale);
+            }
+        }
+        return m;
+    };
     const B = Game._neuralBake = { applied: false, busy: false, oldMap: null, hidden: null, tex: null };
 
     // staged loading overlay ("...generating proceduals...")
@@ -3437,6 +3452,35 @@ Game.applyFoliageTint = (sp) => {
 }
 
 // ── Effects controls ──
+_dbgSlider('dbgRippleSpeed', 'dbgRippleSpeedVal', v => {
+    (Game.WATER_RIPPLE = Game.WATER_RIPPLE || {}).speed = v;
+});
+_dbgSlider('dbgRippleStr', 'dbgRippleStrVal', v => {
+    (Game.WATER_RIPPLE = Game.WATER_RIPPLE || {}).strength = v;
+});
+_dbgSlider('dbgSparkle', 'dbgSparkleVal', v => {
+    (Game.WATER_SPARKLE = Game.WATER_SPARKLE || {}).intensity = v;
+    if (Game._waterFX && Game._waterFX.mat) Game._waterFX.mat.emissiveIntensity = v;
+    const B = Game._neuralBake;
+    if (B && B.waterSwap) B.waterSwap.mesh.material.emissiveIntensity = v;
+});
+_dbgSlider('dbgSparkleScale', 'dbgSparkleScaleVal', v => {
+    (Game.WATER_SPARKLE = Game.WATER_SPARKLE || {}).scale = v;
+    const fx = Game._waterFX;
+    if (fx && fx.sparkle && fx.w) fx.sparkle.repeat.set(fx.w / v, fx.hSpan / v);
+    const B = Game._neuralBake;
+    if (B && B.waterSwap && B.waterSwap.mesh.material.emissiveMap && fx && fx.w) {
+        B.waterSwap.mesh.material.emissiveMap.repeat.set(fx.w / v, fx.hSpan / v);
+    }
+});
+_dbgSlider('dbgSparkleSpeed', 'dbgSparkleSpeedVal', v => {
+    (Game.WATER_SPARKLE = Game.WATER_SPARKLE || {}).speed = v;
+});
+_dbgSlider('dbgWaterOpacity', 'dbgWaterOpacityVal', v => {
+    Game.NEURAL_WATER = v;
+    const B = Game._neuralBake;
+    if (B && B.waterSwap) B.waterSwap.mesh.material.opacity = v;
+});
 Game.RUBBLE_DUST = { amount: 1, size: 1, opacity: 0.3 };
 _dbgSlider('dbgRubbleAmt', 'dbgRubbleAmtVal', v => { Game.RUBBLE_DUST.amount = v; });
 _dbgSlider('dbgRubbleSize', 'dbgRubbleSizeVal', v => { Game.RUBBLE_DUST.size = v; });
