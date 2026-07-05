@@ -731,15 +731,30 @@ Game.buildFluffyGrass = () => {
             }
             return fallback;
         };
+        // pre-count eligible tiles so dense settings thin per-tile up front
+        // instead of building millions of spots and culling after (an O(n^2)
+        // splice here froze the browser on all-grass blank maps)
+        const CAP = 600000;
+        let eligible = 0;
+        for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
+            for (let tx = 0; tx < Game.MAP_COLS; tx++) {
+                const st = mask[ty * Game.MAP_COLS + tx];
+                if (st === 0) continue;
+                if (st === 1 || auto.has(Game.terrain[ty][tx].type) || ov) eligible++;
+            }
+        }
+        if (!eligible) continue;
+        const density = Math.min(cfg.density, CAP / eligible);
         const spots = [];
         for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
             for (let tx = 0; tx < Game.MAP_COLS; tx++) {
                 const st = mask[ty * Game.MAP_COLS + tx];
                 if (st === 0) continue;
                 const tileType = Game.terrain[ty][tx].type;
-                // candidates even on non-matching tiles: paint may cover them
-                let n = Math.floor(cfg.density);
-                if (Math.random() < cfg.density - n) n++;
+                // fast path: tile can't match and no paint override exists
+                if (st !== 1 && !auto.has(tileType) && !ov) continue;
+                let n = Math.floor(density);
+                if (Math.random() < density - n) n++;
                 for (let k = 0; k < n; k++) {
                     const x = (tx + Math.random()) * T;
                     const z = (ty + Math.random()) * T;
@@ -752,14 +767,6 @@ Game.buildFluffyGrass = () => {
             }
         }
         if (!spots.length) continue;
-        // safety cap: keep the draw call sane on dense settings
-        const CAP = 1200000;
-        if (spots.length > CAP) {
-            const keep = CAP / spots.length;
-            for (let i = spots.length - 1; i >= 0; i--) {
-                if (Math.random() > keep) spots.splice(i, 1);
-            }
-        }
         const inst = new THREE.InstancedMesh(Game._fluffBladeGeo(cfg.geo || 'blade'), Game._fluffMaterial(sp), spots.length);
         inst.name = 'fluffy-grass-' + sp;
         inst.raycast = () => { };
