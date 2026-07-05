@@ -609,6 +609,7 @@
       left: 0;
       right: 0;
       height: 160px;
+      transition: transform 0.35s ease;
       display: flex;
       align-items: stretch;
       background: linear-gradient(to bottom, #2b2d32, #1c1e22);
@@ -1294,32 +1295,32 @@
       <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Lighting
       </div>
       <label>Sun Intensity
-        <input type="range" id="dbgSun" min="0" max="6" step="0.05" value="5.05">
-        <span class="dbg-val" id="dbgSunVal">5.05</span>
+        <input type="range" id="dbgSun" min="0" max="6" step="0.05" value="4.2">
+        <span class="dbg-val" id="dbgSunVal">4.20</span>
       </label>
       <label>Shadow Darkness
-        <input type="range" id="dbgShadowDark" min="0" max="1" step="0.02" value="1">
-        <span class="dbg-val" id="dbgShadowDarkVal">1.00</span>
+        <input type="range" id="dbgShadowDark" min="0" max="1" step="0.02" value="0.7">
+        <span class="dbg-val" id="dbgShadowDarkVal">0.70</span>
       </label>
       <label>Shadow Blur
-        <input type="range" id="dbgShadowBlur" min="0" max="14" step="0.5" value="4">
-        <span class="dbg-val" id="dbgShadowBlurVal">4.0</span>
+        <input type="range" id="dbgShadowBlur" min="0" max="14" step="0.5" value="10">
+        <span class="dbg-val" id="dbgShadowBlurVal">10.0</span>
       </label>
       <label>Tilt-Shift Focus
-        <input type="range" id="dbgTiltFocus" min="0" max="1" step="0.02" value="0.35">
-        <span class="dbg-val" id="dbgTiltFocusVal">0.35</span>
+        <input type="range" id="dbgTiltFocus" min="0" max="1" step="0.02" value="0.7">
+        <span class="dbg-val" id="dbgTiltFocusVal">0.70</span>
       </label>
       <label>Tilt-Shift Feather
-        <input type="range" id="dbgTiltFeather" min="0" max="1" step="0.02" value="0.25">
-        <span class="dbg-val" id="dbgTiltFeatherVal">0.25</span>
+        <input type="range" id="dbgTiltFeather" min="0" max="1" step="0.02" value="0.56">
+        <span class="dbg-val" id="dbgTiltFeatherVal">0.56</span>
       </label>
       <label>Ambient
-        <input type="range" id="dbgAmbient" min="0" max="5" step="0.05" value="2.1">
-        <span class="dbg-val" id="dbgAmbientVal">2.10</span>
+        <input type="range" id="dbgAmbient" min="0" max="5" step="0.05" value="1.95">
+        <span class="dbg-val" id="dbgAmbientVal">1.95</span>
       </label>
       <label>Cloud Shadows
-        <input type="range" id="dbgCloud" min="0" max="0.5" step="0.01" value="0">
-        <span class="dbg-val" id="dbgCloudVal">0.00</span>
+        <input type="range" id="dbgCloud" min="0" max="0.5" step="0.01" value="0.27">
+        <span class="dbg-val" id="dbgCloudVal">0.27</span>
       </label>
       <label style="gap:4px"><input type="checkbox" id="dbgDynLight" checked> Dynamic Light</label>
 
@@ -1443,7 +1444,48 @@
     </div>
 
     <!-- HUD Bottom Bar (Sudden Strike style) -->
+    <style>
+      #hudBar.hud-collapsed { transform: translateY(105%); }
+      .hud-fold {
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        width: 26px;
+        height: 22px;
+        line-height: 20px;
+        text-align: center;
+        background: #2a3138;
+        color: #9fb0bc;
+        border: 1px solid rgba(80, 90, 100, .5);
+        cursor: pointer;
+        pointer-events: auto;
+        font-size: 12px;
+        user-select: none;
+        z-index: 16;
+      }
+      .hud-fold:hover { color: #fff; }
+      #hudExpand {
+        position: fixed;
+        bottom: 8px;
+        right: 8px;
+        width: 30px;
+        height: 24px;
+        line-height: 22px;
+        text-align: center;
+        background: #2a3138;
+        color: #9fb0bc;
+        border: 1px solid rgba(80, 90, 100, .5);
+        cursor: pointer;
+        font-size: 12px;
+        user-select: none;
+        z-index: 16;
+        display: none;
+      }
+      #hudExpand:hover { color: #fff; }
+    </style>
+    <div id="hudExpand" title="Show bar">&#9652;</div>
     <div id="hudBar">
+      <div class="hud-fold" id="hudCollapse" title="Hide bar">&#9662;</div>
       <div class="hud-help-wrap">
         <div class="hud-help-btn" onclick="this.nextElementSibling.classList.toggle('show')">?</div>
         <div class="hud-help-tooltip">

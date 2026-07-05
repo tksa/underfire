@@ -39,11 +39,11 @@ Game.initEngine = () => {
     Game.camera.lookAt(Game.cam.x, 0, Game.cam.z);
 
     // Lighting — warm late-summer afternoon
-    const ambient = new THREE.AmbientLight(0xb3a684, 2.1);
+    const ambient = new THREE.AmbientLight(0xb3a684, 1.95);
     Game.scene.add(ambient);
     Game.ambient = ambient;
 
-    const sun = new THREE.DirectionalLight(0xffe6b8, 5.05);
+    const sun = new THREE.DirectionalLight(0xffe6b8, 4.2);
     sun.position.set(40, 80, -30);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -58,7 +58,8 @@ Game.initEngine = () => {
     // self-shadow "acne" (dark moiré patches) that was showing up as fake damage
     // on angled building roofs depending on their orientation to the sun.
     sun.shadow.normalBias = 0.8;
-    sun.shadow.radius = 4;   // soft shadow edges (esp. trees); tunable in debug
+    sun.shadow.radius = 10;   // soft shadow edges (esp. trees); tunable in debug
+    sun.shadow.intensity = 0.7;
     Game.scene.add(sun);
     Game.scene.add(sun.target);
     Game.sun = sun;
@@ -91,7 +92,7 @@ Game.initEngine = () => {
         color: 0x000000,
         alphaMap: cloudTex,
         transparent: true,
-        opacity: 0.12,
+        opacity: 0.27,
         depthWrite: false,
         side: THREE.DoubleSide,
     });
@@ -100,10 +101,14 @@ Game.initEngine = () => {
     Game.cloudShadow.position.set(Game.WORLD_W / 2, 8, Game.WORLD_H / 2);
     Game.scene.add(Game.cloudShadow);
 
-    // Ground plane (for raycasting)
+    // Ground plane (raycasting + the off-map floor). Unlit and unfogged so it
+    // renders EXACTLY the off-map tone (lit+fogged it washed out to grey);
+    // reference captures swap back to the lit look the model was trained on.
     const groundGeo = new THREE.PlaneGeometry(Game.WORLD_W + 20, Game.WORLD_H + 20);
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x161a1e, roughness: 0.95 });
+    const groundMat = new THREE.MeshBasicMaterial({ color: Game.OFFMAP_COLOR || 0x14161c, fog: false });
+    Game._groundPlaneRefMat = new THREE.MeshStandardMaterial({ color: 0x161a1e, roughness: 0.95 });
     Game.groundPlane = new THREE.Mesh(groundGeo, groundMat);
+    Game.groundPlane.name = 'ground-plane';
     Game.groundPlane.rotation.x = -Math.PI / 2;
     Game.groundPlane.position.set(Game.WORLD_W / 2, -0.05, Game.WORLD_H / 2);
     Game.groundPlane.receiveShadow = true;
@@ -311,6 +316,30 @@ Game.worldToScreen = (x, z, y = 0) => {
  * bloom, tilt-shift depth-of-field, colour grading, vignette and SMAA.
  * Degrades to a direct render if the library or a GL feature is unavailable.
  */
+// (Re)build the tilt-shift as the composer's FINAL pass. The effect's live
+// property setters proved unreliable, so sliders rebuild the pass instead —
+// heavier, but guaranteed to apply, and appending keeps it on top.
+Game._applyTiltShift = () => {
+    const PF = Game.PostFX;
+    if (!PF || !Game.composer) return;
+    const st = Game.postfxState || {};
+    if (Game._tiltPass) {
+        Game.composer.removePass(Game._tiltPass);
+        if (Game._tiltPass.dispose) Game._tiltPass.dispose();
+        Game._tiltPass = null;
+    }
+    const eff = new PF.TiltShiftEffect({
+        offset: 0.0,
+        rotation: 0.0,
+        focusArea: st.tiltFocusArea ?? 0.7,
+        feather: st.tiltFeather ?? 0.56,
+        kernelSize: PF.KernelSize.LARGE,
+    });
+    Game._tiltPass = new PF.EffectPass(Game.camera, eff);
+    Game.composer.addPass(Game._tiltPass);
+    if (Game.postfx) Game.postfx.tiltShift = eff;
+};
+
 Game.setupPostFX = () => {
     const PF = Game.PostFX;
     if (!PF || !Game.renderer || !Game.scene || !Game.camera) return false;
@@ -329,13 +358,6 @@ Game.setupPostFX = () => {
             radius: 0.7,
             mipmapBlur: true,
         });
-        const tiltShift = new PF.TiltShiftEffect({
-            offset: 0.0,
-            rotation: 0.0,
-            focusArea: 0.35,   // sharp band over the playfield; blur top/bottom edges
-            feather: 0.25,     // (0.6/0.3 blurred only the outer ~5% - invisible)
-            kernelSize: PF.KernelSize.LARGE,   // SMALL was imperceptible — needs a real blur radius
-        });
         const hueSat = new PF.HueSaturationEffect({ hue: -0.06, saturation: 0.05 });
         const brightContrast = new PF.BrightnessContrastEffect({ brightness: 0.01, contrast: 0.12 });
         const vignette = new PF.VignetteEffect({ offset: 0.62, darkness: 0.67 });
@@ -344,22 +366,24 @@ Game.setupPostFX = () => {
         const smaaPass = new PF.EffectPass(Game.camera, smaa);
         composer.addPass(smaaPass);
         composer.addPass(new PF.EffectPass(Game.camera, bloom));
-        composer.addPass(new PF.EffectPass(Game.camera, tiltShift));
         composer.addPass(new PF.EffectPass(Game.camera, hueSat, brightContrast, vignette));
 
         Game.composer = composer;
-        Game.postfx = { bloom, tiltShift, hueSat, brightContrast, vignette, smaa, smaaPass };
+        Game.postfx = { bloom, tiltShift: null, hueSat, brightContrast, vignette, smaa, smaaPass };
 
         // FSR-like upscaler: render the composed frame at reduced resolution and
         // edge-enhance it on the way up to the canvas.
         Game._setupUpscaler();
         Game._applyComposerSize();
+        // Tilt-shift LAST: rebuilt as the topmost pass so the diorama blur
+        // sits over bloom, grade, vignette — everything.
+        Game._applyTiltShift();
 
         // Live-tunable state (mirrors the constructor values above) + debug UI.
         Game.postfxState = {
             upscaleFactor: Game.upscaleFactor,
             bloomIntensity: 0.4, bloomThreshold: 0.65,
-            tiltFocusArea: 0.35, tiltFeather: 0.25,
+            tiltFocusArea: 0.7, tiltFeather: 0.56,
             saturation: 0.05, hue: -0.06,
             brightness: 0.01, contrast: 0.12,
             vignetteOffset: 0.62, vignetteDarkness: 0.67,
@@ -515,8 +539,6 @@ Game._postfxControlDefs = () => {
         { group: 'Upscaler', key: 'upscaleFactor', label: 'Upscale Factor', min: 1, max: 3, step: 0.01, apply: v => Game.setUpscale(v) },
         { group: 'Bloom', key: 'bloomIntensity', label: 'Bloom Intensity', min: 0, max: 3, step: 0.05, apply: v => { if (pf.bloom) pf.bloom.intensity = v; } },
         { group: 'Bloom', key: 'bloomThreshold', label: 'Bloom Threshold', min: 0, max: 1, step: 0.01, apply: v => { if (pf.bloom && pf.bloom.luminanceMaterial) pf.bloom.luminanceMaterial.threshold = v; } },
-        { group: 'Tilt-Shift', key: 'tiltFocusArea', label: 'Focus Area', min: 0, max: 1, step: 0.01, apply: v => { if (pf.tiltShift) pf.tiltShift.focusArea = v; } },
-        { group: 'Tilt-Shift', key: 'tiltFeather', label: 'Feather', min: 0, max: 1, step: 0.01, apply: v => { if (pf.tiltShift) pf.tiltShift.feather = v; } },
         { group: 'Colour Grade', key: 'saturation', label: 'Saturation', min: -1, max: 1, step: 0.01, apply: v => { if (pf.hueSat) pf.hueSat.saturation = v; } },
         { group: 'Colour Grade', key: 'hue', label: 'Hue', min: -3.14, max: 3.14, step: 0.02, apply: v => { if (pf.hueSat) pf.hueSat.hue = v; } },
         { group: 'Colour Grade', key: 'brightness', label: 'Brightness', min: -0.5, max: 0.5, step: 0.01, apply: v => { if (pf.brightContrast) pf.brightContrast.brightness = v; } },

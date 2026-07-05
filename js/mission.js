@@ -101,12 +101,11 @@ Game.spawnScenario = () => {
     Game.makeUnit(GERMAN, 'mg34', (36.9 + vdx) * T, (17 + vdy) * T, hold(36.9 + vdx, 17 + vdy));
     Game.makeUnit(GERMAN, 'grenadier', (32.5 + vdx) * T, (21 + vdy) * T, hold(32.5 + vdx, 21 + vdy));
 
-    // Auto-select first French squad
+    // Start with nothing selected — the player picks their own opening move
     Game.selection.clear();
-    Game.units.filter(u => u.team === Game.TEAM.FRENCH && u.group === 'A').forEach(u => Game.selection.add(u.id));
     Game.units.forEach(u => {
         if (u.mesh && u.mesh.userData.selectionRing) {
-            u.mesh.userData.selectionRing.visible = Game.selection.has(u.id);
+            u.mesh.userData.selectionRing.visible = false;
         }
     });
 

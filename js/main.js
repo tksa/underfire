@@ -2209,6 +2209,14 @@ Game.setReferenceMode = (on) => {
     // off-map colour: captures must keep the pale margin the model was
     // trained on; play uses the dark UI tone (engine sets it at boot)
     if (Game.renderer) Game.renderer.setClearColor(on ? 0xcabf9f : (Game.OFFMAP_COLOR || 0x14161c));
+    if (Game.groundPlane && Game._groundPlaneRefMat) {
+        if (on) {
+            Game._groundPlanePlayMat = Game.groundPlane.material;
+            Game.groundPlane.material = Game._groundPlaneRefMat;
+        } else if (Game._groundPlanePlayMat) {
+            Game.groundPlane.material = Game._groundPlanePlayMat;
+        }
+    }
     if (on) {
         const saved = Game._refSaved = new Map();
         const hide = (o) => {
@@ -3409,6 +3417,22 @@ Game.applyFoliageTint = (sp) => {
     }
 }
 
+// ── HUD bar fold: chevron collapses the bottom bar to a corner button ──
+{
+    const bar = document.getElementById('hudBar');
+    const down = document.getElementById('hudCollapse');
+    const up = document.getElementById('hudExpand');
+    const setFold = (folded) => {
+        if (!bar || !up) return;
+        bar.classList.toggle('hud-collapsed', folded);
+        up.style.display = folded ? 'block' : 'none';
+        localStorage.setItem('uf_hudFolded', folded ? '1' : '');
+    };
+    down?.addEventListener('click', () => setFold(true));
+    up?.addEventListener('click', () => setFold(false));
+    if (localStorage.getItem('uf_hudFolded') === '1') setFold(true);
+}
+
 // ── Lighting controls ──
 _dbgSlider('dbgSun', 'dbgSunVal', v => {
     Game._dbgSunBase = v;
@@ -3430,13 +3454,14 @@ _dbgSlider('dbgShadowBlur', 'dbgShadowBlurVal', v => {
     }
 });
 
-_dbgSlider('dbgTiltFocus', 'dbgTiltFocusVal', v => {
-    if (Game.postfx && Game.postfx.tiltShift) Game.postfx.tiltShift.focusArea = v;
-});
-
-_dbgSlider('dbgTiltFeather', 'dbgTiltFeatherVal', v => {
-    if (Game.postfx && Game.postfx.tiltShift) Game.postfx.tiltShift.feather = v;
-});
+const _tiltApply = (key, v) => {
+    Game.postfxState = Game.postfxState || {};
+    Game.postfxState[key] = v;
+    clearTimeout(Game._tiltDebounce);
+    Game._tiltDebounce = setTimeout(() => { if (Game._applyTiltShift) Game._applyTiltShift(); }, 120);
+};
+_dbgSlider('dbgTiltFocus', 'dbgTiltFocusVal', v => _tiltApply('tiltFocusArea', v));
+_dbgSlider('dbgTiltFeather', 'dbgTiltFeatherVal', v => _tiltApply('tiltFeather', v));
 
 _dbgSlider('dbgAmbient', 'dbgAmbientVal', v => {
     Game._dbgAmbientBase = v;
