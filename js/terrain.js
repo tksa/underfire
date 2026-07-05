@@ -2805,6 +2805,8 @@ Game._addFieldDividers = () => {
                         x: p.x, y, z: p.z, rotY: p.rotY,
                         s: p.sMul ? scale * p.sMul : scale, sy: bulk * hm, sz: bulk,
                         rrMul: 0.8, rrAdd: 0.1,
+                        stone: kind === 'wall',   // stone crumbles to rubble instead of tipping
+                        wood: kind === 'fence',   // fences splinter into planks
                         dir: 0, fallT: 0, triggered: false,
                     });
                 }

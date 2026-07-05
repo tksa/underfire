@@ -660,6 +660,20 @@ Game.updateFoliageKnockdown = (dt) => {
                 const rr = tk.size * (r.rrMul != null ? r.rrMul : 1.1) + (r.rrAdd != null ? r.rrAdd : 0.5);
                 if (Game.distSq(tk.x, tk.z, r.x, r.z) < rr * rr) {
                     r.triggered = true; r.dir = tk.angle; r.fallT = 0;
+                    if (r.stone || r.wood) {
+                        // walls crumble to stone, fences splinter to wood:
+                        // hide the piece, scatter debris
+                        r.fallT = 1;
+                        pos.set(r.x, -100, r.z);
+                        qY.identity();
+                        scl.set(0.0001, 0.0001, 0.0001);
+                        mat.compose(pos, qY, scl);
+                        r.leaves.setMatrixAt(r.idx, mat);
+                        if (r.branches !== r.leaves) r.branches.setMatrixAt(r.idx, mat);
+                        dirty.add(r.leaves);
+                        dirty.add(r.branches);
+                        if (Game._spawnWallRubble) Game._spawnWallRubble(r);
+                    }
                     break;
                 }
             }
@@ -682,6 +696,246 @@ Game.updateFoliageKnockdown = (dt) => {
         }
     }
     dirty.forEach(m => { m.instanceMatrix.needsUpdate = true; });
+
+    if (Game._updateWallRubble) Game._updateWallRubble(dt);
+};
+
+// ── Stone wall rubble: crushed walls burst into stones that fling out, ──
+// tumble, settle, and fade away — over a crushed-gravel decal in the same
+// fieldstone palette. One small InstancedMesh + one decal per crushed piece.
+Game._wallRubble = [];
+
+// shared crushed-gravel decal texture: speckled grey stones, dense centre,
+// fading edge — same cool-grey family as the wall texture
+Game.RUBBLE_DECAL = { dark: 0.6, blur: 1.5 };   // debug-tunable
+
+Game._rubbleDecalTexture = () => {
+    if (Game._rubbleDecalTex) return Game._rubbleDecalTex;
+    const THREE = Game.THREE;
+    const P = Game.RUBBLE_DECAL || {};
+    const darkMul = 1 - (P.dark != null ? P.dark : 0.6) * 0.7;
+    const N = 128;
+    const c = document.createElement('canvas');
+    c.width = c.height = N;
+    const ctx = c.getContext('2d');
+    if (P.blur) ctx.filter = 'blur(' + P.blur + 'px)';
+    for (let i = 0; i < 300; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const rad = Math.pow(Math.random(), 1.6) * 0.5;   // denser centre
+        const x = N / 2 + Math.cos(a) * rad * N;
+        const y = N / 2 + Math.sin(a) * rad * N;
+        const g = ((55 + Math.random() * 75) * darkMul) | 0;
+        ctx.fillStyle = 'rgba(' + g + ',' + Math.max(0, g - 3) + ',' + Math.max(0, g - 8) + ',' + (0.5 + Math.random() * 0.5) + ')';
+        ctx.beginPath();
+        ctx.ellipse(x, y, 1 + Math.random() * 2.4, 1 + Math.random() * 2.4, a, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    Game._rubbleDecalTex = tex;
+    return tex;
+};
+
+// shared splintered-wood decal: elongated slivers in weathered plank browns
+Game._woodDecalTexture = () => {
+    if (Game._woodDecalTex) return Game._woodDecalTex;
+    const THREE = Game.THREE;
+    const N = 128;
+    const c = document.createElement('canvas');
+    c.width = c.height = N;
+    const ctx = c.getContext('2d');
+    const P = Game.RUBBLE_DECAL || {};
+    const darkMul = 1 - (P.dark != null ? P.dark : 0.6) * 0.7;
+    if (P.blur) ctx.filter = 'blur(' + P.blur + 'px)';
+    for (let i = 0; i < 170; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const rad = Math.pow(Math.random(), 1.6) * 0.5;
+        const x = N / 2 + Math.cos(a) * rad * N;
+        const y = N / 2 + Math.sin(a) * rad * N;
+        const g = ((95 + Math.random() * 55) * darkMul) | 0;
+        ctx.fillStyle = 'rgba(' + g + ',' + ((g * 0.82) | 0) + ',' + ((g * 0.6) | 0) + ',' + (0.4 + Math.random() * 0.5) + ')';
+        ctx.beginPath();
+        ctx.ellipse(x, y, 2 + Math.random() * 4.5, 0.7 + Math.random() * 1.2, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    Game._woodDecalTex = tex;
+    return tex;
+};
+
+Game._spawnWallRubble = (r) => {
+    const THREE = Game.THREE;
+    if (!THREE || !Game.terrainGroup) return;
+    const wood = !!r.wood;
+    const n = wood ? 6 + ((Math.random() * 5) | 0) : 9 + ((Math.random() * 6) | 0);
+    const geo = wood
+        ? (Game._woodShardGeo || (Game._woodShardGeo = new THREE.BoxGeometry(1, 0.16, 0.14)))
+        : (Game._rubbleGeo || (Game._rubbleGeo = new THREE.DodecahedronGeometry(1, 0)));
+    const mat = wood
+        ? new THREE.MeshStandardMaterial({
+            color: 0x9b8d76, roughness: 1.0, metalness: 0.0,
+            transparent: true, opacity: 1,
+        })
+        : new THREE.MeshStandardMaterial({
+            map: Game._makeDarkStoneTexture ? Game._makeDarkStoneTexture() : null,
+            roughness: 0.95, metalness: 0.0,
+            transparent: true, opacity: 1,
+        });
+    const inst = new THREE.InstancedMesh(geo, mat, n);
+    inst.name = 'wall-rubble';
+    inst.castShadow = true;
+    inst.receiveShadow = true;
+    inst.raycast = () => { };
+    const ux = Math.cos(r.rotY), uz = -Math.sin(r.rotY);   // the piece's long axis
+    const len = Math.max(0.8, (r.s || 1) * 1.1);
+    const icol = new THREE.Color();
+    const stones = [];
+    for (let i = 0; i < n; i++) {
+        const a = (Math.random() - 0.5) * 2 * len;
+        const side = Math.random() < 0.5 ? -1 : 1;   // fling to either side
+        const speed = (wood ? 0.7 : 0.9) + Math.random() * 1.6;
+        const st = {
+            x: r.x + ux * a, z: r.z + uz * a,
+            y: (r.y || 0) + 0.45 + Math.random() * 0.35,
+            vx: -uz * side * speed + ux * Game.rand(-0.5, 0.5),
+            vz: ux * side * speed + uz * Game.rand(-0.5, 0.5),
+            vy: (wood ? 0.8 : 1.1) + Math.random() * 1.5,
+            rx: Math.random() * Math.PI, ry: Math.random() * Math.PI, rz: Math.random() * Math.PI,
+            wx: Game.rand(-7, 7), wy: Game.rand(-7, 7), wz: Game.rand(-7, 7),   // tumble
+            settled: false, bounced: false,
+        };
+        if (wood) {
+            // splinters: long thin shards, they spin fast and lie low
+            st.scale = [0.3 + Math.random() * 0.55, 0.7 + Math.random() * 0.6, 0.7 + Math.random() * 0.6];
+            st.fy = 0.06;
+            st.wx *= 1.6; st.wz *= 1.6;
+            icol.setScalar(0.75 + Math.random() * 0.55);
+        } else {
+            const sc = 0.09 + Math.random() * 0.17;
+            st.scale = [sc, sc * 0.7, sc];
+            st.fy = sc * 0.35;
+            icol.setScalar(0.85 + Math.random() * 0.5);
+        }
+        stones.push(st);
+        inst.setColorAt(i, icol);
+    }
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+    inst.frustumCulled = false;   // stones move for the first second
+    Game.terrainGroup.add(inst);
+
+    // crushed-gravel decal along the wall line, same palette as the stones
+    const dGeo = new THREE.PlaneGeometry(len * 2.6, wood ? 1.1 : 1.5);
+    dGeo.rotateX(-Math.PI / 2);
+    const dMat = new THREE.MeshBasicMaterial({
+        map: wood ? Game._woodDecalTexture() : Game._rubbleDecalTexture(),
+        transparent: true,
+        opacity: wood ? 0.7 : 0.9,
+        depthWrite: false,
+    });
+    const decal = new THREE.Mesh(dGeo, dMat);
+    decal.rotation.y = r.rotY;
+    decal.position.set(r.x, (Game.getHeight ? Game.getHeight(r.x, r.z) : r.y) + 0.05, r.z);
+    decal.renderOrder = 3;
+    decal.raycast = () => { };
+    Game.terrainGroup.add(decal);
+
+    Game._wallRubble.push({ inst, mat, decal, dMat, stones, wood, t: 0, life: 60, fade: 18, baseDecalOpacity: wood ? 0.7 : 0.9 });
+
+    // subtle masonry dust as the wall lets go (tunable in the debug panel)
+    const D = Game.RUBBLE_DUST || {};
+    const amount = (D.amount != null ? D.amount : 1) * (wood ? 0.55 : 1);
+    if (Game.smoke && amount > 0) {
+        const puffs = Math.max(1, Math.round((3 + Math.random() * 3) * amount));
+        for (let i = 0; i < puffs; i++) {
+            const a = (Math.random() - 0.5) * 2 * len;
+            const lf = 1.4 + Math.random() * 0.8;
+            Game.smoke.push({
+                x: r.x + ux * a + Game.rand(-0.3, 0.3),
+                z: r.z + uz * a + Game.rand(-0.3, 0.3),
+                r: (0.5 + Math.random() * 0.5) * (D.size != null ? D.size : 1) * (wood ? 0.7 : 1),
+                life: lf, total: lf,
+                vx: Game.rand(-0.35, 0.35), vz: Game.rand(-0.35, 0.35),
+                rise: 0.9,
+                maxOpacity: (D.opacity != null ? D.opacity : 0.3) * (wood ? 0.6 : 1),
+                tint: wood ? 0x9a8a6e : 0x8f887c, mesh: null,
+            });
+        }
+    }
+};
+
+// rebuild the decal textures (debug sliders) and refresh live decals
+Game._refreshRubbleDecals = () => {
+    if (Game._rubbleDecalTex) { Game._rubbleDecalTex.dispose(); Game._rubbleDecalTex = null; }
+    if (Game._woodDecalTex) { Game._woodDecalTex.dispose(); Game._woodDecalTex = null; }
+    for (const rb of Game._wallRubble || []) {
+        rb.dMat.map = rb.wood ? Game._woodDecalTexture() : Game._rubbleDecalTexture();
+        rb.dMat.needsUpdate = true;
+    }
+};
+
+Game._updateWallRubble = (dt) => {
+    const list = Game._wallRubble;
+    if (!list || !list.length) return;
+    const THREE = Game.THREE;
+    const dummy = Game._rubbleDummy || (Game._rubbleDummy = new THREE.Object3D());
+    const step = Math.min(dt || 0.016, 0.05);
+    const G = 7.5;
+    for (let i = list.length - 1; i >= 0; i--) {
+        const rb = list[i];
+        rb.t += dt || 0.016;
+        // fling/tumble physics until every stone has settled
+        let moving = false;
+        for (let k = 0; k < rb.stones.length; k++) {
+            const st = rb.stones[k];
+            if (!st.settled) {
+                moving = true;
+                st.vy -= G * step;
+                st.x += st.vx * step;
+                st.z += st.vz * step;
+                st.y += st.vy * step;
+                st.rx += st.wx * step;
+                st.ry += st.wy * step;
+                st.rz += st.wz * step;
+                const floor = (Game.getHeight ? Game.getHeight(st.x, st.z) : 0) + st.fy;
+                if (st.y <= floor && st.vy < 0) {
+                    if (!st.bounced && Math.abs(st.vy) > 0.8) {
+                        st.bounced = true;
+                        st.y = floor;
+                        st.vy = -st.vy * 0.3;
+                        st.vx *= 0.55;
+                        st.vz *= 0.55;
+                        st.wx *= 0.5; st.wy *= 0.5; st.wz *= 0.5;
+                    } else {
+                        st.y = floor;
+                        st.settled = true;
+                    }
+                }
+            }
+            dummy.position.set(st.x, st.y, st.z);
+            dummy.rotation.set(st.rx, st.ry, st.rz);
+            dummy.scale.set(st.scale[0], st.scale[1], st.scale[2]);
+            dummy.updateMatrix();
+            rb.inst.setMatrixAt(k, dummy.matrix);
+        }
+        if (moving || rb.t < 3) rb.inst.instanceMatrix.needsUpdate = true;
+        if (!moving && !rb.culled) {
+            rb.culled = true;
+            rb.inst.frustumCulled = true;
+            rb.inst.computeBoundingSphere();
+        }
+        const left = rb.life - rb.t;
+        if (left <= 0) {
+            Game.terrainGroup.remove(rb.inst);
+            Game.terrainGroup.remove(rb.decal);
+            rb.mat.dispose();
+            rb.dMat.dispose();
+            rb.decal.geometry.dispose();
+            list.splice(i, 1);
+        } else if (left < rb.fade) {
+            const f = Math.max(0, left / rb.fade);
+            rb.mat.opacity = f;
+            rb.dMat.opacity = (rb.baseDecalOpacity || 0.9) * f;
+        }
+    }
 };
 
 /**

@@ -3436,6 +3436,20 @@ Game.applyFoliageTint = (sp) => {
     up?.addEventListener('click', () => setFold(false));
 }
 
+// ── Effects controls ──
+Game.RUBBLE_DUST = { amount: 1, size: 1, opacity: 0.3 };
+_dbgSlider('dbgRubbleAmt', 'dbgRubbleAmtVal', v => { Game.RUBBLE_DUST.amount = v; });
+_dbgSlider('dbgRubbleSize', 'dbgRubbleSizeVal', v => { Game.RUBBLE_DUST.size = v; });
+_dbgSlider('dbgRubbleOpacity', 'dbgRubbleOpacityVal', v => { Game.RUBBLE_DUST.opacity = v; });
+_dbgSlider('dbgRubbleDark', 'dbgRubbleDarkVal', v => {
+    (Game.RUBBLE_DECAL = Game.RUBBLE_DECAL || {}).dark = v;
+    if (Game._refreshRubbleDecals) Game._refreshRubbleDecals();
+});
+_dbgSlider('dbgRubbleBlur', 'dbgRubbleBlurVal', v => {
+    (Game.RUBBLE_DECAL = Game.RUBBLE_DECAL || {}).blur = v;
+    if (Game._refreshRubbleDecals) Game._refreshRubbleDecals();
+});
+
 // ── Lighting controls ──
 _dbgSlider('dbgSun', 'dbgSunVal', v => {
     Game._dbgSunBase = v;
