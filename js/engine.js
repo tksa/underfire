@@ -33,10 +33,16 @@ Game.initEngine = () => {
     // Camera (orthographic, top-down angled)
     const aspect = Game.viewW / Game.viewH;
     const frustum = Game.cam.zoom;
+    // near is NEGATIVE on purpose: the camera's elevation scales with zoom
+    // (zoom×~1.22, as low as ~10 when zoomed right in), while aircraft fly at
+    // ~34 — i.e. ABOVE and BEHIND the camera plane. An orthographic projection
+    // renders geometry behind the camera just fine as long as the near plane
+    // reaches back far enough; 0.1 sliced planes apart at altitude ("vanish
+    // at height" / half-a-wing clipping).
     Game.camera = new THREE.OrthographicCamera(
         -frustum * aspect, frustum * aspect,
         frustum, -frustum,
-        0.1, 500
+        -120, 500
     );
     Game.camera.position.set(Game.cam.x, 60, Game.cam.z + 40);
     Game.camera.lookAt(Game.cam.x, 0, Game.cam.z);

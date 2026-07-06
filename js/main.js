@@ -926,6 +926,12 @@ Game._tankControlDefs = () => [
     { group: 'Tanks', key: 'tankRings', label: 'Show collision box (0/1)', min: 0, max: 1, step: 1, apply: v => { Game._showTankRings = v >= 1; } },
     { group: 'Tanks', key: 'showPaths', label: 'Show movement paths (0/1)', min: 0, max: 1, step: 1, apply: v => { Game._showPaths = v >= 1; } },
     { group: 'Tanks', key: 'recMovement', label: 'Record unit movement (0/1)', min: 0, max: 1, step: 1, apply: v => { if (v >= 1) Game.startMoveRec(); else Game.stopMoveRec(); } },
+    { group: 'Fighter', key: 'fighterYawD520', label: 'D.520 yaw (rad)', min: -3.15, max: 3.15, step: 0.05, default: Math.PI / 2, apply: v => { if (Game.FIGHTER_TYPES) Game.FIGHTER_TYPES.d520.yaw = v; } },
+    { group: 'Fighter', key: 'fighterYawMB152', label: 'MB.152 yaw (rad)', min: -3.15, max: 3.15, step: 0.05, default: Math.PI / 2, apply: v => { if (Game.FIGHTER_TYPES) Game.FIGHTER_TYPES.mb152.yaw = v; } },
+    { group: 'Fighter', key: 'fighterScale', label: 'Model length (world u)', min: 3, max: 14, step: 0.5, default: 7, apply: v => { if (Game.FIGHTER) { Game.FIGHTER.scale = v; Game._fighterProtos = {}; Game._fighterLoadTried = {}; (Game.fighters || []).forEach(f => { if (f.mesh) { Game.scene.remove(f.mesh); f.mesh = null; } Game._attachFighterMesh(f); }); } } },
+    { group: 'Fighter', key: 'fighterAlt', label: 'Patrol altitude', min: 8, max: 60, step: 1, default: 34, apply: v => { if (Game.FIGHTER) Game.FIGHTER.alt = v; } },
+    { group: 'Fighter', key: 'fighterPitchD520', label: 'D.520 pitch trim (rad)', min: -0.6, max: 0.6, step: 0.02, default: 0, apply: v => { if (Game.FIGHTER_TYPES) Game.FIGHTER_TYPES.d520.pitchFix = v; } },
+    { group: 'Fighter', key: 'fighterPitchMB152', label: 'MB.152 pitch trim (rad)', min: -0.6, max: 0.6, step: 0.02, default: 0, apply: v => { if (Game.FIGHTER_TYPES) Game.FIGHTER_TYPES.mb152.pitchFix = v; } },
     { group: 'Trucks', key: 'truckMaxSteer', label: 'Max steer (rad)', min: 0.2, max: 0.9, step: 0.02, apply: v => { Game.TRUCK_MAX_STEER = v; } },
     { group: 'Trucks', key: 'truckWheelbase', label: 'Wheelbase x size (turn radius)', min: 1.5, max: 6, step: 0.1, apply: v => { Game.TRUCK_WHEELBASE = v; } },
     { group: 'Trucks', key: 'truckAccel', label: 'Acceleration', min: 0.2, max: 2, step: 0.05, apply: v => { Game.TRUCK_ACCEL = v; } },
@@ -1077,7 +1083,9 @@ Game.callAirStrike = (x, z) => {
 
     Game.pushMessage(`${planes} aircraft inbound! Bombs away in 3s... (${Game.airStrikesAvailable} sortie${Game.airStrikesAvailable === 1 ? '' : 's'} left)`, 3.0);
     // Engine drone overhead — louder/longer for a bigger flight.
-    if (Game.Audio && Game.Audio.plane) Game.Audio.plane(3.0 + planes * 0.5);
+    // Real RWM bomber flyby; the synth drone stays as the no-asset fallback.
+    if (Game.Audio && Game.Audio.heavyPlane) Game.Audio.heavyPlane();
+    else if (Game.Audio && Game.Audio.plane) Game.Audio.plane(3.0 + planes * 0.5);
 
     // Rolling bombardment: each plane makes its run a beat after the last, fanned
     // across the target so a multi-plane strike carpets a wider strip.
@@ -2109,6 +2117,25 @@ Game.updateFogOfWar = (dt) => {
             }
         }
     });
+    // Friendly aircraft on station: a MASSIVE recon bubble rides the plane —
+    // the whole reason to call the sortie even with nothing to strafe.
+    if (Game.fighters) {
+        for (const f of Game.fighters) {
+            if (f.state === 'crash') continue;
+            const r = Math.ceil((Game.FIGHTER.reveal || 36) * Game.FOG_RES);
+            const cx = Math.floor(f.x * Game.FOG_RES);
+            const cz = Math.floor(f.z * Game.FOG_RES);
+            for (let dz = -r; dz <= r; dz++) {
+                for (let dx = -r; dx <= r; dx++) {
+                    if (dx * dx + dz * dz > r * r) continue;
+                    const gx = cx + dx, gz = cz + dz;
+                    if (gx >= 0 && gx < Game.fogCols && gz >= 0 && gz < Game.fogRows) {
+                        Game.fogGrid[gz * Game.fogCols + gx] = 1.0;
+                    }
+                }
+            }
+        }
+    }
     }
 
     // Render fog overlay to canvas
@@ -4182,6 +4209,7 @@ Game.tick = (now) => {
         Game.updateSupportUnits(dt);
         if (Game.updateIndirectShells) Game.updateIndirectShells(dt);
         if (Game.updateAirStrikes) Game.updateAirStrikes(dt);
+        if (Game.updateFighters) Game.updateFighters(dt);
         if (Game.updateThrownGrenades) Game.updateThrownGrenades(dt);
         if (Game.updateSmokeClouds) Game.updateSmokeClouds(dt);
         if (Game.updateTracers3D) Game.updateTracers3D(dt);
@@ -4282,6 +4310,7 @@ Game.boot = async () => {
         cmdMove: () => { Game.setOrderStance('move'); },
         cmdSmoke: () => { Game._commandMode = 'smoke'; Game.pushMessage('Smoke — right-click target.', 2.0); },
         cmdAirStrike: () => { if (Game.airStrikesAvailable > 0) { Game._commandMode = 'airstrike'; Game.adjustAirStrikePlanes(0); Game.pushMessage(`Air strike: ${Game.airStrikePlanesToUse} of ${Game.airStrikesAvailable} plane(s). Wheel to adjust, right-click target.`, 3.5); } else { Game.pushMessage('No air strikes available!', 2.0); } },
+        cmdFighter: () => { if (Game.fighterTotalAvailable && Game.fighterTotalAvailable() > 0) { Game.toggleFighterMenu(); } else { Game.pushMessage('No fighters available!', 2.0); } },
         cmdRotate: () => { Game._commandMode = 'rotate'; Game.pushMessage('Rotate — right-click direction.', 2.0); },
         cmdProne: () => { Game.toggleProneSelection(); },
     };

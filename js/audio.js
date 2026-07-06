@@ -20,10 +20,12 @@ Game.Audio = (() => {
             'sounds/rwm/howitzerexplosion.ogg', 'sounds/bang_05.ogg'],
     };
     // Looping beds: ambience (always-on) + engine layer (tracks moving armor)
+    // + fighter prop loop (RWM fly_small — follows the friendly plane overhead)
     const LOOP_FILES = {
         ambWind: 'sounds/rwm/wind_forest_loop.ogg',
         ambBirds: 'sounds/rwm/birds.ogg',
         engine: 'sounds/rwm/diesel_move.ogg',
+        fighter: 'sounds/rwm/fly_small.ogg',
     };
     // Unit voice barks (French = f_/player, German = d_/enemy) + ricochet, pooled by file
     const EXTRA = [
@@ -31,10 +33,11 @@ Game.Audio = (() => {
         'f_sold_attack', 'f_tank_attack', 'f_tank_stop',
         'd_select', 'd_tank_select', 'd_move', 'd_tank_move', 'd_attack', 'd_tank_attack',
         'ricochet', 'ricochet_ground',
+        'fly_heavy', 'fly_small',
     ].map(n => 'sounds/rwm/' + n + '.ogg');
 
     const loops = {};               // key -> HTMLAudioElement (loop=true)
-    const loopVol = { ambWind: 0, ambBirds: 0, engine: 0 };
+    const loopVol = { ambWind: 0, ambBirds: 0, engine: 0, fighter: 0 };
     let loopsStarted = false;
     let lastVoice = -10;            // gameClock of last voice bark (throttle)
 
@@ -158,6 +161,32 @@ Game.Audio = (() => {
         } catch (e) { /* ignore */ }
     };
 
+    // Positional prop-engine loop for a fighter overhead — the real RWM
+    // fly_small sample, looped, volume riding distance to the camera with an
+    // audible floor (you HEAR the sortie coming from far off). During a crash
+    // the loop pitch-dives like a falling plane. start() when the sortie is
+    // called, setPos() each frame, stop() when the sky is clear.
+    const fdrState = { active: false, x: null, z: null, crash: false };
+    const fighterDrone = {
+        start() {
+            fdrState.active = true;
+            fdrState.crash = false;
+            fdrState.x = fdrState.z = null;
+            // loops normally start on the mission-start gesture; make sure
+            if (loops.fighter && loopsStarted) {
+                const p = loops.fighter.play();
+                if (p && p.catch) p.catch(() => { });
+            }
+        },
+        setPos(x, z) { fdrState.x = x; fdrState.z = z; },
+        setCrash(v) { fdrState.crash = !!v; },
+        stop() {
+            fdrState.active = false;
+            fdrState.crash = false;
+            try { if (loops.fighter) loops.fighter.playbackRate = 1; } catch (e) { }
+        },
+    };
+
     // Per-frame mix of the looping beds. Ambience is constant; the engine
     // layer follows the loudest moving vehicle near the camera.
     const updateAmbient = (dt) => {
@@ -168,10 +197,23 @@ Game.Audio = (() => {
             engineAct = Math.max(engineAct, distVol(u.x, u.z));
             if (engineAct >= 1) break;
         }
+        // Fighter loop: audible floor at distance, swells as the plane nears;
+        // a crashing plane's engine pitch-dives.
+        let fighterVol = 0;
+        if (fdrState.active) {
+            const dv = (fdrState.x == null) ? 0.3 : Math.max(0.12, distVol(fdrState.x, fdrState.z));
+            fighterVol = 0.8 * dv * master;
+            try {
+                const pr = loops.fighter.playbackRate || 1;
+                const want = fdrState.crash ? 1.45 : 1.0;
+                loops.fighter.playbackRate = pr + (want - pr) * Math.min(1, (dt || 0.016) * 2);
+            } catch (e) { }
+        }
         const target = {
             ambWind: 0.14 * master,
             ambBirds: 0.06 * master,
             engine: engineAct * 0.5 * master,
+            fighter: fighterVol,
         };
         const k = Math.min(1, (dt || 0.016) * 3);
         for (const key in loops) {
@@ -214,6 +256,9 @@ Game.Audio = (() => {
         explosion: (x, z) => play('explosion', x, z),
         ricochet: (x, z) => playFile(Math.random() < 0.5 ? 'ricochet' : 'ricochet_ground', 0.5, x, z, true),
         plane,
+        // Heavy-bomber flyby for the air strike — the real RWM sample.
+        heavyPlane: () => playFile('fly_heavy', 0.75, 0, 0, false),
+        fighterDrone,
         voice,
         click,
         updateAmbient,

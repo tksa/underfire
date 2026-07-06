@@ -81,7 +81,7 @@ Game.computeFormationTargets = (chosen, wx, wz) => {
     return out;
 };
 
-Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false) => {
+Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gather = false) => {
     let chosen = unitList || Game.selectedPlayerUnits();
     if (!chosen.length) return;
     // Supply / fuel trucks can't fight, so an attack-move STOPS them where they are
@@ -105,7 +105,11 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false) => {
     // One distinct destination slot PER unit — the very same slots drawn as preview
     // circles — with vehicles spread evenly across the formation. This is what makes
     // each selected unit go to its own circle and keeps tanks from clumping.
-    const targets = Game.computeFormationTargets(chosen, wx, wz);
+    // GATHER (SS2 Ctrl+Move): everyone converges on the point itself — as tight
+    // as separation allows — instead of taking spread formation slots.
+    const targets = gather
+        ? chosen.map(u => ({ unit: u, x: wx, z: wz }))
+        : Game.computeFormationTargets(chosen, wx, wz);
     const targetFor = new Map(targets.map(t => [t.unit.id, t]));
 
     // Group pace = the slowest member's EFFECTIVE speed, so armor/trucks wait for the
@@ -616,6 +620,20 @@ Game.handleMouseSelection = () => {
     const boxH = Math.abs(dy);
 
     if (boxW < 4 && boxH < 4) {
+        // Airborne fighter under the click: select it like any tank — its
+        // patrol ring lights up and right-click re-tasks it.
+        const fPick = Game.fighterAtScreen && Game.fighterAtScreen(mouse.dragCurrentX, mouse.dragCurrentY);
+        if (fPick) {
+            Game.selection.clear();
+            Game.selectedBuilding = null;
+            Game.selectedFighter = fPick;
+            const lbl = (fPick.def && fPick.def.label) || 'Fighter';
+            Game.pushMessage(`${lbl} selected — right-click to re-task its patrol area.`, 2.5);
+            if (Game.Audio) Game.Audio.voice('f_tank_select');
+            return;
+        }
+        Game.selectedFighter = null;
+
         // Enter-building: if infantry are selected and the click lands on a
         // building (and not on a friendly unit you meant to select instead),
         // send the selected infantry in rather than changing the selection.
@@ -672,6 +690,7 @@ Game.handleMouseSelection = () => {
         }
         if (!Game.keys['ShiftLeft'] && !Game.keys['ShiftRight']) Game.selection.clear();
         if (picked) {
+            Game.selectedBuilding = null;
             if (Game.Audio) Game.Audio.voice(Game.isTank(picked.kind) ? 'f_tank_select' : 'f_sold_select');
             const now = performance.now();
             if (Game._lastPickedKind === picked.kind && now - Game._lastPickedTime < 300) {
@@ -686,8 +705,24 @@ Game.handleMouseSelection = () => {
             }
             Game._lastPickedKind = picked.kind;
             Game._lastPickedTime = now;
+        } else {
+            // No unit under the click: a GARRISONED building can be selected
+            // (Sudden Strike). Right-click terrain then sends the whole
+            // garrison out to that point; right-click the building itself
+            // releases one soldier at the door.
+            const gp2 = Game.screenToGround(mouse.dragCurrentX, mouse.dragCurrentY);
+            const bRec = (Game.buildingAtScreen && Game.buildingAtScreen(mouse.dragCurrentX, mouse.dragCurrentY))
+                || (gp2 && Game.buildingAt && Game.buildingAt(gp2.x, gp2.z));
+            const occupied = bRec && !bRec.collapsed && bRec.occupants && bRec.occupants.length
+                && bRec.occupants.some(id => { const u = Game.getUnitById(id); return u && u.team === Game.TEAM.FRENCH; });
+            Game.selectedBuilding = occupied ? bRec : null;
+            if (Game.selectedBuilding) {
+                Game.pushMessage(`Building selected (${bRec.occupants.length}/${bRec.capacity} inside) — right-click terrain: all out · right-click the house: one out.`, 3.0);
+                if (Game.Audio) Game.Audio.voice('f_sold_select');
+            }
         }
     } else {
+        Game.selectedBuilding = null;
         // Box select — project units to screen, check in box
         const sx = Math.min(mouse.dragStartX, mouse.dragCurrentX);
         const sy = Math.min(mouse.dragStartY, mouse.dragCurrentY);
@@ -740,6 +775,48 @@ Game.handleInputEvents = () => {
         } else if (e.button === 2) {
             const ground = Game.screenToGround(e.clientX, e.clientY);
             if (ground) {
+                // Selected fighter: right-click re-tasks its patrol circle —
+                // the plane banks over and orbits the new area.
+                if (Game.selectedFighter && !Game._commandMode && Game.selection.size === 0) {
+                    const f = Game.selectedFighter;
+                    if (f.dead || f.state === 'crash') {
+                        Game.selectedFighter = null;
+                    } else if (f.state === 'egress') {
+                        Game.pushMessage('Fighter is out of ammunition and returning to base.', 2.0);
+                        return;
+                    } else {
+                        f.cx = ground.x; f.cz = ground.z;
+                        f.passX = null;   // plan a fresh attack pass over the new area
+                        if (Game.dist(f.x, f.z, f.cx, f.cz) > (Game.FIGHTER.radius || 15) * 2) f.state = 'inbound';
+                        Game._fighterZoneMark = { x: f.cx, z: f.cz, t: 6 };
+                        Game.pushMessage('Fighter re-tasked to the marked area.', 2.0);
+                        return;
+                    }
+                }
+
+                // Selected garrisoned building (Sudden Strike): right-click ON
+                // the building = one soldier steps out; right-click terrain =
+                // the whole garrison files out and moves to the point.
+                if (Game.selectedBuilding && !Game._commandMode && Game.selection.size === 0) {
+                    const rec = Game.selectedBuilding;
+                    if (rec.collapsed || !rec.occupants || !rec.occupants.length) {
+                        Game.selectedBuilding = null;
+                    } else {
+                        const onB = (Game.buildingAtScreen && Game.buildingAtScreen(e.clientX, e.clientY))
+                            || (Game.buildingAt && Game.buildingAt(ground.x, ground.z));
+                        if (onB === rec) {
+                            const n = Game.exitBuilding(rec, 1);
+                            if (n) Game.pushMessage(`One soldier steps out (${rec.occupants.length}/${rec.capacity} still inside).`, 1.8);
+                            if (!rec.occupants.length) Game.selectedBuilding = null;
+                        } else {
+                            const n = Game.exitBuilding(rec, Infinity, ground.x, ground.z);
+                            if (n) Game.pushMessage(`Garrison moving out (${n} soldier${n === 1 ? '' : 's'}).`, 1.8);
+                            if (Game.spawnOrderMarker) Game.spawnOrderMarker(ground.x, ground.z, 0x88cc66);
+                            Game.selectedBuilding = null;
+                        }
+                        return;
+                    }
+                }
                 // Double right-click = RETREAT: force selected units to break off
                 // and fall back here (disengage; infantry sprint, tanks reverse).
                 const now = performance.now();
@@ -751,6 +828,9 @@ Game.handleInputEvents = () => {
                     Game.orderRetreat(ground.x, ground.z);
                 } else if (Game._commandMode === 'airstrike') {
                     Game.callAirStrike(ground.x, ground.z);
+                    Game._commandMode = null;
+                } else if (Game._commandMode === 'fighter') {
+                    Game.callFighter(ground.x, ground.z);
                     Game._commandMode = null;
                 } else if (Game._commandMode === 'recon') {
                     Game.callRecon(ground.x, ground.z);
@@ -784,11 +864,13 @@ Game.handleInputEvents = () => {
                     Game.AI.setGuard(ground.x, ground.z);
                     Game._commandMode = null;
                 } else {
-                    // Ctrl/Cmd (or Shift) + right-click = queue a movement waypoint.
-                    // Units visit each queued point in order; legs are pathfound so
-                    // they route around obstacles (not the old straight-line push).
-                    if (e.ctrlKey || e.metaKey || e.shiftKey) {
+                    // Shift + right-click = queue a movement waypoint (SS2: Shift
+                    // appends orders). Ctrl/Cmd + right-click = GATHER at the
+                    // destination (SS2: Ctrl+Move) — converge on one point.
+                    if (e.shiftKey) {
                         Game.issueCommand(ground.x, ground.z, 'move', null, true);
+                    } else if (e.ctrlKey || e.metaKey) {
+                        Game.issueCommand(ground.x, ground.z, 'move', null, false, true);
                     } else {
                         // Plain right-click. Clicking an enemy ALWAYS attacks it. On open
                         // ground, obey the current order stance: 'attack' = attack-move
@@ -884,7 +966,9 @@ Game.handleInputEvents = () => {
             e.preventDefault();
         }
 
-        // Space — tactical pause: time stops, orders can still be issued
+        // Space — tactical pause: time stops, orders can still be issued.
+        // (SS2 maps Space to "center on last event" — tried it, but Space-to-
+        // pause is this game's muscle memory; L / the Pause key cover the rest.)
         if (e.code === 'Space') {
             e.preventDefault();
             const menuOpen = !document.getElementById('mainMenu')?.classList.contains('hidden');
@@ -894,6 +978,36 @@ Game.handleInputEvents = () => {
                     ? 'PAUSED — issue orders, Space to resume.'
                     : 'Resumed.', 2.0);
             }
+        }
+
+        // Pause key — pause mode on/off (SS2). P does the same.
+        if (e.code === 'Pause') {
+            Game._paused = !Game._paused;
+            Game.pushMessage(Game._paused ? 'PAUSED — commands can still be issued' : 'UNPAUSED', 2.0);
+        }
+
+        // Tab — center view around the selected units (SS2)
+        if (e.code === 'Tab') {
+            e.preventDefault();
+            const sel = Game.selectedPlayerUnits();
+            if (sel.length) {
+                Game.cam.x = sel.reduce((s, u) => s + u.x, 0) / sel.length;
+                Game.cam.z = sel.reduce((s, u) => s + u.z, 0) / sel.length;
+            }
+        }
+
+        // F9 — display mission objectives (SS2)
+        if (e.code === 'F9') {
+            e.preventDefault();
+            Game.pushMessage('Objective: seize the crossroads (red marker). Losing the whole force fails the mission.', 5.0);
+        }
+
+        // ; — reinforcement report (SS2: number of reinforcements on their way)
+        if (e.code === 'Semicolon') {
+            const ms = Game.missionState || {};
+            Game.pushMessage(ms.reinforcementTriggered
+                ? 'Enemy reserves already committed. No further waves expected.'
+                : 'Intelligence: enemy reserve elements are expected from the east.', 3.0);
         }
 
         // L — jump to last attack
@@ -935,6 +1049,7 @@ Game.handleInputEvents = () => {
                     Game._lastGroupTime = now;
                     // Select group
                     Game.selection.clear();
+                    Game.selectedBuilding = null;
                     groupIds.forEach(id => {
                         if (Game.units.find(u => u.alive && u.id === id)) Game.selection.add(id);
                     });
@@ -942,15 +1057,15 @@ Game.handleInputEvents = () => {
             }
         }
 
-        // Camera save/recall (F5-F8)
-        const fMatch = e.code.match(/^F([5-8])$/);
+        // Camera save/recall (F1-F8, SS2: Ctrl+F1-F8 saves, F1-F8 recalls)
+        const fMatch = e.code.match(/^F([1-8])$/);
         if (fMatch) {
+            e.preventDefault();          // keep the browser off F1 (help) etc.
             const slot = parseInt(fMatch[1]);
             Game._camSlots = Game._camSlots || {};
             if (e.ctrlKey || e.metaKey) {
                 Game._camSlots[slot] = { x: Game.cam.x, z: Game.cam.z, zoom: Game.cam.zoom };
                 Game.pushMessage(`Camera position saved to F${slot}.`, 1.5);
-                e.preventDefault();
             } else {
                 const saved = Game._camSlots[slot];
                 if (saved) {
@@ -983,6 +1098,17 @@ Game.handleInputEvents = () => {
             }
         }
 
+        // Fighter cover (J key) — opens the squadron menu (plane types +
+        // counts); pick one, then the green ring follows the cursor and
+        // right-click sends it in (from the map edge nearest the click).
+        if (e.code === 'KeyJ') {
+            if (Game.fighterTotalAvailable && Game.fighterTotalAvailable() > 0) {
+                Game.toggleFighterMenu();
+            } else {
+                Game.pushMessage('No fighters available!', 2.0);
+            }
+        }
+
         // Toggle Move / Attack-move stance (E key)
         if (e.code === 'KeyE') {
             Game.setOrderStance(Game.orderStance === 'attack' ? 'move' : 'attack');
@@ -1011,14 +1137,32 @@ Game.handleInputEvents = () => {
             });
         }
 
-        // Grenade (G key)
+        // Stand ground toggle (G key — SS2): hold this position; still fires.
         if (e.code === 'KeyG') {
+            const sel = Game.selectedPlayerUnits();
+            if (sel.length) {
+                const on = sel.some(u => u.orderMode !== 'hold');
+                sel.forEach(u => {
+                    u.orderMode = on ? 'hold' : 'aggressive';
+                    if (on) { u.path = []; u.moving = false; }
+                });
+                Game.pushMessage(on ? 'Standing ground.' : 'Free to maneuver.', 1.4);
+            }
+        }
+
+        // Grenade (Q key; was G — G is Stand Ground per SS2)
+        if (e.code === 'KeyQ') {
             Game._commandMode = 'grenade';
             Game.pushMessage('Grenade — right-click target.', 2.0);
         }
 
-        // Smoke grenade (T key)
+        // Hold fire (T key — SS2; H remains an alias)
         if (e.code === 'KeyT') {
+            Game.toggleHoldFire();
+        }
+
+        // Smoke grenade (N key; was T — T is Hold Fire per SS2)
+        if (e.code === 'KeyN') {
             Game._commandMode = 'smoke';
             Game.pushMessage('Smoke — right-click target.', 2.0);
         }

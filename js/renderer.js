@@ -336,8 +336,15 @@ Game.updateTracers3D = (dt) => {
         const bx = Game.lerp(tr.x, tr.tx, Math.max(0, p - 0.12));
         const bz = Game.lerp(tr.z, tr.tz, Math.max(0, p - 0.12));
 
+        // Altitude fire (aircraft strafing): y0/y1 give the source and impact
+        // heights and the round slopes down between them; ground fire keeps
+        // the terrain-hugging height as before.
+        const yFor = (pp) => (tr.y0 != null)
+            ? Game.lerp(tr.y0, (tr.y1 != null ? tr.y1 : 0.6), pp)
+            : (Game.getHeight ? Game.getHeight(cx, cz) : 0) + (tr.big ? 0.8 : 0.6);
+
         if (!tr.mesh) {
-            const tracerY = (Game.getHeight ? Game.getHeight(cx, cz) : 0) + (tr.big ? 0.8 : 0.6);
+            const tracerY = yFor(p);
             const color = tr.big ? 0xffd28c : (tr.team === Game.TEAM.FRENCH ? 0xfff5be : 0xffd6aa);
 
             if (tr.big) {
@@ -356,7 +363,7 @@ Game.updateTracers3D = (dt) => {
             } else {
                 // Regular tracer: thin line
                 const geo = new THREE.BufferGeometry().setFromPoints([
-                    new THREE.Vector3(bx, tracerY, bz),
+                    new THREE.Vector3(bx, yFor(Math.max(0, p - 0.12)), bz),
                     new THREE.Vector3(cx, tracerY, cz)
                 ]);
                 const mat = new THREE.LineBasicMaterial({
@@ -366,7 +373,7 @@ Game.updateTracers3D = (dt) => {
             }
             Game.effectsGroup.add(tr.mesh);
         } else {
-            const tracerY = (Game.getHeight ? Game.getHeight(cx, cz) : 0) + (tr.big ? 0.8 : 0.6);
+            const tracerY = yFor(p);
             if (tr.big && tr.mesh.isMesh) {
                 // Update cylinder tracer position and orientation
                 const midX = (bx + cx) / 2, midZ = (bz + cz) / 2;
@@ -375,7 +382,7 @@ Game.updateTracers3D = (dt) => {
                 tr.mesh.material.opacity = Game.clamp(tr.life / tr.total * 2, 0, 0.95);
             } else if (tr.mesh.geometry.attributes.position) {
                 const positions = tr.mesh.geometry.attributes.position.array;
-                positions[0] = bx; positions[1] = tracerY; positions[2] = bz;
+                positions[0] = bx; positions[1] = yFor(Math.max(0, p - 0.12)); positions[2] = bz;
                 positions[3] = cx; positions[4] = tracerY; positions[5] = cz;
                 tr.mesh.geometry.attributes.position.needsUpdate = true;
                 tr.mesh.material.opacity = Game.clamp(tr.life / tr.total * 2, 0, 0.9);
@@ -1049,7 +1056,9 @@ Game.updateSmoke3D = (dt) => {
             });
             mat.rotation = Math.random() * Math.PI * 2;
             s.mesh = new THREE.Sprite(mat);
-            s._baseY = (Game.getHeight ? Game.getHeight(s.x, s.z) : 0) + 0.5;
+            // baseY: explicit spawn height (aircraft trails); default = ground.
+            s._baseY = (s.baseY != null) ? s.baseY
+                : (Game.getHeight ? Game.getHeight(s.x, s.z) : 0) + 0.5;
             s.mesh.position.set(s.x, s._baseY, s.z);
             Game.effectsGroup.add(s.mesh);
         }
@@ -1611,6 +1620,18 @@ Game.updateHUD = () => {
         strikeBadge.textContent = avail > 0 ? `${toUse}/${avail}` : '0';
         strikeBtn.classList.toggle('disabled', avail <= 0);
         strikeBtn.classList.toggle('armed', Game._commandMode === 'airstrike');
+    }
+
+    // Fighter button: badge = total sorties left across the squadron; lit
+    // while targeting or with a plane on station.
+    const fighterBtn = document.getElementById('cmdFighter');
+    const fighterBadge = document.getElementById('fighterBadge');
+    if (fighterBtn && fighterBadge) {
+        const avail = Game.fighterTotalAvailable ? Game.fighterTotalAvailable() : 0;
+        fighterBadge.textContent = String(avail);
+        fighterBtn.classList.toggle('disabled', avail <= 0);
+        fighterBtn.classList.toggle('armed', Game._commandMode === 'fighter');
+        fighterBtn.classList.toggle('active', (Game.fighters || []).length > 0);
     }
 
     // Status pill

@@ -1582,14 +1582,16 @@
         <div class="cmd-grid">
           <div class="cmd-btn" id="cmdStop" title="Stop (V)"><span class="cmd-icon">■</span><span
               class="cmd-label">Stop</span></div>
-          <div class="cmd-btn" id="cmdHold" title="Hold fire (H)"><span class="cmd-icon">⊘</span><span
+          <div class="cmd-btn" id="cmdHold" title="Hold fire (T or H)"><span class="cmd-icon">⊘</span><span
               class="cmd-label">Hold</span></div>
-          <div class="cmd-btn" id="cmdGrenade" title="Grenade (G)"><span class="cmd-icon"><img class="ui-ico" src="icons/grenade.svg" alt=""></span><span
+          <div class="cmd-btn" id="cmdGrenade" title="Grenade (Q)"><span class="cmd-icon"><img class="ui-ico" src="icons/grenade.svg" alt=""></span><span
               class="cmd-label">Grenade</span></div>
-          <div class="cmd-btn" id="cmdSmoke" title="Smoke (T)"><span class="cmd-icon"><img class="ui-ico" src="icons/smoke.svg" alt=""></span><span
+          <div class="cmd-btn" id="cmdSmoke" title="Smoke (N)"><span class="cmd-icon"><img class="ui-ico" src="icons/smoke.svg" alt=""></span><span
               class="cmd-label">Smoke</span></div>
           <div class="cmd-btn" id="cmdAirStrike" title="Air Strike (B) — wheel to set planes"><span class="cmd-badge" id="airStrikeBadge">0</span><span class="cmd-icon"><img class="ui-ico" src="icons/bombing-run.svg" alt=""></span><span
               class="cmd-label">Strike</span></div>
+          <div class="cmd-btn" id="cmdFighter" title="Fighter cover (J) — right-click a patrol area; the plane flies in from the map edge nearest your click"><span class="cmd-badge" id="fighterBadge">2</span><span class="cmd-icon">✈</span><span
+              class="cmd-label">Fighter</span></div>
           <div class="cmd-btn" id="cmdRotate" title="Rotate (R)"><span class="cmd-icon">↻</span><span
               class="cmd-label">Rotate</span></div>
           <div class="cmd-btn" id="cmdProne" title="Crawl / Stand toggle (C cycles)"><span class="cmd-icon">⤓</span><span
@@ -1881,7 +1883,7 @@
         'config', 'i18n', 'utils', 'engine', 'weapons', 'terrain', 'units',
         'pathfinding', 'combat', 'ai', 'camera', 'input', 'renderer', 'audio',
         'mission', 'neural_export', 'unit_modules', 'ai_tactics', 'valor', 'buildings', 'garrison_ui',
-        'soldier_model',
+        'soldier_model', 'aircraft',
         'editor'
       ];
       classic.forEach(function (f) {
