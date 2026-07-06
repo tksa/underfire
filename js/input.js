@@ -185,7 +185,16 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false) => {
             && (Game.isTank(unit.kind) || unit.kind === 'fuel' || unit.kind === 'supply')) {
             const gAng = Math.atan2(tz - unit.z, tx - unit.x);
             const gd = Math.hypot(tx - unit.x, tz - unit.z);
-            if (gd < (Game.REVERSE_MAX_DIST ?? 11) && Math.abs(Game.angleDiff(unit.angle, gAng)) > 1.9) {
+            // In contact with an enemy roughly ahead of the hull, prefer backing
+            // out for longer and shallower rearward moves too — a real crew
+            // reverses rather than swinging its side armor across the gun.
+            let revDist = Game.REVERSE_MAX_DIST ?? 11, revAng = 1.9;
+            const foe = unit.fireTargetId != null ? Game.getUnitById(unit.fireTargetId) : null;
+            if (foe && foe.alive
+                && Math.abs(Game.angleDiff(unit.angle, Game.angleTo(unit.x, unit.z, foe.x, foe.z))) < 0.9) {
+                revDist = 18; revAng = 1.6;
+            }
+            if (gd < revDist && Math.abs(Game.angleDiff(unit.angle, gAng)) > revAng) {
                 unit._reverseMove = true;
                 // Back STRAIGHT into the spot: replace A*'s tile-snapped, slightly
                 // curved short path with a single direct segment to the exact point.

@@ -106,6 +106,30 @@ Game._tankBoxPush = (ux, uz, tank, r, margin) => {
 };
 
 /**
+ * Depth of a vehicle's hull (sampled nose / centre / tail) inside any OTHER
+ * vehicle's footprint box at position (x, z). 0 = clear. uMod.move uses this to
+ * make hulls SOLID: any step that would end deeper inside another vehicle than
+ * it started is refused, so vehicles stop at contact instead of overlapping or
+ * being slid apart.
+ */
+Game._vehPenetration = (unit, x, z) => {
+    const c = Math.cos(unit.angle), s = Math.sin(unit.angle);
+    const halfLen = unit.size * Math.max(0.4, (Game.TANK_BOX_LEN || 1.5) - 0.5);
+    const r = unit.size * (Game.TANK_BOX_WID || 1.0) * 0.95;
+    let depth = 0;
+    for (const o of Game.units) {
+        if (!o.alive || o.id === unit.id) continue;
+        if (!(Game.isTank(o.kind) || o.kind === 'fuel' || o.kind === 'supply')) continue;
+        if (Game.distSq(x, z, o.x, o.z) > 80) continue;
+        for (const t of [-halfLen, 0, halfLen]) {
+            const p = Game._tankBoxPush(x + c * t, z + s * t, o, r, 0.02);
+            if (p) depth = Math.max(depth, Math.min(p.px, p.pz));
+        }
+    }
+    return depth;
+};
+
+/**
  * How much a tank should ease off for units CROSSING its path (1 = full speed,
  * 0 = stop). It yields to anyone moving ACROSS its nose (so it doesn't bulldoze
  * through troops who are meant to pass), then resumes once they clear. It does NOT
@@ -138,6 +162,193 @@ Game._vehicleFollow = (unit) => {
         const minGap = len + (o.size || 1) * (Game.TANK_BOX_LEN || 1.5) + 0.4;  // bumper-to-bumper
         const slowGap = minGap + 4.0;                          // start easing off here
         factor = Math.min(factor, Game.clamp((ahead - minGap) / (slowGap - minGap), 0, 1));
+    }
+    return factor;
+};
+
+/**
+ * Foot-column pacing (car-following for infantry): a man eases off behind a
+ * comrade directly ahead on his lane instead of marching into his back. Without
+ * this the separation push cancelled his step outright each frame, so a packed
+ * file advanced as a stop-go ACCORDION — hundreds of sub-second halts per march.
+ * Head-on passers are skipped (separation slips them past each other laterally).
+ */
+Game._infantryFollow = (unit) => {
+    const hx = Math.cos(unit.angle), hz = Math.sin(unit.angle);
+    let factor = 1;
+    for (const o of Game.units) {
+        if (!o.alive || o.id === unit.id || o.team !== unit.team) continue;
+        if (Game.isTank(o.kind) || o.kind === 'fuel' || o.kind === 'supply') continue;
+        if (o._garrisoned || o._inVehicle != null) continue;
+        const rx = o.x - unit.x, rz = o.z - unit.z;
+        if (rx * rx + rz * rz > 4) continue;                 // only the man right ahead
+        const ahead = rx * hx + rz * hz;
+        if (ahead <= 0.1) continue;
+        if (Math.abs(rx * -hz + rz * hx) > 0.55) continue;   // not in my lane
+        // Walking toward me: let separation slip us past, don't mutually freeze.
+        if ((o.currentSpeed || 0) > 0.3 && Math.cos(o.angle - unit.angle) < -0.3) continue;
+        const minGap = ((unit.size || 0.5) + (o.size || 0.5)) * 0.7 + 0.25;
+        factor = Math.min(factor, Game.clamp((ahead - minGap) / 0.9, 0, 1));
+    }
+    return factor;
+};
+
+// ── Constrained local planner (the ORCA idea passed through a tank driver) ──
+// When a moving tank's dead-reckoned course conflicts with another vehicle
+// inside the look-ahead horizon, sample the handful of TRACK-LEGAL maneuvers a
+// real driver has — hold course, steer off left/right, ease, stop, back out —
+// simulate each with the hull's own turn/accel limits, score the predicted
+// futures (collision, goal progress, facing, reverse reluctance) and command
+// the winner. Prediction happens in velocity space like ORCA; the OUTPUT is
+// only ever throttle/steer/reverse — a tank cannot sidestep, so no candidate
+// contains lateral motion. Returns null while the current course is clean
+// (the normal driver keeps full control); a chosen command is held briefly so
+// the tank commits instead of flip-flopping between maneuvers every frame.
+Game.TANK_PLANNER = { horizon: 1.6, step: 0.27, replan: 0.3 };
+
+Game._tankDriverPlan = (unit, maxSpeed) => {
+    if (!unit.path || !unit.path.length || maxSpeed <= 0) { unit._drvCmd = null; return null; }
+    const now = Game.gameClock || 0;
+    if (unit._drvCmd && now < unit._drvCmd.until) return unit._drvCmd.cmd;   // commit briefly
+    const P = Game.TANK_PLANNER;
+
+    // Neighbors that matter: other vehicles nearby, dead-reckoned at constant
+    // velocity over the horizon (parked hulls predict as stationary obstacles).
+    const nbrs = [];
+    for (const o of Game.units) {
+        if (!o.alive || o.id === unit.id) continue;
+        if (!(Game.isTank(o.kind) || o.kind === 'fuel' || o.kind === 'supply')) continue;
+        if (Game.distSq(unit.x, unit.z, o.x, o.z) > 26 * 26) continue;
+        const dir = o._reversing ? -1 : 1;
+        nbrs.push({
+            x: o.x, z: o.z,
+            vx: Math.cos(o.angle) * (o.currentSpeed || 0) * dir,
+            vz: Math.sin(o.angle) * (o.currentSpeed || 0) * dir,
+            // WIDTH-based circle: side-by-side passage must be legal. The first
+            // cut used hull LENGTH, which put parked formation neighbours inside
+            // the "conflict" ring permanently — every candidate scored dirty and
+            // STOP won, freezing tanks beside their own platoon for good.
+            r: o.size * (Game.TANK_BOX_WID || 1.0) + 0.15,
+        });
+    }
+    if (!nbrs.length) { unit._drvCmd = null; return null; }
+
+    const myR = unit.size * (Game.TANK_BOX_WID || 1.0);
+    // Baseline: how bad is the standing situation already? Only a course that
+    // makes it WORSE is a conflict — sitting near a parked platoon-mate is fine.
+    let baseWorst = 0;
+    for (const n of nbrs) {
+        const pen = (myR + n.r + 0.35) - Math.hypot(unit.x - n.x, unit.z - n.z);
+        if (pen > baseWorst) baseWorst = pen;
+    }
+    const wp = unit.path[0];
+    const turnRate = (unit.rotationSpeed || 1.5) * 0.8;
+
+    // Roll one candidate forward under tank kinematics; worst = deepest
+    // clearance violation against any neighbor's predicted position, terr =
+    // steps spent on impassable terrain (a maneuver into a building is no fix).
+    const sim = (thr, steer, rev) => {
+        let x = unit.x, z = unit.z, a = unit.angle;
+        let v = (unit.currentSpeed || 0) * (unit._reversing ? -1 : 1);
+        const target = rev ? -maxSpeed * 0.4 : maxSpeed * thr;
+        let worst = 0, terr = 0;
+        for (let t = P.step; t <= P.horizon + 1e-6; t += P.step) {
+            const rate = (Math.abs(target) > Math.abs(v) ? 0.5 : 1.2) * maxSpeed * P.step;
+            v += Game.clamp(target - v, -rate, rate);
+            a += steer * turnRate * P.step;
+            x += Math.cos(a) * v * P.step;
+            z += Math.sin(a) * v * P.step;
+            for (const n of nbrs) {
+                const pen = (myR + n.r + 0.35)
+                    - Math.hypot(x - (n.x + n.vx * t), z - (n.z + n.vz * t));
+                if (pen > worst) worst = pen;
+            }
+            const tile = Game.getTileAtWorld(x, z);
+            if (!tile || tile.blocked || (tile.vehicleBlocked && tile.type !== 'dense_forest')) terr++;
+        }
+        return { worst, terr, x, z, a };
+    };
+
+    // Current course clean (no worse than the standing baseline)? Stay out of
+    // the driver's way entirely.
+    if (sim(1, 0, false).worst <= baseWorst + 0.05) { unit._drvCmd = null; return null; }
+
+    const desiredA = Game.angleTo(unit.x, unit.z, wp.x, wp.z);
+    const CANDS = [
+        { thr: 1, steer: 0, rev: false },
+        { thr: 1, steer: -1, rev: false }, { thr: 1, steer: 1, rev: false },
+        { thr: 0.45, steer: 0, rev: false },
+        { thr: 0.45, steer: -1, rev: false }, { thr: 0.45, steer: 1, rev: false },
+        { thr: 0, steer: 0, rev: false },
+        { thr: 0, steer: 0, rev: true },
+    ];
+    let best = null, bestScore = Infinity;
+    const last = unit._drvCmd && unit._drvCmd.cmd;   // expired command: continuity memory
+    for (const c of CANDS) {
+        const p = sim(c.thr, c.steer, c.rev);
+        const score = Math.max(0, p.worst - baseWorst) * 100
+            + p.terr * 40                                 // never steer into a building
+            + Game.dist(p.x, p.z, wp.x, wp.z) * 1.5
+            + Math.abs(Game.angleDiff(p.a, desiredA)) * 2
+            + (c.rev ? 3 : 0)
+            // COMMIT to a side: flipping the steer sign between re-plans swung
+            // the hull left-right-left for seconds on end. Changing sides has
+            // to be clearly worth it.
+            + (last && last.steer && c.steer && c.steer !== last.steer ? 8 : 0);
+        if (score < bestScore) { bestScore = score; best = c; }
+    }
+    // Steer/reverse maneuvers are held longer than throttle tweaks — a swing
+    // needs time to develop before it's second-guessed.
+    unit._drvCmd = { cmd: best, until: now + ((best.steer || best.rev) ? 0.6 : P.replan) };
+    return best;
+};
+
+/**
+ * Predictive crossing yield — the sound core of ORCA/RVO adapted to tracked
+ * vehicles. Full ORCA solves for an arbitrary new VELOCITY each frame, which
+ * assumes an agent that can side-step (pedestrians); a tank cannot, and this
+ * engine forbids any off-axis translation. What we keep is (1) the velocity
+ * obstacle idea — project both hulls forward and find the closest point of
+ * approach — and (2) reciprocity — exactly ONE of the pair yields, decided by
+ * the same size/id right-of-way used everywhere, so no mutual dithering. The
+ * ONLY output is a speed factor (ease off / hold back); steering is untouched.
+ * Same-heading pairs are excluded (car-following paces those); parked hulls
+ * are excluded (the corridor detour routes around them).
+ */
+Game._vehicleCrossingYield = (unit) => {
+    if ((unit.currentSpeed || 0) < 0.3) return 1;
+    const HORIZON = 2.5;                          // seconds of look-ahead
+    const dirU = unit._reversing ? -1 : 1;
+    const vux = Math.cos(unit.angle) * unit.currentSpeed * dirU;
+    const vuz = Math.sin(unit.angle) * unit.currentSpeed * dirU;
+    let factor = 1;
+    for (const o of Game.units) {
+        if (!o.alive || o.id === unit.id) continue;
+        if (!(Game.isTank(o.kind) || o.kind === 'fuel' || o.kind === 'supply')) continue;
+        if ((o.currentSpeed || 0) < 0.3) continue;             // parked: detour handles it
+        const rx = o.x - unit.x, rz = o.z - unit.z;
+        if (rx * rx + rz * rz > 900) continue;                 // 30u interest radius
+        // Same way = column, not a crossing.
+        const dirO = o._reversing ? -1 : 1;
+        if (Math.cos(o.angle - unit.angle) * dirU * dirO > 0.6) continue;
+        // Right of way: the larger hull holds course; equal size -> lower id holds.
+        const iYield = o.size > unit.size + 0.01
+            || (Math.abs(o.size - unit.size) <= 0.01 && o.id < unit.id);
+        if (!iYield) continue;
+        // Closest point of approach under current velocities.
+        const vox = Math.cos(o.angle) * o.currentSpeed * dirO;
+        const voz = Math.sin(o.angle) * o.currentSpeed * dirO;
+        const rvx = vox - vux, rvz = voz - vuz;                // o's motion relative to us
+        const rv2 = rvx * rvx + rvz * rvz;
+        if (rv2 < 0.01) continue;
+        const tcpa = -(rx * rvx + rz * rvz) / rv2;
+        if (tcpa <= 0 || tcpa > HORIZON) continue;             // diverging or far off
+        const mx = rx + rvx * tcpa, mz = rz + rvz * tcpa;      // miss vector at CPA
+        const clearance = (unit.size + o.size) * (Game.TANK_BOX_LEN || 1.5) + 0.6;
+        if (Math.hypot(mx, mz) > clearance) continue;          // clean pass
+        // Conflict: ease off in proportion to how soon it happens, so the other
+        // hull crosses ahead and we roll through behind it.
+        factor = Math.min(factor, Game.clamp((tcpa - 0.4) / 1.6, 0.15, 1));
     }
     return factor;
 };
@@ -325,8 +536,15 @@ Game.applySeparation = (unit, dt) => {
         // "meant to pass" — the TANK yields to him instead (see Game._tankYield), so
         // we skip make-way for him here and let him walk his line.
         const manUnderOrders = unit.path && unit.path.length && !unit._idleMoving;
-        if (!isVeh && otherVeh && other.team === unit.team
-            && (other.currentSpeed || 0) > 0.45 && !manUnderOrders) {
+        // A man being OVERTAKEN — vehicle bearing down from behind on roughly
+        // his own heading — scrambles aside even under orders: the tank only
+        // yields to men CROSSING its lane, so a same-way man ahead used to just
+        // get shoved along by the hull. And men dodge tanks regardless of team
+        // (an enemy tank is MORE worth dodging); the crush check below still
+        // catches anyone too slow.
+        const overtaken = manUnderOrders && Math.cos(unit.angle - other.angle) > 0.5;
+        if (!isVeh && otherVeh
+            && (other.currentSpeed || 0) > 0.45 && (!manUnderOrders || overtaken)) {
             const fX = Math.cos(other.angle), fZ = Math.sin(other.angle);
             const relX = unit.x - other.x, relZ = unit.z - other.z;
             const ahead = relX * fX + relZ * fZ;               // + = in front of the tank
@@ -474,19 +692,16 @@ Game.applySeparation = (unit, dt) => {
     }
 
     if (isVeh) {
-        // De-overlap directly apart (capped). The old code projected separation onto
-        // the forward axis only, which let a tank bulldoze a hull in front of it.
-        // The cap is kept LOW so a de-overlap reads as a gentle nudge, not a sideways
-        // SKID — with the column-following + spread-slots keeping hulls from packing,
-        // big de-overlaps are rare and a hard shove just looked like the tank sliding.
-        const sepMag = Math.hypot(sepX, sepZ);
-        if (sepMag > 0.0001) {
-            const m = Math.min(sepMag, 2.8);
-            unit.x += (sepX / sepMag) * m * dt;
-            unit.z += (sepZ / sepMag) * m * dt;
+        // NO positional de-overlap for vehicles — ever. Translating a hull off
+        // another hull is exactly the sideways SLIDE that must not exist: a
+        // tracked vehicle can only move along its own axis. Solidity is
+        // enforced in uMod.move instead (a step that would end inside another
+        // hull is refused outright), so overlap never happens to begin with;
+        // here we only decide to yield.
+        if (blockedAhead) {
+            unit.stopTimer = Math.max(unit.stopTimer || 0, 0.2);
+            unit._crawlT = 0.8;   // creep back up after the yield (see uMod.move)
         }
-        // Yield to a tank sitting in our path: pause rather than grind into it.
-        if (blockedAhead) unit.stopTimer = Math.max(unit.stopTimer || 0, 0.2);
     } else {
         // Infantry: push in any direction, but capped to a RUN speed so getting out of
         // a tank's way looks like scrambling clear, not a sideways teleport-bounce.
@@ -502,6 +717,42 @@ Game.applySeparation = (unit, dt) => {
         // steer above carries him around the hull instead of grinding into it.
         if (blockedAhead) unit.stopTimer = Math.max(unit.stopTimer || 0, 0.15);
     }
+};
+
+/**
+ * Is a PARKED vehicle sitting on this unit's route within the next lookAhead
+ * units of travel? Walks the path polyline in ~1u samples against parked
+ * hulls' footprint boxes. Returns the blocking vehicle or null. Feeds the
+ * dynamic re-route in uMod.move.
+ */
+Game._pathBlockedByVehicle = (unit, lookAhead = 12) => {
+    if (!unit.path || !unit.path.length) return null;
+    const parked = [];
+    for (const o of Game.units) {
+        if (!o.alive || o.id === unit.id) continue;
+        if (!(Game.isTank(o.kind) || o.kind === 'fuel' || o.kind === 'supply')) continue;
+        if ((o.currentSpeed || 0) > 0.15 || (o.path && o.path.length)) continue;
+        if (Game.distSq(unit.x, unit.z, o.x, o.z) > (lookAhead + 8) * (lookAhead + 8)) continue;
+        parked.push(o);
+    }
+    if (!parked.length) return null;
+    const vehSized = Game.isTank(unit.kind) || unit.kind === 'fuel' || unit.kind === 'supply';
+    const r = unit.size * (vehSized ? 1.0 : 0.7);
+    let px = unit.x, pz = unit.z, travelled = 0;
+    for (let i = 0; i < unit.path.length && travelled < lookAhead; i++) {
+        const wp = unit.path[i];
+        const seg = Math.hypot(wp.x - px, wp.z - pz);
+        const steps = Math.max(1, Math.ceil(seg));
+        for (let s = 1; s <= steps; s++) {
+            const t = s / steps;
+            const sx = px + (wp.x - px) * t, sz = pz + (wp.z - pz) * t;
+            for (const o of parked) {
+                if (Game._tankBoxPush(sx, sz, o, r, 0.15)) return o;
+            }
+        }
+        travelled += seg; px = wp.x; pz = wp.z;
+    }
+    return null;
 };
 
 // ── Local obstacle avoidance around tanks ───────────────────────────────────
@@ -640,11 +891,22 @@ Game._vehicleAvoid = (unit) => {
     }
     gx = Game.clamp(gx, 1, Game.WORLD_W - 1);
     gz = Game.clamp(gz, 1, Game.WORLD_H - 1);
-    const t = Game.getTileAtWorld(gx, gz);
-    if (t && (t.blocked || (vehSized && t.vehicleBlocked))) {  // that side is walled — try the other
+    const tileBad = (x, z) => {
+        const tt = Game.getTileAtWorld(x, z);
+        return !tt || tt.blocked || (vehSized && tt.vehicleBlocked && tt.type !== 'dense_forest');
+    };
+    if (tileBad(gx, gz)) {                               // that side is walled — try the other
         side = -side; px = -px; pz = -pz;
         gx = Game.clamp(block.x + px * off, 1, Game.WORLD_W - 1);
         gz = Game.clamp(block.z + pz * off, 1, Game.WORLD_H - 1);
+        if (tileBad(gx, gz)) {
+            // Both flanks are inside buildings/walls (hull parked in an alley):
+            // no geometric side-step exists — drop the detour and let the
+            // stuck-replan route a real A* path instead of aiming at masonry.
+            if (activeDetour) unit.path.shift();
+            unit._detour = null;
+            return;
+        }
     }
 
     if (unit._detour && unit.path[0] === unit._detour) {

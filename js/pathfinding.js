@@ -9,22 +9,52 @@ Game.heuristic = (a, b) => Math.abs(a.tx - b.tx) + Math.abs(a.ty - b.ty);
 Game.tileCost = (unit, tx, ty) => {
     const tile = Game.getTile(tx, ty);
     if (!tile || tile.blocked) return Infinity;
+    // Dynamic obstacles: tiles under PARKED vehicles (baked per-search by
+    // findPath) carry a heavy surcharge, so a re-plan routes AROUND a hull
+    // sitting on the way. A surcharge, not Infinity: a boxed-in unit still
+    // gets a best-effort path (local avoidance + solid hulls own the truth).
+    const dyn = (Game._dynObs && Game._dynObs.has(tx + ',' + ty)) ? 14 : 0;
     const isVeh = Game.isTank(unit.kind);
     if (isVeh) {
         // Tanks CRUSH through dense forest (clearing trees) rather than route around
         // it — a low cost so A* takes the direct line through the woods, and the
         // foliage knock-down flattens the saplings as the hull passes.
-        if (tile.type === 'dense_forest') return 1.8;
+        if (tile.type === 'dense_forest') return 1.8 + dyn;
         if (tile.vehicleBlocked) return Infinity;     // any genuinely impassable veh terrain
         let cost = tile.move;
         if (tile.type === 'forest' || tile.type === 'hedge') cost += 0.8;
         if (tile.type === 'mud') cost += 0.9;
-        return cost;
+        return cost + dyn;
     }
-    return tile.move;
+    return tile.move + dyn;
+};
+
+/**
+ * Bake the footprints of PARKED vehicles (everyone except the pathing unit)
+ * into a tile set consulted by tileCost for the duration of one A* search.
+ * Moving vehicles are deliberately NOT baked — they'll be gone by the time the
+ * route is walked, and the local layers (yield, crossing-prediction, planner,
+ * solid hulls) handle live traffic.
+ */
+Game._buildDynObstacles = (unit) => {
+    const set = new Set();
+    const T = Game.TILE;
+    for (const o of Game.units) {
+        if (!o.alive || o.id === unit.id) continue;
+        if (!(Game.isTank(o.kind) || o.kind === 'fuel' || o.kind === 'supply')) continue;
+        if ((o.currentSpeed || 0) > 0.15 || (o.path && o.path.length)) continue;   // moving: not baked
+        const r = o.size * (Game.TANK_BOX_LEN || 1.5) * 0.9;
+        const tx0 = Math.floor((o.x - r) / T), tx1 = Math.floor((o.x + r) / T);
+        const ty0 = Math.floor((o.z - r) / T), ty1 = Math.floor((o.z + r) / T);
+        for (let ty = ty0; ty <= ty1; ty++) {
+            for (let tx = tx0; tx <= tx1; tx++) set.add(tx + ',' + ty);
+        }
+    }
+    Game._dynObs = set;
 };
 
 Game.findPath = (unit, startX, startZ, endX, endZ) => {
+    if (Game._buildDynObstacles) Game._buildDynObstacles(unit);
     const start = Game.tileAtWorld(startX, startZ);
     const end = Game.tileAtWorld(endX, endZ);
     if (Game.isBlocked(end.tx, end.ty)) {
@@ -89,6 +119,13 @@ Game.findPath = (unit, startX, startZ, endX, endZ) => {
             if (closed.has(nkey)) continue;
             const cost = Game.tileCost(unit, ntx, nty);
             if (!isFinite(cost)) continue;
+            // NO DIAGONAL CORNER-CUTTING: a diagonal step is legal only when
+            // BOTH orthogonal neighbours are passable too. Stepping diagonally
+            // past a house/wall corner produced path segments that shaved
+            // through the building's corner — "waypoints don't avoid buildings".
+            if (dx !== 0 && dy !== 0
+                && (!isFinite(Game.tileCost(unit, current.tx + dx, current.ty))
+                    || !isFinite(Game.tileCost(unit, current.tx, current.ty + dy)))) continue;
             const diag = (dx !== 0 && dy !== 0) ? 1.4 : 1.0;
             const ng = current.g + cost * diag;
             const prev = gScore.get(nkey);
@@ -110,6 +147,23 @@ Game.findPath = (unit, startX, startZ, endX, endZ) => {
     path.reverse();
     if (path.length > 1) path.shift();
     return path;
+};
+
+/**
+ * True when the straight segment (ax,az)→(bx,bz) crosses only tiles this unit
+ * can traverse. Used by path smoothing and any code that fabricates a shortcut
+ * waypoint, so a straightened line never clips through a building or wall.
+ */
+Game.segmentPassable = (unit, ax, az, bx, bz) => {
+    const isVeh = Game.isTank(unit.kind);
+    const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az)));
+    for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const tile = Game.getTileAtWorld(ax + (bx - ax) * t, az + (bz - az) * t);
+        if (!tile || tile.blocked) return false;
+        if (isVeh && tile.vehicleBlocked && tile.type !== 'dense_forest') return false;
+    }
+    return true;
 };
 
 Game.lineOfSight = (a, b) => {

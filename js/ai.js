@@ -63,6 +63,43 @@ Game.findCoverPosition = (unit, threatX, threatZ) => {
     return best;
 };
 
+/**
+ * Pick a FIRING POSITION for a direct-fire vehicle against a target: a spot at
+ * comfortable stand-off range with line of sight, on the shooter's own side of
+ * the target, spaced off other friendly armor, with a nod to covering terrain.
+ * The core armor rule: a tank moves toward a firing position, never toward the
+ * enemy itself. Returns {x, z} or null (caller falls back to a plain approach).
+ * opts.standoff: preferred fraction of weapon range (default 0.72).
+ */
+Game.findFiringPosition = (unit, target, opts = {}) => {
+    const range = unit.range || 30;
+    const standoff = Game.clamp(opts.standoff ?? 0.72, 0.3, 0.95);
+    const bearing = Game.angleTo(target.x, target.z, unit.x, unit.z);   // target -> shooter side
+    let best = null, bestScore = -Infinity;
+    for (const rf of [standoff, standoff - 0.15, standoff + 0.12]) {
+        const r = Game.clamp(rf, 0.25, 0.92) * range;
+        for (let k = -4; k <= 4; k++) {
+            const a = bearing + k * 0.26;                    // fan ±60° on our own side
+            const cx = Game.clamp(target.x + Math.cos(a) * r, 1, Game.WORLD_W - 1);
+            const cz = Game.clamp(target.z + Math.sin(a) * r, 1, Game.WORLD_H - 1);
+            const tile = Game.getTileAtWorld(cx, cz);
+            if (!tile || tile.blocked || tile.vehicleBlocked) continue;
+            if (Game.lineOfSight({ x: cx, z: cz }, target) === false) continue;  // must see to shoot
+            let score = 40;
+            score -= Math.abs(rf - standoff) * 30;           // hold the stand-off band
+            score -= Game.dist(unit.x, unit.z, cx, cz) * 1.2; // shortest reposition wins
+            score -= Math.abs(k) * 2.2;                      // don't cross the target's front
+            score += (tile.cover || 0) * 25;                 // field edges/hedges: hull-down-ish
+            for (const f of Game.units) {                    // don't stack armor on one spot
+                if (!f.alive || f.id === unit.id || f.team !== unit.team || !Game.isTank(f.kind)) continue;
+                if (Game.distSq(f.x, f.z, cx, cz) < 25) { score -= 18; break; }
+            }
+            if (score > bestScore) { bestScore = score; best = { x: cx, z: cz }; }
+        }
+    }
+    return best;
+};
+
 // Nearest living friendly tank within radius — used by infantry to shelter in
 // the lee of armor (mobile cover).
 Game.nearestFriendlyTank = (unit, radius = 20) => {
@@ -223,12 +260,10 @@ Game.updateAI = (unit, dt, enemy) => {
     // which was ITSELF — and chased that moving point in circles on the spot.)
     if (!isVeh && threatPos && !inCover && role !== 'maneuver'
         && (enemy || supp > 15 || unit.underFire > 0)) {
-        // Face the fire even from an unseen shooter — at a finite turn rate per
-        // think tick (an instant snap read as the man twitching/spinning).
+        // Face the fire even from an unseen shooter — via the per-frame facing
+        // goal (a discrete turn step per think tick read as jerky small turns).
         if (!enemy) {
-            const want = Game.angleTo(unit.x, unit.z, threatPos.x, threatPos.z);
-            unit.angle = Game.rotateTo(unit.angle, want, 0.55);
-            unit.turretAngle = unit.angle;
+            unit._faceGoal = Game.angleTo(unit.x, unit.z, threatPos.x, threatPos.z);
         }
         // Already moving to a refuge — keep going instead of re-planning each tick.
         if ((unit._ai === 'seekcover' || unit._ai === 'shelter')
@@ -274,6 +309,55 @@ Game.updateAI = (unit, dt, enemy) => {
         return;
     }
 
+    // ── ARMOR COMBAT INTENTS: a tank fights from positions, it doesn't charge.
+    //    Damaged (<35%): break off — reverse out of contact, front kept to the
+    //    threat (the reverse-retreat drive handles the motion). In range + LOS:
+    //    HALT AND FIRE (the fire module lays the turret/hull). Otherwise, and
+    //    only if it's a mobile force (attack/patrol — hold garrisons keep their
+    //    post), move to a scored firing position, not to the enemy. ──
+    if (isVeh && enemy) {
+        const d = Game.dist(unit.x, unit.z, enemy.x, enemy.z);
+        if (hpPct < 0.35) {
+            unit._ai = 'retreat';
+            unit.retreating = true;
+            unit._retreatThreat = { x: enemy.x, z: enemy.z };
+            const rally = unit._rally || unit.holdPoint || { x: unit.x, z: unit.z };
+            if ((!unit.path || !unit.path.length) && Game.dist(unit.x, unit.z, rally.x, rally.z) > 3) {
+                unit.path = Game.findPath(unit, unit.x, unit.z, rally.x, rally.z);
+            }
+            return;
+        }
+        if (d <= unit.range * 0.95 && Game.unitCanSee(unit, enemy)) {
+            unit._ai = 'engage';
+            unit.path = [];                       // halt and fire from here
+            return;
+        }
+        const mobile = unit.aiState === 'attack' || unit.aiState === 'patrol' || posture === 'attack';
+        if (mobile) {
+            // Re-plan only when idle or the target has shifted well away from the
+            // last anchor — never every think tick.
+            const shifted = !unit._fpAnchor
+                || Game.distSq(unit._fpAnchor.x, unit._fpAnchor.z, enemy.x, enemy.z) > 36;
+            if (!unit.path || !unit.path.length || shifted) {
+                unit._fpAnchor = { x: enemy.x, z: enemy.z };
+                // Maneuver element presses to a closer band; base of fire stands off.
+                const fp = Game.findFiringPosition
+                    ? Game.findFiringPosition(unit, enemy, { standoff: role === 'maneuver' ? 0.55 : 0.75 })
+                    : null;
+                const goal = fp || enemy;
+                unit.path = Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
+            }
+            unit._ai = 'advance';
+            return;
+        }
+        // Hold garrison without range/LOS: keep the post, stay pointed at him
+        // (continuous per-frame facing — no stepwise think-tick turns).
+        unit._ai = 'alert';
+        unit._faceGoal = Game.angleTo(unit.x, unit.z, enemy.x, enemy.z);
+        unit.path = [];
+        return;
+    }
+
     // ── ENGAGE / ADVANCE when an enemy is visible ──
     if (enemy) {
         const d = Game.dist(unit.x, unit.z, enemy.x, enemy.z);
@@ -306,10 +390,8 @@ Game.updateAI = (unit, dt, enemy) => {
     // only; the turret tracks via its own inertia (fire module idle recentre).
     if (threatPos) {
         unit._ai = 'alert';
-        const want = Game.angleTo(unit.x, unit.z, threatPos.x, threatPos.z);
-        unit.angle = Game.rotateTo(unit.angle, want, isVeh ? 0.35 : 0.55);
-        if (!isVeh) { unit.turretAngle = unit.angle; setStance(supp > 35 ? 'prone' : 'crouch'); }
-        else if (!unit.hasTurret) { unit.turretAngle = unit.angle; }
+        unit._faceGoal = Game.angleTo(unit.x, unit.z, threatPos.x, threatPos.z);
+        if (!isVeh) setStance(supp > 35 ? 'prone' : 'crouch');
         unit.path = [];
         return;
     }
@@ -318,8 +400,13 @@ Game.updateAI = (unit, dt, enemy) => {
     unit._ai = 'hold';
     if (unit.aiState === 'patrol' && unit.patrol) {
         const pt = unit.patrol[0];
-        if (Game.dist(unit.x, unit.z, pt.x, pt.z) < 2) unit.patrol.push(unit.patrol.shift());
-        unit.path = Game.findPath(unit, unit.x, unit.z, unit.patrol[0].x, unit.patrol[0].z);
+        if (Game.dist(unit.x, unit.z, pt.x, pt.z) < 2) { unit.patrol.push(unit.patrol.shift()); unit.path = []; }
+        // Re-path only when the current leg is spent — re-planning every think
+        // tick fought the stuck-settle logic (a wedged patroller could never
+        // stay settled long enough to be rescued).
+        if (!unit.path || !unit.path.length) {
+            unit.path = Game.findPath(unit, unit.x, unit.z, unit.patrol[0].x, unit.patrol[0].z);
+        }
     } else if (unit.holdPoint && Game.dist(unit.x, unit.z, unit.holdPoint.x, unit.holdPoint.z) > 3
         && (!unit.path || !unit.path.length)) {
         unit.path = Game.findPath(unit, unit.x, unit.z, unit.holdPoint.x, unit.holdPoint.z);

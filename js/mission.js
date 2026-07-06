@@ -211,8 +211,11 @@ Game.updateMission = (dt) => {
         const vdx = (Game.villageOfs && Game.villageOfs.dx) || 0;
         const vdy = (Game.villageOfs && Game.villageOfs.dy) || 0;
         Game.spawnSquad(Game.TEAM.GERMAN, (46 + vdx) * T, (9 + vdy) * T, 'reserve', { aiState: 'attack' });
-        Game.makeUnit(Game.TEAM.GERMAN, 'panzer2', (47 + vdx) * T, (10 + vdy) * T, { aiState: 'attack', veterancy: .1 });
-        Game.makeUnit(Game.TEAM.GERMAN, 'panzer4', (48 + vdx) * T, (11 + vdy) * T, { aiState: 'attack', veterancy: .1 });
+        // Shared group: the squad AI splits them into base-of-fire + maneuver
+        // roles, so the pair bounds between firing positions covering each other
+        // instead of both charging the same axis.
+        Game.makeUnit(Game.TEAM.GERMAN, 'panzer2', (47 + vdx) * T, (10 + vdy) * T, { group: 'pzreserve', aiState: 'attack', veterancy: .1 });
+        Game.makeUnit(Game.TEAM.GERMAN, 'panzer4', (48 + vdx) * T, (11 + vdy) * T, { group: 'pzreserve', aiState: 'attack', veterancy: .1 });
         Game.pushMessage('Enemy reserve elements arriving from the east!', 6);
     }
 };

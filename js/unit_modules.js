@@ -239,10 +239,20 @@ Game.uMod.engage = (unit, ctx) => {
             if (!unit.moving || unit._pursueTimer <= 0 || targetMoved) {
                 unit._pursueTimer = 1.2;
                 unit._pursueAnchor = { x: enemy.x, z: enemy.z };
-                const goalDist = Math.max(2, Math.min(unit.range * 0.85, dft * 0.6));
-                const ang = Game.angleTo(enemy.x, enemy.z, unit.x, unit.z);
-                const gx = Game.clamp(enemy.x + Math.cos(ang) * goalDist, 1, Game.WORLD_W - 1);
-                const gz = Game.clamp(enemy.z + Math.sin(ang) * goalDist, 1, Game.WORLD_H - 1);
+                // Armor advances to a scored FIRING POSITION (stand-off band, LOS,
+                // own side of the target, spaced off friendly tanks) rather than
+                // marching down the charge axis to point-blank.
+                let gx, gz;
+                const fp = ctx.isVeh && Game.findFiringPosition
+                    ? Game.findFiringPosition(unit, enemy) : null;
+                if (fp) {
+                    gx = fp.x; gz = fp.z;
+                } else {
+                    const goalDist = Math.max(2, Math.min(unit.range * 0.85, dft * 0.6));
+                    const ang = Game.angleTo(enemy.x, enemy.z, unit.x, unit.z);
+                    gx = Game.clamp(enemy.x + Math.cos(ang) * goalDist, 1, Game.WORLD_W - 1);
+                    gz = Game.clamp(enemy.z + Math.sin(ang) * goalDist, 1, Game.WORLD_H - 1);
+                }
                 unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
                 unit.moving = true;
                 unit.stopTimer = 0;
@@ -345,7 +355,13 @@ Game.uMod.fire = (unit, ctx) => {
                 unit.turretAngVel = tRot.angVel;
                 const turretAligned = Math.abs(Game.angleDiff(unit.turretAngle, aimAngleToEnemy)) < 0.15;
 
-                if (!unit.moving) {
+                // TURRET-FIRST: the turret makes the quick layup; the hull only
+                // comes around when the target sits well off the nose (bringing
+                // the frontal armor to bear on a flank threat). Rotating the
+                // hull for every engagement made tanks fidget through strings
+                // of small alignment turns they never needed.
+                if (!unit.moving
+                    && Math.abs(Game.angleDiff(unit.angle, aimAngleToEnemy)) > 1.2) {
                     const hRot = Game.rotateWithInertia(
                         unit.angle, unit.hullAngVel, aimAngleToEnemy,
                         unit.rotationSpeed * 0.3, unit.hullTurnAccel * 0.3, dt
@@ -456,15 +472,72 @@ Game.uMod.move = (unit, ctx) => {
     // instead of grinding through them). Standing men are scattered by make-way.
     if (isVeh && maxSpeed > 0 && Game._tankYield) maxSpeed *= Game._tankYield(unit);
 
+    // Post-yield creep: after a contact stop for another hull, ease back up to
+    // pace instead of gunning straight back into the same hull — the instant
+    // re-acceleration re-triggered the yield several times a second (the
+    // column stop-go stutter).
+    if (isVeh && (unit._crawlT || 0) > 0) {
+        unit._crawlT = Math.max(0, unit._crawlT - dt);
+        maxSpeed *= 0.35 + 0.65 * (1 - unit._crawlT / 0.8);
+    }
+
     // Car-following: vehicles moving the same way ease off behind a leader and form a
     // COLUMN instead of weaving around each other (stops the grouped-tank churn).
     if ((isVeh || isTruck) && maxSpeed > 0 && Game._vehicleFollow) maxSpeed *= Game._vehicleFollow(unit);
+
+    // Predictive crossing yield (ORCA's time-projection idea, speed-only): the
+    // lower-priority hull of a CONVERGING pair eases off seconds before contact
+    // and passes behind, instead of both driving to the meet point and locking.
+    if ((isVeh || isTruck) && maxSpeed > 0 && Game._vehicleCrossingYield) maxSpeed *= Game._vehicleCrossingYield(unit);
+
+    // Foot-column pacing: ease off behind the man directly ahead so packed
+    // files FLOW instead of accordion-stopping into each other's backs.
+    if (!isVeh && !isTruck && maxSpeed > 0 && unit.path && unit.path.length && Game._infantryFollow) {
+        maxSpeed *= Game._infantryFollow(unit);
+    }
+
+    // DYNAMIC RE-ROUTE: when a PARKED vehicle sits on the route ahead, re-plan
+    // now — while still rolling — instead of driving up to the hull and only
+    // escaping via the stuck detector. Parked hulls are baked into A* as cost
+    // obstacles, so the fresh route genuinely goes around. This is a ROUTE
+    // change only, never a motion change: position, heading and speed carry on
+    // under the same driver (rate-limited turn, continuous accel), so the unit
+    // bends smoothly onto the new line mid-stride. Throttled; a blocker that
+    // yielded no better route isn't re-tried for a few seconds (the local
+    // layers own that case).
+    if (unit.path && unit.path.length && (unit.stopTimer || 0) <= 0
+        && !unit._reverseMove && !unit.retreating && !unit._garrisoned) {
+        unit._rerouteT = (unit._rerouteT || 0) - dt;
+        if (unit._rerouteT <= 0) {
+            unit._rerouteT = 0.6;
+            const blocker = Game._pathBlockedByVehicle ? Game._pathBlockedByVehicle(unit, 12) : null;
+            const retryOk = !blocker || !unit._rerouteFor
+                || unit._rerouteFor.id !== blocker.id
+                || (Game.gameClock - unit._rerouteFor.t) > 4;
+            if (blocker && retryOk) {
+                const goal = unit.path[unit.path.length - 1];
+                // A blocker squatting ON the destination is the arrival/settle
+                // logic's case — re-routing would just churn.
+                if (Game.distSq(goal.x, goal.z, blocker.x, blocker.z) > 16) {
+                    unit._rerouteFor = { id: blocker.id, t: Game.gameClock };
+                    const fresh = Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
+                    if (fresh.length) { unit.path = fresh; unit._detour = null; }
+                }
+            }
+        }
+    } else {
+        unit._rerouteT = 0;
+    }
 
     // Insert/refresh a side-step waypoint to route around any tank blocking the
     // lane ahead (dynamic obstacle avoidance) before we read the next waypoint.
     // Runs for tanks, trucks and infantry so foot troops walk AROUND a hull
     // instead of marching on the spot against it.
-    if (Game._vehicleAvoid) Game._vehicleAvoid(unit);
+    // ONE STEERING AUTHORITY AT A TIME: while the local planner holds an active
+    // command, the detour logic keeps its hands off the path — the two taking
+    // turns re-aiming the hull every few tenths was the left-right-left
+    // "excessive turning" churn on wedged tanks.
+    if (Game._vehicleAvoid && !(unit._drvCmd && unit._drvCmd.cmd)) Game._vehicleAvoid(unit);
 
     if (unit.path && unit.path.length && unit.stopTimer <= 0 && (unit.orderDelay || 0) <= 0
         && (!unit.deployable || unit._canMove)) {
@@ -518,7 +591,11 @@ Game.uMod.move = (unit, ctx) => {
                     const n2Dz = next2.z - unit.z;
                     const n2Ang = Math.atan2(n2Dz, n2Dx);
 
-                    if (Math.abs(Game.angleDiff(peekAng, n2Ang)) < 0.4 && peekD < 6) {
+                    // Only straighten if the shortcut segment is actually clear —
+                    // merging waypoints blind let the straightened line clip
+                    // through building corners the A* dogleg was avoiding.
+                    if (Math.abs(Game.angleDiff(peekAng, n2Ang)) < 0.4 && peekD < 6
+                        && (!Game.segmentPassable || Game.segmentPassable(unit, unit.x, unit.z, next2.x, next2.z))) {
                         unit.path.shift();
                     } else {
                         break;
@@ -551,13 +628,21 @@ Game.uMod.move = (unit, ctx) => {
                 // farther out it just turns and drives normally).
                 const reverseRetreat = unit.retreating && unit._retreatThreat
                     && Game.dist(unit.x, unit.z, unit._retreatThreat.x, unit._retreatThreat.z) < 45;
+                // Constrained local plan (ORCA idea through the tank driver):
+                // non-null only while the dead-reckoned course conflicts with
+                // another hull — then it commands one track-legal maneuver.
+                const drvPlan = (!reverseRetreat && !unit._reverseMove && Game._tankDriverPlan)
+                    ? Game._tankDriverPlan(unit, maxSpeed) : null;
                 if (reverseRetreat) {
                     const faceAng = Game.angleTo(unit.x, unit.z, unit._retreatThreat.x, unit._retreatThreat.z);
                     unit.angle = Game.rotateTo(unit.angle, faceAng, unit.rotationSpeed * dt);
                     const revSpeed = maxSpeed * 0.5;
                     const step = Math.min(revSpeed * dt, d);
-                    unit.x += Math.cos(ang) * step;
-                    unit.z += Math.sin(ang) * step;
+                    // Back out along the hull's OWN axis (rear-first). Stepping
+                    // toward the waypoint bearing while the nose holds on the
+                    // threat translated the hull sideways — tracks cannot do that.
+                    unit.x -= Math.cos(unit.angle) * step;
+                    unit.z -= Math.sin(unit.angle) * step;
                     unit.currentSpeed = revSpeed;
                     unit._reversing = true;
                     unit.turretAngle = hasTurret ? faceAng : unit.angle;
@@ -593,8 +678,30 @@ Game.uMod.move = (unit, ctx) => {
                         Game.trackMarks = Game.trackMarks || [];
                         Game.trackMarks.push({ x: unit.x, z: unit.z, angle: unit.angle, size: unit.size, team: unit.team, life: 15.0, total: 15.0, mesh: null });
                     }
+                } else if (drvPlan && drvPlan.rev) {
+                    // Planner commanded a back-out: reverse straight along the
+                    // hull's own axis, nose held, until a re-plan finds the
+                    // course clear (never a sidestep, never a spin-around).
+                    const revSpeed = maxSpeed * 0.4;
+                    unit.currentSpeed = Math.min(revSpeed, (unit.currentSpeed || 0) + maxSpeed * 0.5 * dt);
+                    const step = unit.currentSpeed * dt;
+                    unit.x -= Math.cos(unit.angle) * step;
+                    unit.z -= Math.sin(unit.angle) * step;
+                    unit._reversing = true;
+                    unit.moving = true;
+                    if (!hasTurret) unit.turretAngle = unit.angle;
+                    unit._trackDist = (unit._trackDist || 0) + step;
+                    if (unit._trackDist > 1.2) {
+                        unit._trackDist = 0;
+                        Game.trackMarks = Game.trackMarks || [];
+                        Game.trackMarks.push({ x: unit.x, z: unit.z, angle: unit.angle, size: unit.size, team: unit.team, life: 15.0, total: 15.0, mesh: null });
+                    }
                 } else {
-                const angleDelta = Game.angleDiff(unit.angle, ang);
+                // Steer command from the planner biases the bearing we drive at
+                // (a committed swing off to one side); throttle caps come later.
+                const steerAng = (drvPlan && drvPlan.steer)
+                    ? unit.angle + drvPlan.steer * 1.2 : ang;
+                const angleDelta = Game.angleDiff(unit.angle, steerAng);
                 const absAngleDelta = Math.abs(angleDelta);
 
                 const speedRatio = unit.currentSpeed / (maxSpeed || 1);
@@ -602,17 +709,25 @@ Game.uMod.move = (unit, ctx) => {
                 const pivotBoost = (absAngleDelta > 0.5 && speedRatio < 0.2) ? 1.3 : 1.0;
                 const turnSpeed = unit.rotationSpeed * turnMomentumFactor * pivotBoost;
 
-                unit.angle = Game.rotateTo(unit.angle, ang, turnSpeed * dt);
+                unit.angle = Game.rotateTo(unit.angle, steerAng, turnSpeed * dt);
 
                 let targetSpeed = 0;
 
                 if (absAngleDelta < Math.PI / 2) {
-                    const cosA = Math.cos(absAngleDelta);
-                    const alignment = Math.max(0, Math.pow(cosA, 3));
-                    targetSpeed = maxSpeed * alignment;
+                    // Carry speed through corners like a real driver: ease off
+                    // with heading error but KEEP ROLLING through moderate turns
+                    // (floor up to ~63°), and only brake right down beyond that.
+                    // The old cos³ curve dropped to ~35% for a routine 45° grid
+                    // dogleg — every unsmoothed waypoint read as a
+                    // brake-pivot-lurch pulse instead of a driven arc.
+                    const alignment = Math.max(0, Math.cos(absAngleDelta));
+                    targetSpeed = maxSpeed * Game.clamp(alignment, absAngleDelta < 1.1 ? 0.55 : 0.15, 1);
                 } else {
                     targetSpeed = 0;
                 }
+                // Planner throttle command (ease / hard slow / stop) caps the
+                // alignment-based speed while the conflict is live.
+                if (drvPlan) targetSpeed = Math.min(targetSpeed, maxSpeed * drvPlan.thr);
 
                 const accelRate = maxSpeed * 0.5;
                 const brakeRate = maxSpeed * 1.2;
@@ -653,8 +768,11 @@ Game.uMod.move = (unit, ctx) => {
                     unit._reversing = true;
                     const revSpeed = maxSpeed * 0.25;
                     const revStep = Math.min(revSpeed * dt, d);
-                    unit.x += Math.cos(ang) * revStep;
-                    unit.z += Math.sin(ang) * revStep;
+                    // Rear-first along the hull's own axis (the waypoint is
+                    // behind us, so backing up closes on it) — stepping along
+                    // the waypoint bearing directly was a sideways slide.
+                    unit.x -= Math.cos(unit.angle) * revStep;
+                    unit.z -= Math.sin(unit.angle) * revStep;
                     unit.currentSpeed = revSpeed;
 
                     unit._trackDist = (unit._trackDist || 0) + revStep;
@@ -840,6 +958,16 @@ Game.uMod.move = (unit, ctx) => {
                 unit._faceAngle = null;
                 unit._faceUntil = 0;
             }
+        } else if (unit._faceGoal != null) {
+            // Soft facing goal from the AI (watch a threat bearing): turned at
+            // the hull's own rate CONTINUOUSLY, every frame. The AI used to
+            // rotate directly in its think tick — one discrete 0.35-0.55 rad
+            // step every 0.25-0.5s, which read as a string of small jerky
+            // turns. Unlike _faceAngle, this never blocks target acquisition.
+            const rate = isVeh ? unit.rotationSpeed * 0.6 : (unit.rotationSpeed || 6);
+            unit.angle = Game.rotateTo(unit.angle, unit._faceGoal, rate * dt);
+            if (!isVeh || !unit.hasTurret) unit.turretAngle = unit.angle;
+            if (Math.abs(Game.angleDiff(unit.angle, unit._faceGoal)) < 0.05) unit._faceGoal = null;
         }
     }
 
@@ -857,6 +985,36 @@ Game.uMod.move = (unit, ctx) => {
         unit.x = prevX;
         unit.z = prevZ;
         unit.currentSpeed = 0;
+    }
+
+    // SOLID HULLS (vehicles): a vehicle may never end a frame deeper inside
+    // another vehicle's footprint than it started, whatever moved it (drive,
+    // reverse, coast). The whole frame's motion is refused and momentum killed
+    // — hulls STOP at contact; there is no de-overlap shove anywhere any more,
+    // so a vehicle physically cannot slide sideways. (Steps that REDUCE an
+    // existing penetration stay allowed so legacy overlaps can back out.)
+    if ((isVeh || isTruck) && Game._vehPenetration) {
+        const dNew = Game._vehPenetration(unit, unit.x, unit.z);
+        if (dNew > 0.001 && dNew > Game._vehPenetration(unit, prevX, prevZ) + 1e-4) {
+            unit.x = prevX;
+            unit.z = prevZ;
+            unit.currentSpeed = 0;
+            unit._crawlT = Math.max(unit._crawlT || 0, 0.5);
+        }
+    }
+
+    // Solid hulls for foot troops: end the frame OUTSIDE any vehicle box. The
+    // rate-capped push in applySeparation keeps the approach smooth, but a man
+    // wedged by a crowd could still finish a frame inside the hull and vibrate
+    // there; this exact final resolve makes contact stable — he stands AT the
+    // armor (net displacement ~0, so the legs don't treadmill either).
+    if (!isVeh && !isTruck && Game._tankBoxPush) {
+        for (const o of Game.units) {
+            if (!o.alive || o.id === unit.id || !Game.isTank(o.kind)) continue;
+            if (Game.distSq(unit.x, unit.z, o.x, o.z) > 49) continue;
+            const p = Game._tankBoxPush(unit.x, unit.z, o, unit.size * 0.7, 0.05);
+            if (p) { unit.x += p.x; unit.z += p.z; }
+        }
     }
 
     // STUCK -> REPLAN: a unit with a live path that has made no real headway for a
@@ -893,37 +1051,55 @@ Game.uMod.move = (unit, ctx) => {
         unit._stuckT = 0;
     }
 
-    // RUN-IN-PLACE GUARD (foot troops): a man striding at full speed but making no
-    // actual headway is jogging on the spot against an obstacle (usually a tank
-    // hull the path-follower can't see). Within ~0.35s, stop him — and if a hull
-    // really is on top of him, walk him a couple of paces clear of it instead of
-    // letting him grind into the armor forever.
+    // STALL GUARD (foot troops): no PROGRESS toward the next waypoint for
+    // ~0.5s while commanded to move. Progress — not raw headway — is what's
+    // measured: a man oscillating against a hull or a crowd racks up plenty of
+    // displacement while going nowhere, which fooled the old headway test into
+    // letting him jog on the spot forever. On a stall: stop, and if a hull is
+    // the blocker, step around it on the goal side and RE-CHAIN the original
+    // destination so the order isn't lost.
     if (!isVeh && !isTruck && unit.path && unit.path.length
         && (unit.currentSpeed || 0) > 0.4 && (unit.stopTimer || 0) <= 0) {
-        const headway = Math.hypot(unit.x - prevX, unit.z - prevZ);
-        if (headway < unit.currentSpeed * dt * 0.25) {
-            unit._grindT = (unit._grindT || 0) + dt;
-            if (unit._grindT > 0.35) {
-                unit._grindT = 0;
+        const wp0 = unit.path[0];
+        const dWp = Game.dist(unit.x, unit.z, wp0.x, wp0.z);
+        if (unit._progWp !== wp0) { unit._progWp = wp0; unit._progBest = dWp; unit._progT = 0; }
+        if (dWp < unit._progBest - 0.06) {
+            unit._progBest = dWp; unit._progT = 0; unit._progReplans = 0;
+        } else {
+            unit._progT = (unit._progT || 0) + dt;
+            if (unit._progT > 0.5) {
+                unit._progT = 0; unit._progWp = null;
+                const goal = unit.path[unit.path.length - 1];
                 let hull = null;
                 for (const o of Game.units) {
                     if (!o.alive || !Game.isTank(o.kind)) continue;
-                    if (Game._tankBoxPush && Game._tankBoxPush(unit.x, unit.z, o, unit.size * 0.7, 0.6)) { hull = o; break; }
+                    if (Game._tankBoxPush && Game._tankBoxPush(unit.x, unit.z, o, unit.size * 0.7, 0.7)) { hull = o; break; }
                 }
                 unit.path = []; unit.moving = false; unit.currentSpeed = 0;
-                if (hull) {
-                    const away = Game.angleTo(hull.x, hull.z, unit.x, unit.z);
-                    const gx = Game.clamp(unit.x + Math.cos(away) * 2.4, 1, Game.WORLD_W - 1);
-                    const gz = Game.clamp(unit.z + Math.sin(away) * 2.4, 1, Game.WORLD_H - 1);
-                    unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
+                unit._progReplans = (unit._progReplans || 0) + 1;
+                if (unit._progReplans > 2) {
+                    // Repeatedly stalled: settle here rather than churn forever.
+                } else if (hull) {
+                    // Around the hull on whichever side leads toward the goal,
+                    // then onward to the original destination.
+                    const toHull = Game.angleTo(unit.x, unit.z, hull.x, hull.z);
+                    let px = -Math.sin(toHull), pz = Math.cos(toHull);
+                    if (goal && (goal.x - unit.x) * px + (goal.z - unit.z) * pz < 0) { px = -px; pz = -pz; }
+                    const cl = hull.size * (Game.TANK_BOX_LEN || 1.5) + 1.6;
+                    const sx = Game.clamp(hull.x + px * cl, 1, Game.WORLD_W - 1);
+                    const sz = Game.clamp(hull.z + pz * cl, 1, Game.WORLD_H - 1);
+                    const leg1 = Game.findPath(unit, unit.x, unit.z, sx, sz);
+                    const leg2 = goal ? Game.findPath(unit, sx, sz, goal.x, goal.z) : [];
+                    unit.path = leg1.concat(leg2);
+                    unit.moving = unit.path.length > 0;
+                } else if (goal && Game.dist(unit.x, unit.z, goal.x, goal.z) > 2.5) {
+                    unit.path = Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
                     unit.moving = unit.path.length > 0;
                 }
             }
-        } else {
-            unit._grindT = 0;
         }
     } else {
-        unit._grindT = 0;
+        unit._progT = 0; unit._progWp = null;
     }
 
     // Measured ground speed this frame (includes separation shoves). The renderer
