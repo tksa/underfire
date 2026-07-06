@@ -35,7 +35,13 @@ Game.uMod.morale = (unit, ctx) => {
             if (unit.stance !== 'prone') { unit.stance = 'prone'; unit._autoStance = true; }
         } else if (unit.suppressionValue > 62) {
             if (unit.stance === 'stand' || unit.stance === 'run') { unit.stance = 'crouch'; unit._autoStance = true; }
-        } else if (unit.suppressionValue < 30 && unit._autoStance) {
+        } else if (unit.suppressionValue < 30 && unit._autoStance
+            && (unit.underFire || 0) <= 0
+            && (Game.gameClock - (unit._threatTime || -1e9)) > 3) {
+            // Recover to standing only once genuinely calm. Recovering on low
+            // suppression alone fought the AI's deliberate combat crouch every
+            // think tick — men flickered crouch->stand->crouch twice a second
+            // (the "repeating animation" stutter) all through a firefight.
             unit.stance = 'stand';
             unit._autoStance = false;
         }
@@ -267,6 +273,41 @@ Game.uMod.engage = (unit, ctx) => {
         } else {
             unit._assaultGoal = null;     // arrived at the ordered spot
         }
+    }
+};
+
+// Take cover (player infantry): a man caught in the open — engaged or under
+// fire — breaks for the nearest wall/hedge/bush and fights from there crouched,
+// instead of standing upright trading shots in a field (he still shoots on the
+// way; infantry fire isn't gated on being halted). Never overrides an active
+// move order, a player-forced attack, or a hold/retreat order, and only ever
+// dashes a short distance. The enemy AI has its own version of this in ai.js.
+Game.uMod.takeCover = (unit, ctx) => {
+    if (ctx.isVeh || unit.class !== 'infantry') return;
+    if (unit.deployable || unit.entrenched || unit._garrisoned || unit._enterRec) return;
+    if (unit.forcedTargetId != null || unit.orderMode === 'retreat' || unit.retreating
+        || unit.orderMode === 'hold') return;
+    if (unit.path && unit.path.length) return;             // busy moving (order or dash)
+    const engaged = !!ctx.enemy || (unit.underFire || 0) > 0 || (unit.suppressionValue || 0) > 20;
+    if (!engaged) return;
+    // Already behind something decent: just keep low. (0.22 matches the minimum
+    // cover findCoverPosition will pick, so an arrived man never re-dashes.)
+    if ((unit.coverBonus || 0) > 0.22) {
+        if (unit.stance === 'stand' || unit.stance === 'run') { unit.stance = 'crouch'; unit._autoStance = true; }
+        return;
+    }
+    if ((unit._coverCd || 0) > Game.gameClock) return;     // don't re-plan every frame
+    unit._coverCd = Game.gameClock + 3.0;
+    const threat = ctx.enemy || unit._lastThreat;
+    if (!threat) return;
+    const cov = Game.findCoverPosition(unit, threat.x, threat.z);
+    if (cov && Game.dist(unit.x, unit.z, cov.x, cov.z) > 1.2) {
+        unit.path = Game.findPath(unit, unit.x, unit.z, cov.x, cov.z);
+        unit.moving = unit.path.length > 0;
+        if (unit.stance !== 'prone') { unit.stance = 'crouch'; unit._autoStance = true; }
+    } else if (unit.stance === 'stand') {
+        // Nothing nearby — at least get low where he stands.
+        unit.stance = 'crouch'; unit._autoStance = true;
     }
 };
 
@@ -852,6 +893,44 @@ Game.uMod.move = (unit, ctx) => {
         unit._stuckT = 0;
     }
 
+    // RUN-IN-PLACE GUARD (foot troops): a man striding at full speed but making no
+    // actual headway is jogging on the spot against an obstacle (usually a tank
+    // hull the path-follower can't see). Within ~0.35s, stop him — and if a hull
+    // really is on top of him, walk him a couple of paces clear of it instead of
+    // letting him grind into the armor forever.
+    if (!isVeh && !isTruck && unit.path && unit.path.length
+        && (unit.currentSpeed || 0) > 0.4 && (unit.stopTimer || 0) <= 0) {
+        const headway = Math.hypot(unit.x - prevX, unit.z - prevZ);
+        if (headway < unit.currentSpeed * dt * 0.25) {
+            unit._grindT = (unit._grindT || 0) + dt;
+            if (unit._grindT > 0.35) {
+                unit._grindT = 0;
+                let hull = null;
+                for (const o of Game.units) {
+                    if (!o.alive || !Game.isTank(o.kind)) continue;
+                    if (Game._tankBoxPush && Game._tankBoxPush(unit.x, unit.z, o, unit.size * 0.7, 0.6)) { hull = o; break; }
+                }
+                unit.path = []; unit.moving = false; unit.currentSpeed = 0;
+                if (hull) {
+                    const away = Game.angleTo(hull.x, hull.z, unit.x, unit.z);
+                    const gx = Game.clamp(unit.x + Math.cos(away) * 2.4, 1, Game.WORLD_W - 1);
+                    const gz = Game.clamp(unit.z + Math.sin(away) * 2.4, 1, Game.WORLD_H - 1);
+                    unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
+                    unit.moving = unit.path.length > 0;
+                }
+            }
+        } else {
+            unit._grindT = 0;
+        }
+    } else {
+        unit._grindT = 0;
+    }
+
+    // Measured ground speed this frame (includes separation shoves). The renderer
+    // drives the leg animation from THIS, not from currentSpeed/moving flags, so a
+    // man can never glide without his legs moving — and never runs on the spot.
+    unit._dispSpeed = dt > 0 ? Math.hypot(unit.x - prevX, unit.z - prevZ) / dt : 0;
+
     if (isVeh && Game.getVehicleHeight) {
         unit.y = Game.getVehicleHeight(unit.x, unit.z, unit.size, unit.angle);
     } else {
@@ -931,6 +1010,7 @@ Game.updateUnit = (unit, dt) => {
     if (M.bombard(unit, ctx)) return;
     M.engage(unit, ctx);
     if (unit.team === Game.TEAM.GERMAN) Game.updateAI(unit, dt, ctx.enemy);
+    else if (M.takeCover) M.takeCover(unit, ctx);
     M.fire(unit, ctx);
     // Idle/ambient posture (rest, at-ease, ready). Runs just before move so a
     // roused soldier is on his feet before the move module reads his stance.

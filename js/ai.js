@@ -48,7 +48,11 @@ Game.findCoverPosition = (unit, threatX, threatZ) => {
             const tile = Game.getTileAtWorld(cx, cz);
             if (!tile || tile.blocked || (Game.isTank(unit.kind) && tile.vehicleBlocked)) continue;
             const cover = Game.coverAt(cx, cz);
-            if (cover < 0.2) continue;
+            // Only spots that will COUNT as in-cover once reached (the AI's
+            // inCover test is >0.32). Accepting 0.2-0.32 refuges sent men on a
+            // dash that left them still "exposed" on arrival, so they re-sought
+            // cover forever — the seekcover/alert twitch loop.
+            if (cover < 0.34) continue;
             const losBlocked = Game.lineOfSight({ x: threatX, z: threatZ }, { x: cx, z: cz }) === false;
             const dist = Game.dist(unit.x, unit.z, cx, cz);
             const towardThreat = Math.cos(a - toThreat); // +1 if heading at the threat
@@ -64,7 +68,9 @@ Game.findCoverPosition = (unit, threatX, threatZ) => {
 Game.nearestFriendlyTank = (unit, radius = 20) => {
     let best = null, bd = radius * radius;
     for (const a of Game.units) {
-        if (!a.alive || a.team !== unit.team || !Game.isTank(a.kind)) continue;
+        // a.id check: a tank calling this must never pick ITSELF (it would
+        // "shelter" in its own lee and chase that moving point in circles).
+        if (!a.alive || a.id === unit.id || a.team !== unit.team || !Game.isTank(a.kind)) continue;
         const d = Game.distSq(unit.x, unit.z, a.x, a.z);
         if (d < bd) { bd = d; best = a; }
     }
@@ -134,12 +140,19 @@ Game.updateAI = (unit, dt, enemy) => {
                 if (ed < bd && Game.unitCanSee(unit, e)) { bd = ed; tank = e; }
             }
             if (tank && Game.spawnThrownGrenade) {
-                unit._atGrenades--;
-                unit._atNext = Game.gameClock + Game.rand(2.5, 4.5);
-                unit.angle = Game.angleTo(unit.x, unit.z, tank.x, tank.z);
-                Game.spawnThrownGrenade(unit.x, unit.z,
-                    tank.x + Game.rand(-0.6, 0.6), tank.z + Game.rand(-0.6, 0.6),
-                    { type: 'at', dmg: 45, blastR: 2.2, supp: 18, arc: 1.4 });
+                // Whip around fast but finitely, and only let go once roughly
+                // facing the tank — the instant 180° snap-and-throw read as a
+                // teleport-turn glitch.
+                const want = Game.angleTo(unit.x, unit.z, tank.x, tank.z);
+                unit.angle = Game.rotateTo(unit.angle, want, 1.0);
+                unit.turretAngle = unit.angle;
+                if (Math.abs(Game.angleDiff(unit.angle, want)) < 0.3) {
+                    unit._atGrenades--;
+                    unit._atNext = Game.gameClock + Game.rand(2.5, 4.5);
+                    Game.spawnThrownGrenade(unit.x, unit.z,
+                        tank.x + Game.rand(-0.6, 0.6), tank.z + Game.rand(-0.6, 0.6),
+                        { type: 'at', dmg: 45, blastR: 2.2, supp: 18, arc: 1.4 });
+                }
             }
         }
     }
@@ -155,10 +168,15 @@ Game.updateAI = (unit, dt, enemy) => {
         // in a random direction instead of an orderly fall-back (RWM moralerndmove).
         const rally = unit._rally || unit.holdPoint || { x: unit.x, z: unit.z };
         if (!isVeh && !unit._steadied && supp > 70 && Game.rand(0, 1) < 0.25 && threatPos) {
-            const away = Game.angleTo(threatPos.x, threatPos.z, unit.x, unit.z) + Game.rand(-0.8, 0.8);
-            const gx = Game.clamp(unit.x + Math.cos(away) * 6 * Game.TILE, 1, Game.WORLD_W - 1);
-            const gz = Game.clamp(unit.z + Math.sin(away) * 6 * Game.TILE, 1, Game.WORLD_H - 1);
-            unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
+            // Commit to ONE bolt direction until it's spent — re-rolling a fresh
+            // random direction every think tick had the panicking man swivelling
+            // on the spot instead of running anywhere.
+            if (!unit.path || !unit.path.length) {
+                const away = Game.angleTo(threatPos.x, threatPos.z, unit.x, unit.z) + Game.rand(-0.8, 0.8);
+                const gx = Game.clamp(unit.x + Math.cos(away) * 6 * Game.TILE, 1, Game.WORLD_W - 1);
+                const gz = Game.clamp(unit.z + Math.sin(away) * 6 * Game.TILE, 1, Game.WORLD_H - 1);
+                unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
+            }
             setStance('run');
             return;
         }
@@ -182,16 +200,34 @@ Game.updateAI = (unit, dt, enemy) => {
         return;
     }
 
+    // ── COMMIT to an in-progress cover dash: a man half-way to a wall must not
+    //    have the dash cancelled because this tick happens to judge him "in
+    //    cover" or the threat blinked — the cancel/replan cycle left men
+    //    twitching in circles between refuges. He keeps going (still shooting;
+    //    fire isn't gated on being halted) and re-evaluates once he arrives. ──
+    if (!isVeh && (unit._ai === 'seekcover' || unit._ai === 'shelter') && unit.path && unit.path.length) {
+        // Sprint the open ground, drop to a crouch for the last couple of
+        // meters (suppression can still force him lower via the morale module).
+        const wp = unit.path[unit.path.length - 1];
+        setStance(Game.dist(unit.x, unit.z, wp.x, wp.z) > 2.5 ? 'run' : 'crouch');
+        return;
+    }
+
     // ── REACT TO CONTACT: exposed infantry don't stand and trade shots — they
     //    break for terrain cover, a tree line, or the lee of a nearby friendly
     //    tank (mobile cover), then crouch and fire from there. Triggers on a live
     //    enemy too (not only once suppressed), so troops take cover proactively.
     //    Maneuver elements keep bounding. ──
-    if (threatPos && !inCover && role !== 'maneuver'
+    // FOOT TROOPS ONLY: armor doesn't scurry for infantry cover. (Ungated, a
+    // tank ran this branch, picked "the lee of the nearest friendly tank" —
+    // which was ITSELF — and chased that moving point in circles on the spot.)
+    if (!isVeh && threatPos && !inCover && role !== 'maneuver'
         && (enemy || supp > 15 || unit.underFire > 0)) {
-        // Face the fire even from an unseen shooter.
+        // Face the fire even from an unseen shooter — at a finite turn rate per
+        // think tick (an instant snap read as the man twitching/spinning).
         if (!enemy) {
-            unit.angle = Game.angleTo(unit.x, unit.z, threatPos.x, threatPos.z);
+            const want = Game.angleTo(unit.x, unit.z, threatPos.x, threatPos.z);
+            unit.angle = Game.rotateTo(unit.angle, want, 0.55);
             unit.turretAngle = unit.angle;
         }
         // Already moving to a refuge — keep going instead of re-planning each tick.
@@ -206,8 +242,12 @@ Game.updateAI = (unit, dt, enemy) => {
         const tank = Game.nearestFriendlyTank(unit, 20);
         if (tank) {
             const a = Game.angleTo(threatPos.x, threatPos.z, tank.x, tank.z); // past the tank, away from fire
-            const ax = Game.clamp(tank.x + Math.cos(a) * 2.8, 1, Game.WORLD_W - 1);
-            const az = Game.clamp(tank.z + Math.sin(a) * 2.8, 1, Game.WORLD_H - 1);
+            // Stand CLEAR of the hull's collision box (worst case: its long axis),
+            // not at a fixed 2.8u — that landed inside big tanks' boxes, so the man
+            // jogged into the hull forever while the box pushed him back out.
+            const lee = tank.size * (Game.TANK_BOX_LEN || 1.5) + (unit.size || 0.5) * 0.7 + 1.0;
+            const ax = Game.clamp(tank.x + Math.cos(a) * lee, 1, Game.WORLD_W - 1);
+            const az = Game.clamp(tank.z + Math.sin(a) * lee, 1, Game.WORLD_H - 1);
             if (!refuge || Game.dist(unit.x, unit.z, ax, az) < Game.dist(unit.x, unit.z, refuge.x, refuge.z)) {
                 refuge = { x: ax, z: az }; kind = 'shelter';
             }
@@ -215,7 +255,9 @@ Game.updateAI = (unit, dt, enemy) => {
         if (refuge && Game.dist(unit.x, unit.z, refuge.x, refuge.z) > 1.2) {
             unit._ai = kind;
             unit.path = Game.findPath(unit, unit.x, unit.z, refuge.x, refuge.z);
-            setStance('crouch');
+            // Break for it at a sprint; the dash-commit block above manages the
+            // stance for the rest of the run and he crouches on arrival.
+            setStance(Game.dist(unit.x, unit.z, refuge.x, refuge.z) > 2.5 ? 'run' : 'crouch');
         } else {
             // Nothing close — go to ground and fight from the dirt; crawl clear if pinned.
             unit._ai = 'pinned';
@@ -258,11 +300,16 @@ Game.updateAI = (unit, dt, enemy) => {
     }
 
     // ── Alerted but no target in view: face the threat from cover ──
+    // Turn a bounded step per think tick (~1-2 rad/s), never an instant snap —
+    // snapping a tank's hull AND turret to each fresh threat bearing every
+    // 0.25-0.5s was the alerted-unit twitch/spin. Turreted tanks swing the hull
+    // only; the turret tracks via its own inertia (fire module idle recentre).
     if (threatPos) {
         unit._ai = 'alert';
-        unit.angle = Game.angleTo(unit.x, unit.z, threatPos.x, threatPos.z);
+        const want = Game.angleTo(unit.x, unit.z, threatPos.x, threatPos.z);
+        unit.angle = Game.rotateTo(unit.angle, want, isVeh ? 0.35 : 0.55);
         if (!isVeh) { unit.turretAngle = unit.angle; setStance(supp > 35 ? 'prone' : 'crouch'); }
-        else { unit.turretAngle = unit.angle; }
+        else if (!unit.hasTurret) { unit.turretAngle = unit.angle; }
         unit.path = [];
         return;
     }

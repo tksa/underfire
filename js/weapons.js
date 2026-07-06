@@ -42,6 +42,9 @@ Game.WEAPONS = {
         damage: 10, suppression: 2, penetration: 0, heBlast: 0,
     },
     // ── Rifles ──────────────────────────────────────
+    // Bolt-action pacing: work the bolt, re-acquire, squeeze — a trained rifleman
+    // manages ~15 aimed rpm (cooldown ≈ 3.5-4s), nothing like an SMG's rattle.
+    // Each aimed round hits harder to keep the rifle lethal at its slower cadence.
     kar98k: {
         name: 'Kar98k',
         nation: 'german',
@@ -49,11 +52,11 @@ Game.WEAPONS = {
         fireType: 'single',
         crew: 1,
         gameRange: 80,
-        rateOfFire: 0.83,           // shots per second (12 rpm)
-        cooldown: 1.2,
+        rateOfFire: 0.28,           // shots per second (~17 rpm aimed)
+        cooldown: 3.6,
         accuracy: { close: 0.55, medium: 0.70, long: 0.65 },
-        damage: 18,
-        suppression: 4,
+        damage: 24,
+        suppression: 5,
         penetration: 0,
         heBlast: 0,
     },
@@ -64,11 +67,11 @@ Game.WEAPONS = {
         fireType: 'single',
         crew: 1,
         gameRange: 80,
-        rateOfFire: 0.75,
-        cooldown: 1.3,
+        rateOfFire: 0.26,           // (~15 rpm aimed)
+        cooldown: 3.9,
         accuracy: { close: 0.53, medium: 0.68, long: 0.63 },
-        damage: 17,
-        suppression: 4,
+        damage: 23,
+        suppression: 5,
         penetration: 0,
         heBlast: 0,
     },
@@ -183,8 +186,8 @@ Game.WEAPONS = {
         fireType: 'single',
         crew: 1,
         gameRange: 160,
-        rateOfFire: 0.42,
-        cooldown: 2.4,
+        rateOfFire: 0.18,           // deliberate scoped shots — slower than a line rifleman
+        cooldown: 5.4,
         accuracy: { close: 0.45, medium: 0.80, long: 0.85 },
         damage: 35,
         suppression: 8,
@@ -198,8 +201,8 @@ Game.WEAPONS = {
         fireType: 'single',
         crew: 1,
         gameRange: 160,
-        rateOfFire: 0.42,
-        cooldown: 2.4,
+        rateOfFire: 0.18,           // deliberate scoped shots
+        cooldown: 5.4,
         accuracy: { close: 0.43, medium: 0.78, long: 0.83 },
         damage: 34,
         suppression: 8,

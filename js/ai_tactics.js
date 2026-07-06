@@ -103,6 +103,7 @@ Game.uMod.ambient = (unit, ctx) => {
         unit._restState = 'ready';
         unit._calmSince = null;
         unit._idleLookT = 0;
+        unit._homeAngle = null;      // idle glances re-anchor to the post-combat facing
         return;
     }
 
@@ -155,7 +156,12 @@ Game.AI._idleLook = (unit, dt) => {
     const cfg = Game.AI.ambientCfg;
     unit._idleLookT = (unit._idleLookT || 0) - dt;
     if (unit._idleLookT <= 0) {
-        let ang = unit.angle + Game.rand(-1.1, 1.1);    // default: a lazy glance
+        // Glance around a fixed HOME bearing, not the current angle: offsetting
+        // from wherever the last glance ended is a random walk in heading, and
+        // idle men slowly pirouetted through full circles over a minute. The
+        // home bearing re-anchors whenever combat/orders turn him somewhere new.
+        if (unit._homeAngle == null) unit._homeAngle = unit.angle;
+        let ang = unit._homeAngle + Game.rand(-1.1, 1.1);   // default: a lazy glance
         let hold = Game.rand(cfg.lookMin, cfg.lookMax);
         if (Game.rand(0, 1) < cfg.chatChance) {
             const mate = Game.AI._nearestComrade(unit, cfg.chatRadius);

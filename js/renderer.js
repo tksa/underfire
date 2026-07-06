@@ -53,9 +53,18 @@ Game.syncUnitMeshes = (dt) => {
                     }
                 } else if (unit.mesh.userData.isSoldier && Game.playSoldierDeath) {
                     // Skinned soldier: play a random death animation (holds the last
-                    // frame) instead of the rigid fall-over.
+                    // frame) instead of the rigid fall-over. Clear any tilt another
+                    // code path may have applied so the clip plays upright.
                     unit.isDeadBody = true;
-                    Game.playSoldierDeath(unit);
+                    unit.mesh.rotation.z = 0;
+                    unit.mesh.rotation.x = 0;
+                    unit.mesh.position.y = unit.y || 0;
+                    if (!Game.playSoldierDeath(unit)) {
+                        // No usable death clip on this rig — rigid fall-over so a
+                        // corpse never stays on its feet.
+                        unit.mesh.rotation.z = Math.PI / 2;
+                        unit.mesh.position.y = (unit.y || 0) + 0.1;
+                    }
                 } else {
                     unit.isDeadBody = true;
                     unit.mesh.rotation.z = Math.PI / 2;        // fall over
@@ -446,11 +455,35 @@ Game._chooseClip = (unit) => {
         && names.includes(Game.SOLDIER_FORCE_CLIP)) return Game.SOLDIER_FORCE_CLIP;
     const pick = (list) => list.find(n => names.includes(n));
     const st = unit.stance || 'stand';
-    if (unit.moving) return pick(['walk', 'run', 'push', 'move', 'crawl']) || names[0];
+    // Locomotion keys off MEASURED displacement (move module), so a man shoved
+    // sideways by separation still animates his legs instead of gliding — with
+    // HYSTERESIS: kick in at a firm pace, drop out only when nearly stopped.
+    // A single threshold flapped walk<->idle several times a second whenever a
+    // man hovered around it (one flavour of the "repeating animation" thrash).
+    const spd = (unit._dispSpeed != null) ? unit._dispSpeed : (unit.currentSpeed || 0);
+    const loco = spd > (ud._locoOn ? 0.12 : 0.3);
+    ud._locoOn = loco;
+    if (loco) {
+        // A prone man on the move is CRAWLING — never the upright walk cycle
+        // (a pinned soldier gliding along standing was the standing/prone mixup).
+        if (st === 'prone') return pick(['crawl', 'fire_prone', 'prone_idle']) || pick(['walk']) || names[0];
+        // Walk/run pick with HYSTERESIS: break into a run at a firm sprint,
+        // drop back to a walk only once clearly slower. A single threshold
+        // flapped walk<->run twice a second at group-march pace (~3.2 u/s).
+        const fast = st === 'run' || spd > (ud._runOn ? 2.8 : 3.6);
+        ud._runOn = fast;
+        return (fast && pick(['run'])) || pick(['walk', 'run', 'push', 'move', 'crawl']) || names[0];
+    }
     if (unit.fireTargetId != null) {
         return pick(['fire_' + st, 'fire_crouch', 'fire_stand', 'fire_prone', 'fire', 'attack'])
             || pick(['idle']) || names[0];
     }
+    // Idle poses match the stance — a crouched or prone soldier must NOT pop back
+    // up into the standing idle (troops "stood up" in bushes the moment they
+    // stopped firing).
+    if (st === 'prone') return pick(['fire_prone', 'prone_idle']) || pick(['idle']) || names[0];
+    if (st === 'crouch') return pick(['crouch', 'crouch_idle']) || pick(['idle']) || names[0];
+    if (st === 'rest') return pick(['sit', 'crouch']) || pick(['idle']) || names[0];
     return pick(['idle', 'crouch_idle', 'prone_idle']) || names[0];
 };
 
@@ -467,6 +500,7 @@ Game._playClip = (unit, name, fade = 0.25) => {
     next.reset().play();
     if (prev && prev !== next) next.crossFadeFrom(prev, fade, false);
     ud._activeClip = name;
+    ud._clipSince = Game.gameClock || 0;   // min-hold anchor (see _updateModelAnimation)
 };
 
 /** Choose + crossfade the right clip for a unit, then advance its mixer. */
@@ -477,7 +511,27 @@ Game._updateModelAnimation = (unit, dt) => {
     if (ud.isSoldier && Game._soldierAnimOverride && Game._soldierAnimOverride(unit, dt)) return;
     if (ud.actions) {
         const want = Game._chooseClip(unit);
-        if (want) Game._playClip(unit, want, ud.isSoldier ? (Game.SOLDIER_POSTURE_FADE || 0.3) : 0.25);
+        // Min-hold: a freshly started clip plays for at least a beat before a
+        // different state may replace it (combat picks react instantly). Without
+        // this, fluttering state flags re-triggered clips several times a second
+        // — the "same animation repeating" stutter.
+        // Combat picks and locomotion STARTS react instantly (a delayed walk
+        // clip reads as sliding). Switching BETWEEN walk and run is not urgent
+        // — it waits out the min-hold, or pace flutter thrashes the two clips.
+        const isLoco = (n) => n === 'walk' || n === 'run' || n === 'crawl';
+        const urgent = want && (want.startsWith('fire') || want === 'grenade'
+            || (isLoco(want) && !isLoco(ud._activeClip)));
+        if (want && (want === ud._activeClip || urgent
+            || (Game.gameClock || 0) - (ud._clipSince ?? -9) > 0.35)) {
+            // Transitions in/out of the prone pose fade FAST: a slow blend
+            // between a standing and a lying clip reads as a half-standing
+            // ghost for a beat (the "standing/prone look" when hitting the dirt).
+            const proneHop = want === 'fire_prone' || ud._activeClip === 'fire_prone'
+                || want === 'crawl' || ud._activeClip === 'crawl';
+            const fade = !ud.isSoldier ? 0.25
+                : proneHop ? 0.12 : (Game.SOLDIER_POSTURE_FADE || 0.3);
+            Game._playClip(unit, want, fade);
+        }
     }
     if (ud.isSoldier && Game._soldierTimeScale) Game._soldierTimeScale(unit);
     ud.mixer.update(dt);
@@ -1034,17 +1088,25 @@ Game.updateSmoke3D = (dt) => {
             if (!f.mesh) {
                 const mat = new THREE.SpriteMaterial({
                     map: Game._getFlashTex(),
-                    color: 0xffcc66,
+                    color: f.flame ? 0xff7a2e : 0xffcc66,
                     transparent: true,
-                    opacity: 0.95,
+                    opacity: f.flame ? 0.0 : 0.95,
                     blending: THREE.AdditiveBlending,
                     depthWrite: false,
                 });
                 mat.rotation = Math.random() * Math.PI * 2;
                 f.mesh = new THREE.Sprite(mat);
-                f._baseY = (Game.getHeight ? Game.getHeight(f.x, f.z) : 0) + 0.7;
+                f._baseY = (Game.getHeight ? Game.getHeight(f.x, f.z) : 0) + (f.flame ? 0.35 : 0.7);
                 f.mesh.position.set(f.x, f._baseY, f.z);
                 Game.effectsGroup.add(f.mesh);
+            } else if (f.flame) {
+                // Ground-fire flame tongue: soft ease in/out, no pop — the pop
+                // scaling below is for explosion flashes, and reusing it here made
+                // a burning patch read as a string of firecracker detonations.
+                const age = 1 - f.life / f.total;    // 0 -> 1
+                f.mesh.scale.setScalar(f.r * (0.85 + age * 0.4));
+                f.mesh.position.y = f._baseY + age * 0.25;   // licks upward a little
+                f.mesh.material.opacity = Math.sin(age * Math.PI) * 0.55;
             } else {
                 const t = f.life / f.total;          // 1 -> 0
                 // pop big then snap down
@@ -1165,13 +1227,15 @@ Game.updateFires = (dt) => {
         f._flT -= dt;
         if (f._flT <= 0) {
             f._flT = 0.2 / mul;
-            // flame flicker (low, warm, additive)
+            // flame flicker (low, warm, additive) — flame:true renders as a soft
+            // licking tongue, not the popping explosion-flash sprite
             const flames = 1 + Math.round(Math.random());
             for (let k = 0; k < flames; k++) {
+                const fl = 0.35 + Math.random() * 0.3;
                 Game.muzzleFlashes.push({
                     x: f.x + Game.rand(-f.r, f.r) * 0.6, z: f.z + Game.rand(-f.r, f.r) * 0.6,
                     r: (0.22 + Math.random() * 0.28) * (0.6 + intensity * 0.6),
-                    life: 0.16 + Math.random() * 0.12, total: 0.3, big: false, mesh: null,
+                    life: fl, total: fl, big: false, flame: true, mesh: null,
                 });
             }
             // grey-brown wood-fire smoke column

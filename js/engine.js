@@ -435,6 +435,7 @@ Game.setupPostFX = () => {
         }
         Game.buildPostFXDebugUI();
         if (Game.buildSoldierAnimUI) Game.buildSoldierAnimUI();
+        if (Game.buildMoveRecUI) Game.buildMoveRecUI();
         return true;
     } catch (e) {
         console.warn('PostFX setup failed, falling back to direct render:', e);

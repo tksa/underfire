@@ -293,15 +293,32 @@ Game.setSoldierForce = (name) => {
 
 // Play a random death variant on a killed soldier once, holding the final frame
 // (so the corpse stays collapsed). Called from the dead-unit branch in renderer.js.
+// Returns true when a corpse pose was set; false = caller should use the rigid
+// fall-over fallback (e.g. this rig has no usable death clip).
 Game.playSoldierDeath = (unit) => {
     const ud = unit.mesh && unit.mesh.userData;
-    if (!ud || !ud.actions) return;
+    if (!ud || !ud.actions) return false;
     const THREE = Game.THREE;
+    // Killed while VISIBLY on his belly (judge by the clip on screen, not the
+    // logical stance — those can disagree for a beat): he simply goes still.
+    // The death variants are authored FROM STANDING, so crossfading one in made
+    // a prone man pop upright and fall a second time (the standing/prone glitch).
+    const prevName = ud._activeClip;
+    const prevAct = prevName ? ud.actions[prevName] : null;
+    if ((prevName === 'fire_prone' || prevName === 'crawl' || prevName === 'prone_idle') && prevAct) {
+        Object.values(ud.actions).forEach(a => { if (a !== prevAct) { a.stop(); a.enabled = false; } });
+        prevAct.paused = true;               // hold the lying pose as the corpse
+        return true;
+    }
     const opts = ['death', 'death2', 'death3'].filter(n => ud.actions[n]);
-    if (!opts.length) return;
+    if (!opts.length) return false;
     const name = opts[Math.floor(Math.random() * opts.length)];
     const act = ud.actions[name];
-    Object.values(ud.actions).forEach(a => { if (a !== act) { a.stop(); a.enabled = false; } });
+    // Keep the clip he was playing alive for a short crossfade into the death
+    // clip; hard-stopping everything snapped him to the death clip's first pose
+    // in one frame (a visible flip/teleport), THEN played the fall.
+    const prev = ud._activeClip ? ud.actions[ud._activeClip] : null;
+    Object.values(ud.actions).forEach(a => { if (a !== act && a !== prev) { a.stop(); a.enabled = false; } });
     act.reset();
     act.setLoop(THREE.LoopOnce, 1);
     act.clampWhenFinished = true;
@@ -309,7 +326,9 @@ Game.playSoldierDeath = (unit) => {
     act.setEffectiveWeight(1);
     act.setEffectiveTimeScale(1);
     act.play();
+    if (prev && prev !== act) act.crossFadeFrom(prev, 0.12, false);
     ud._activeClip = name;
+    return true;
 };
 
 // Hold the raw timeline at time t on every soldier (scrub to find ranges).
@@ -368,7 +387,7 @@ Game._soldierTimeScale = (unit) => {
     const base = clip === 'run' ? (Game.SOLDIER_RUN_TIMESCALE || 1) : (Game.SOLDIER_WALK_TIMESCALE || 1);
     let ts = base;
     if (Game.SOLDIER_MOVE_SYNC) {
-        const spd = unit.currentSpeed || unit.speed || 0;
+        const spd = (unit._dispSpeed != null) ? unit._dispSpeed : (unit.currentSpeed || unit.speed || 0);
         ts *= Game.clamp(spd / 2.2, 0.35, 2.5);   // 2.2 ~ the clip's authored stride speed
     }
     act.setEffectiveTimeScale(ts);
@@ -410,10 +429,14 @@ Game._soldierProceduralLegs = (unit, dt) => {
     const b = Game._soldierLegBones(unit);
     const rest = ud.soldierLegRest;
     if (!b || !b.hipL || !rest) return;
-    const spd = unit.currentSpeed || 0;
+    // Keyed to MEASURED displacement (unit._dispSpeed, set by the move module),
+    // not the moving flag/commanded speed: separation shoves and make-way
+    // scrambles then animate the legs too, so a pushed man visibly steps aside
+    // instead of ice-skating, and a blocked man never treadmills on the spot.
+    const spd = (unit._dispSpeed != null) ? unit._dispSpeed : (unit.currentSpeed || 0);
     // Debug: a forced walk/run clip strides in place even when the unit is parked.
     const forcedLoco = Game.SOLDIER_FORCE_CLIP === 'walk' || Game.SOLDIER_FORCE_CLIP === 'run';
-    const moving = forcedLoco || (!!unit.moving && spd > 0.05);
+    const moving = forcedLoco || spd > 0.2;
     ud._gaitBlend = Game.lerp(ud._gaitBlend || 0, moving ? 1 : 0, Math.min(1, dt * 8));
     const bl = ud._gaitBlend;
     if (bl < 0.02) return;                                   // idle: clip owns the legs

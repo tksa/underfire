@@ -387,17 +387,14 @@ Game.applyShot = (shooter, target) => {
                 if (Game.isTank(target.kind)) {
                     target.mesh.visible = false; // Tanks completely explode for now
                 } else {
-                    // Infantry dies — leave body on battlefield
+                    // Infantry dies — leave body on battlefield. The corpse pose is
+                    // handled ONCE by the renderer's death branch (skinned soldiers
+                    // play a death clip; procedural rigs fall over). Flattening the
+                    // mesh here too made skinned soldiers play their death animation
+                    // rotated 90° — the "rotate and flip" corpse.
                     target.isDeadBody = true;
-                    // Stop any movement or rotation immediately
                     target.speed = 0;
                     target.currentSpeed = 0;
-                    
-                    // Flatten the mesh to simulate falling to the ground
-                    if (target.mesh) {
-                        target.mesh.rotation.z = Math.PI / 2;
-                        target.mesh.position.y = (target.y || 0) + 0.1;
-                    }
                 }
             }
         }

@@ -95,6 +95,16 @@ Game.rotateWithInertia = (angle, angVel, target, maxVel, accel, dt) => {
     // Clamp to max velocity
     angVel = Game.clamp(angVel, -maxVel, maxVel);
 
+    // Critically-damped approach: when closing on the target, never carry more
+    // speed than 'accel' can shed over the remaining arc (v² = 2·a·d). Without
+    // this cap the discrete brake step routinely arrives with residual velocity,
+    // overshoots, brakes back, overshoots again — the visible left/right ring
+    // wobble on tank hulls and turrets settling onto an aim point.
+    if (Math.sign(angVel) === dir) {
+        const ceil = Math.sqrt(2 * accel * absDiff);
+        angVel = Game.clamp(angVel, -ceil, ceil);
+    }
+
     angle += angVel * dt;
     return { angle, angVel };
 };

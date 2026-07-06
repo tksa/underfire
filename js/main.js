@@ -170,11 +170,13 @@ Game._tankYield = (unit) => {
 };
 
 // ── Movement recorder (debug) ───────────────────────────────────────────────
-// Records every FRIENDLY unit's position/heading/speed/state each frame so movement
-// can be replayed/analysed. Toggle from the debug panel ("Record unit movement") or
-// call Game.startMoveRec() / Game.stopMoveRec(). Stopping prints a per-unit jitter
-// summary (heading + speed reversals, path length vs net travel = "wiggle") to the
-// console and downloads the full sample log as JSON.
+// Records EVERY living unit's position/heading/speed/stance/animation each frame
+// so movement problems (rotation spins, jitter, repeated animations, sliding) can
+// be replayed/analysed. Start/stop from the debug panel (` key → "Movement
+// Recorder") or call Game.startMoveRec() / Game.stopMoveRec(). Stopping prints a
+// per-unit jitter summary to the console (heading reversals, full turns made on
+// the spot, animation-clip switches, path length vs net travel = "wiggle") and
+// downloads the full sample log as JSON.
 Game._moveRec = null;
 Game.startMoveRec = () => {
     Game._moveRec = [];
@@ -185,12 +187,16 @@ Game.recordMoveFrame = () => {
     if (!Game._moveRec) return;
     const t = +(((Game.gameClock || 0) - Game._moveRecT0)).toFixed(3);
     for (const u of Game.units) {
-        if (!u.alive || u.team !== Game.TEAM.FRENCH) continue;   // all friendly units
+        if (!u.alive) continue;                       // ALL living units, both teams
         Game._moveRec.push({
-            t, id: u.id, kind: u.kind, cls: u.class, x: +u.x.toFixed(3), z: +u.z.toFixed(3),
+            t, id: u.id, team: u.team, kind: u.kind, cls: u.class,
+            x: +u.x.toFixed(3), z: +u.z.toFixed(3),
             a: +(u.angle || 0).toFixed(3), spd: +(u.currentSpeed || 0).toFixed(2),
+            dsp: +(u._dispSpeed || 0).toFixed(2),     // measured ground speed (slide detector)
             stop: +(u.stopTimer || 0).toFixed(2), det: u._detour ? 1 : 0, rev: u._reversing ? 1 : 0,
-            mv: u.moving ? 1 : 0,
+            mv: u.moving ? 1 : 0, st: u.stance || '',
+            ai: u._ai || u.aiState || '',
+            clip: (u.mesh && u.mesh.userData && u.mesh.userData._activeClip) || '',
         });
     }
     if (Game._moveRec.length > 400000) Game._moveRec.splice(0, 8000);
@@ -203,31 +209,84 @@ Game.stopMoveRec = () => {
     const summary = Object.keys(byId).map(id => {
         const s = byId[id];
         let headRev = 0, spdRev = 0, pathLen = 0, lastA = 0, lastSd = 0, stopFrames = 0;
+        let totalRot = 0, clipSwitches = 0, spinRot = 0;
         for (let i = 1; i < s.length; i++) {
-            pathLen += Math.hypot(s[i].x - s[i - 1].x, s[i].z - s[i - 1].z);
+            const step = Math.hypot(s[i].x - s[i - 1].x, s[i].z - s[i - 1].z);
+            pathLen += step;
             const da = Game.angleDiff(s[i - 1].a, s[i].a);
+            totalRot += Math.abs(da);
+            if (step < 0.02) spinRot += Math.abs(da);   // turning while going nowhere
             if (Math.abs(da) > 0.01) { if (lastA !== 0 && Math.sign(da) !== Math.sign(lastA)) headRev++; lastA = da; }
             const sd = Math.sign(s[i].spd - s[i - 1].spd);
             if (sd !== 0) { if (lastSd !== 0 && sd !== lastSd) spdRev++; lastSd = sd; }
             if (s[i].spd < 0.05) stopFrames++;
+            if (s[i].clip !== s[i - 1].clip) clipSwitches++;
         }
         const net = s.length ? Math.hypot(s[s.length - 1].x - s[0].x, s[s.length - 1].z - s[0].z) : 0;
+        const dur = s.length > 1 ? Math.max(0.001, s[s.length - 1].t - s[0].t) : 0.001;
         return {
-            id: +id, kind: s[0].kind, frames: s.length, headingReversals: headRev,
+            id: +id, team: s[0].team, kind: s[0].kind, frames: s.length,
+            headingReversals: headRev,
+            // full 360s turned while standing still — the "spinning on the spot" metric
+            spinTurns: +(spinRot / (Math.PI * 2)).toFixed(2),
+            totalTurns: +(totalRot / (Math.PI * 2)).toFixed(2),
+            // clip switches per second — high = animation thrash / repeats
+            clipPerSec: +(clipSwitches / dur).toFixed(2),
             speedReversals: spdRev, stopFrames, pathLen: +pathLen.toFixed(1),
             net: +net.toFixed(1), wiggle: +(pathLen / (net || 1)).toFixed(2),
         };
     });
-    console.log('=== TANK MOVEMENT SUMMARY (jitter = many reversals / high wiggle) ===');
+    // Worst offenders first: spinning in place, then animation thrash.
+    summary.sort((a, b) => (b.spinTurns - a.spinTurns) || (b.clipPerSec - a.clipPerSec));
+    console.log('=== UNIT MOVEMENT SUMMARY (spinTurns = 360s on the spot; clipPerSec = anim thrash; high wiggle = weaving) ===');
     if (console.table) console.table(summary); else console.log(JSON.stringify(summary, null, 1));
     try {
         const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-        a.download = 'tank_movement.json'; a.click();
+        a.download = 'unit_movement.json'; a.click();
     } catch (e) { /* headless: no DOM download */ }
-    if (Game.pushMessage) Game.pushMessage(`Recording stopped (${data.length} samples) — summary in console.`, 3.0);
+    if (Game.pushMessage) Game.pushMessage(`Recording stopped (${data.length} samples) — summary in console, JSON downloaded.`, 3.0);
     Game._moveRecSummary = summary;
     return summary;
+};
+
+// Debug-panel section for the recorder (the functions existed but were never
+// exposed in the UI — this is the missing "record movement" control).
+Game.buildMoveRecUI = () => {
+    const panel = document.getElementById('debugPanel');
+    if (!panel || document.getElementById('dbgMoveRec')) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'dbgMoveRec';
+    const title = document.createElement('div');
+    title.className = 'dbg-title';
+    title.style.marginTop = '8px';
+    title.textContent = 'Movement Recorder';
+    wrap.appendChild(title);
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:4px;margin-top:3px';
+    const btnCss = 'background:#2a2e35;color:#cdd3da;border:1px solid #454b55;border-radius:3px;padding:3px 10px;font-size:11px;cursor:pointer';
+    const start = document.createElement('button');
+    start.textContent = '● Record';
+    start.style.cssText = btnCss;
+    const stop = document.createElement('button');
+    stop.textContent = '■ Stop + Save';
+    stop.style.cssText = btnCss;
+    start.addEventListener('click', () => {
+        Game.startMoveRec();
+        start.style.background = '#7a2a2a';
+    });
+    stop.addEventListener('click', () => {
+        Game.stopMoveRec();
+        start.style.background = '#2a2e35';
+    });
+    row.appendChild(start);
+    row.appendChild(stop);
+    wrap.appendChild(row);
+    const hint = document.createElement('div');
+    hint.style.cssText = 'color:#7a8a96;font-size:10px;margin-top:3px';
+    hint.textContent = 'Records ALL units every frame (position, heading, speed, stance, anim clip). Stop downloads unit_movement.json + prints a per-unit jitter table to the console.';
+    wrap.appendChild(hint);
+    panel.appendChild(wrap);
 };
 
 Game.applySeparation = (unit, dt) => {
@@ -292,7 +351,10 @@ Game.applySeparation = (unit, dt) => {
                 // RUN clear, don't slide: face the escape direction and break into a run
                 // so it reads as a man scrambling out of the way rather than bouncing
                 // sideways. (Capped to run speed below, not a sideways dart.)
-                unit.angle = Math.atan2(exZ, exX);
+                // TURN at a finite rate — the escape vector rotates with the passing
+                // tank, and snapping the facing to it every frame swept the man
+                // through continuous full circles on the spot.
+                unit.angle = Game.rotateTo(unit.angle, Math.atan2(exZ, exX), 9 * dt);
                 unit.turretAngle = unit.angle;
                 if (unit.stance !== 'prone' && unit.stance !== 'crouch') { unit.stance = 'run'; unit._autoStance = true; }
             } else if (unit._bailFor === other.id && (ahead <= -other.size || Math.abs(lateral) >= halfWidth)) {
@@ -321,8 +383,11 @@ Game.applySeparation = (unit, dt) => {
                 if (!enemyRolling) {
                     // Resolve over a few frames, not in one pop: a deep overlap (a man
                     // shoved into a hull by a crowd) would otherwise jump him >1u in a
-                    // single frame, which reads as a teleport. Cap the per-frame correction.
-                    const pm = Math.hypot(push.x, push.z), cap = 0.35;
+                    // single frame, which reads as a teleport. Cap the correction at a
+                    // RUN-speed rate (dt-scaled) — the old fixed per-FRAME cap of 0.35u
+                    // meant up to ~20u/s at 60fps, and a man straddling the box edge
+                    // visibly vibrated/bounced against the hull every frame.
+                    const pm = Math.hypot(push.x, push.z), cap = 3.4 * dt;
                     const k = pm > cap ? cap / pm : 1;
                     unit.x += push.x * k; unit.z += push.z * k;
                 }
@@ -767,10 +832,31 @@ Game.updateAirStrikes = (dt) => {
     for (let i = Game.airStrikes.length - 1; i >= 0; i--) {
         const strike = Game.airStrikes[i];
         strike.delay -= dt;
+        // Shells fall as a WALKING STICK of bombs, one after another — not the
+        // whole load detonating in a single frame (that read as a "firecracker"
+        // burst of overlapping little explosions instead of a bombing run).
         if (strike.delay <= 0 && !strike.done) {
-            strike.done = true;
-            // Drop shells
-            for (let s = 0; s < strike.shells; s++) {
+            if (!strike._runStarted) {
+                strike._runStarted = true;
+                strike._shellT = 0;
+                Game.lastAttackPos = { x: strike.x, z: strike.z };
+                // Bombing run visual — tracer lines from approach direction
+                for (let t = 0; t < 5; t++) {
+                    const approachX = strike.x + Game.rand(-3, 3);
+                    const approachZ = strike.z - 15; // Planes come from north
+                    Game.tracers.push({
+                        x: approachX, z: approachZ,
+                        tx: strike.x + Game.rand(-5, 5), tz: strike.z + Game.rand(-5, 5),
+                        life: 0.5, total: 0.5,
+                        team: Game.TEAM.FRENCH, big: true, mesh: null,
+                    });
+                }
+                Game.pushMessage('Air strike impact!', 2.0);
+            }
+            strike._shellT -= dt;
+            while (strike._shellT <= 0 && strike.shells > 0) {
+                strike._shellT += Game.rand(0.12, 0.3);
+                strike.shells--;
                 const sx = strike.x + Game.rand(-6, 6);
                 const sz = strike.z + Game.rand(-6, 6);
                 // Damage all units in blast
@@ -800,21 +886,9 @@ Game.updateAirStrikes = (dt) => {
                 Game.craters.push({ x: sx, z: sz, r: Game.rand(0.8, 1.5) });
                 if (Game.Audio) Game.Audio.explosion(sx, sz);
                 Game.addBlastFlash(sx, sz, 1.6);
+                Game.cameraShake = Math.max(Game.cameraShake || 0, 9);
             }
-            Game.cameraShake = 12;
-            Game.lastAttackPos = { x: strike.x, z: strike.z };
-            // Bombing run visual — tracer lines from approach direction
-            for (let t = 0; t < 5; t++) {
-                const approachX = strike.x + Game.rand(-3, 3);
-                const approachZ = strike.z - 15; // Planes come from north
-                Game.tracers.push({
-                    x: approachX, z: approachZ,
-                    tx: strike.x + Game.rand(-5, 5), tz: strike.z + Game.rand(-5, 5),
-                    life: 0.5, total: 0.5,
-                    team: Game.TEAM.FRENCH, big: true, mesh: null,
-                });
-            }
-            Game.pushMessage('Air strike impact!', 2.0);
+            if (strike.shells <= 0) strike.done = true;
         }
         if (strike.done && strike.delay < -2) {
             Game.airStrikes.splice(i, 1);
@@ -3077,6 +3151,10 @@ Game.NEURAL_BAKE_PPU = 21.6;   // px per world unit ~= training pixel density
             when: Date.now(),
             water: Game.NEURAL_WATER,
             tints: JSON.parse(JSON.stringify(Game._foliageTint || {})),
+            // Pond layout rides in the save so a reload replays these exact
+            // ponds instead of re-rolling them from the (code-drift-sensitive)
+            // seeded RNG stream — see the pond section in generateMap.
+            ponds: JSON.parse(JSON.stringify(Game.ponds || [])),
             editor: Game.editorSerialize ? Game.editorSerialize() : null,
             bake: null,
         };
@@ -3140,6 +3218,7 @@ Game.NEURAL_BAKE_PPU = 21.6;   // px per world unit ~= training pixel density
         const meta = {
             name: rec.name, seed: rec.seed, when: rec.when,
             water: rec.water, tints: rec.tints,
+            ponds: rec.ponds || [],
         };
         if (rec.editor) {
             meta.editor = { blank: rec.editor.blank, types: rec.editor.types,
@@ -4001,6 +4080,12 @@ Game.boot = async () => {
 
     // Load heightmap from depth image (async)
     await Game.loadHeightmap();
+
+    // Pond plan: a saved map replays its recorded pond layout; a save without
+    // pond metadata suppresses procedural ponds (their seeded positions drift
+    // whenever generation code changes, digging water where the save's baked
+    // ground texture shows dry field). Fresh procedural maps roll random ponds.
+    Game._pondPlan = pendingSave ? (pendingSave.ponds || 'suppress') : null;
 
     // Generate tile-based map data (or an editor blank canvas), then lay any
     // painted tiles from the save over it before the world builds
