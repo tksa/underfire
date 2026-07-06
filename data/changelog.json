@@ -1,8 +1,18 @@
 {
  "version": "v0.10.1",
- "build": "a404fe1",
+ "build": "7b1bc45",
  "generated": "2026-07-06",
  "commits": [
+  {
+   "hash": "7b1bc45",
+   "date": "2026-07-06",
+   "subject": "tank tactics, solid no-slide movement, and dynamic rerouting"
+  },
+  {
+   "hash": "3478f8b",
+   "date": "2026-07-06",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "a404fe1",
    "date": "2026-07-06",
@@ -62,16 +72,6 @@
    "hash": "2eff25c",
    "date": "2026-07-05",
    "subject": "trunks were see-through (leaf soft-blend opacity applied to bark)"
-  },
-  {
-   "hash": "d84af44",
-   "date": "2026-07-05",
-   "subject": "refresh changelog"
-  },
-  {
-   "hash": "059ca8b",
-   "date": "2026-07-05",
-   "subject": "true dark off-map, tilt-shift as final pass, HUD fold, no start selection"
   }
  ]
 }
