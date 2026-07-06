@@ -1,8 +1,23 @@
 {
  "version": "v0.10.1",
- "build": "49ef707",
+ "build": "a404fe1",
  "generated": "2026-07-06",
  "commits": [
+  {
+   "hash": "a404fe1",
+   "date": "2026-07-06",
+   "subject": "phantom pond on saved maps"
+  },
+  {
+   "hash": "da9002c",
+   "date": "2026-07-06",
+   "subject": "infantry/tank realism overhaul"
+  },
+  {
+   "hash": "997985e",
+   "date": "2026-07-06",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "49ef707",
    "date": "2026-07-06",
@@ -57,21 +72,6 @@
    "hash": "059ca8b",
    "date": "2026-07-05",
    "subject": "true dark off-map, tilt-shift as final pass, HUD fold, no start selection"
-  },
-  {
-   "hash": "98fc58f",
-   "date": "2026-07-05",
-   "subject": "refresh changelog"
-  },
-  {
-   "hash": "5eeb163",
-   "date": "2026-07-05",
-   "subject": "black boot loader with asset-aware fade, dark off-map, visible tilt-shift"
-  },
-  {
-   "hash": "f4ccf27",
-   "date": "2026-07-05",
-   "subject": "refresh changelog"
   }
  ]
 }
