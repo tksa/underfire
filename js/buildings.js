@@ -560,6 +560,49 @@ Game.ungarrisonUnit = (unit) => {
     if (unit.mesh) unit.mesh.visible = true;
 };
 
+// ── Player exit orders (Sudden Strike style) ────────────────────────────────
+// Release up to `count` occupants through the door nearest the destination
+// (or the first door if none), then send them on to (tx, tz) if given.
+// Returns how many soldiers stepped out.
+Game.exitBuilding = (rec, count = Infinity, tx = null, tz = null) => {
+    if (!rec || !rec.occupants || !rec.occupants.length) return 0;
+    const ids = rec.occupants.slice(0, Math.min(count, rec.occupants.length));
+    const doors = (Game.buildingDoors && Game.buildingDoors(rec)) || [];
+    if (!doors.length) doors.push({ x: rec.cx, z: rec.cz + (rec.d || 4) / 2 + 0.8 });
+    const ref = (tx != null) ? { x: tx, z: tz } : doors[0];
+    let door = doors[0], bd = Infinity;
+    for (const p of doors) {
+        const d = Game.distSq(p.x, p.z, ref.x, ref.z);
+        if (d < bd) { bd = d; door = p; }
+    }
+    let n = 0;
+    ids.forEach((id, i) => {
+        const u = Game.getUnitById(id);
+        if (!u || !u.alive) return;
+        Game.ungarrisonUnit(u);
+        // Step out through the door, fanned so a whole squad doesn't stack.
+        const a = Game.angleTo(rec.cx, rec.cz, door.x, door.z) + Game.rand(-0.5, 0.5);
+        u.x = Game.clamp(door.x + Math.cos(a) * (0.7 + (i % 3) * 0.5), 1, Game.WORLD_W - 1);
+        u.z = Game.clamp(door.z + Math.sin(a) * (0.7 + (i % 3) * 0.5), 1, Game.WORLD_H - 1);
+        u.y = Game.getHeight ? Game.getHeight(u.x, u.z) : 0;
+        u.path = []; u.moving = false;
+        u.stance = 'stand'; u._autoStance = false;
+        if (tx != null) {
+            const A = (i / Math.max(1, ids.length)) * Math.PI * 2;
+            const R = i === 0 ? 0 : 1.2 + (i % 5) * 0.6;
+            u.path = Game.findPath(u, u.x, u.z,
+                Game.clamp(tx + Math.cos(A) * R, 1, Game.WORLD_W - 1),
+                Game.clamp(tz + Math.sin(A) * R, 1, Game.WORLD_H - 1));
+            u.moving = u.path.length > 0;
+            u.orderMode = 'move';
+            u.orderDelay = Game.commandDelay ? Game.commandDelay(u) : 0;
+        }
+        n++;
+    });
+    if (n && Game.Audio) Game.Audio.voice('f_sold_move');
+    return n;
+};
+
 // Occupancy summary for the HUD label: count, capacity, average health %.
 Game.buildingOccupantStats = (rec) => {
     if (!rec || !rec.occupants || !rec.occupants.length) {

@@ -56,6 +56,12 @@ Game.updateGarrisonUI = () => {
     const vp = document.getElementById('viewport');
     if (vp) vp.classList.toggle('cmd-enter', wantEnter);
 
+    // A selected building that emptied or collapsed drops its selection.
+    if (Game.selectedBuilding && (Game.selectedBuilding.collapsed
+        || !Game.selectedBuilding.occupants || !Game.selectedBuilding.occupants.length)) {
+        Game.selectedBuilding = null;
+    }
+
     const seen = new Set();
     for (const rec of Game.buildingRecords) {
         if (rec.collapsed) continue;
@@ -67,17 +73,39 @@ Game.updateGarrisonUI = () => {
         if (!el) {
             el = document.createElement('div');
             el.style.cssText = 'position:absolute;transform:translate(-50%,-100%);'
-                + 'font:600 12px system-ui,Segoe UI,sans-serif;color:#eee;white-space:nowrap;'
-                + 'padding:2px 7px;border-radius:5px;background:rgba(20,22,18,0.72);'
+                + 'font:600 11px system-ui,Segoe UI,sans-serif;color:#eee;white-space:nowrap;'
+                + 'padding:3px 6px;border-radius:5px;background:rgba(20,22,18,0.72);'
                 + 'border:1px solid rgba(255,255,255,0.15);text-shadow:0 1px 2px #000;';
             c.appendChild(el);
             Game._garrisonUI.labels.set(rec, el);
         }
 
+        // Sudden Strike-style status stack: one row per occupant — life bar
+        // (green) over ammo bar (yellow) — always shown while troops are inside
+        // (SS manual §III.D: buildings containing units display their status
+        // bars even when unselected).
         const st = Game.buildingOccupantStats(rec);
-        const hpc = st.avgHealthPct > 66 ? '#7ec97e' : st.avgHealthPct > 33 ? '#e0c46a' : '#e07a6a';
-        el.innerHTML = `<span>\u{1F465} ${st.count}/${st.capacity}</span>`
-            + ` <span style="color:${hpc}">♥ ${st.avgHealthPct}%</span>`;
+        const rows = [];
+        for (const id of rec.occupants) {
+            const u = Game.getUnitById ? Game.getUnitById(id) : null;
+            if (!u || !u.alive) continue;
+            const hp = Game.clamp(u.hp / (u.maxHp || 1), 0, 1);
+            const am = (u.maxAmmo > 0) ? Game.clamp(u.ammo / u.maxAmmo, 0, 1) : 1;
+            const hpc = hp > 0.66 ? '#5ec95e' : hp > 0.33 ? '#e0c46a' : '#e06a5a';
+            rows.push('<div style="margin:2px 0">'
+                + `<div style="width:32px;height:3px;background:#2a2a2a;border-radius:1px">`
+                + `<div style="width:${Math.round(hp * 100)}%;height:3px;background:${hpc};border-radius:1px"></div></div>`
+                + `<div style="width:32px;height:2px;background:#2a2a2a;margin-top:1px;border-radius:1px">`
+                + `<div style="width:${Math.round(am * 100)}%;height:2px;background:#d8b93c;border-radius:1px"></div></div>`
+                + '</div>');
+        }
+        el.innerHTML = `<div style="font-size:10px;text-align:center;margin-bottom:1px">\u{1F465} ${st.count}/${st.capacity}</div>`
+            + rows.join('');
+        // Selected building: bright frame (right-click terrain = all out;
+        // right-click the building = one out).
+        const isSel = rec === Game.selectedBuilding;
+        el.style.borderColor = isSel ? '#ffd24a' : 'rgba(255,255,255,0.15)';
+        el.style.boxShadow = isSel ? '0 0 6px rgba(255,210,74,0.55)' : 'none';
 
         const p = Game._projWorld(rec.cx, (rec.baseY || 0) + 7, rec.cz);
         if (p.vis) { el.style.display = 'block'; el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; }
