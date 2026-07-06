@@ -379,44 +379,58 @@ Game.generateMap = () => {
             }
             return true;
         };
-        const want = Game.randi(1, 3);
-        const cands = [];
-        for (let i = 0; i < 90 && cands.length < want * 6; i++) {
-            const r = Game.rand(2.0, 5.5);   // small mare up to a big field pond
-            const cx = Game.randi(8, COLS - 9), cz = Game.randi(8, ROWS - 9);
-            if (!pondClear(cx, cz, r)) continue;
-            cands.push({ cx, cz, r, h: Game.getHeight((cx + 0.5) * T, (cz + 0.5) * T) });
-        }
-        cands.sort((a, b) => a.h - b.h);   // lowest ground first
-        for (const c of cands) {
-            if (Game.ponds.length >= want) break;
-            if (Game.ponds.some(p => Math.hypot(p.tx - c.cx, p.tz - c.cz) < (p.r + c.r) * 1.3 + 8)) continue;
-            // rough circle, not a perfect one: a random egg/squeeze stretch on
-            // a random axis, on top of the fbm shore wobble below
-            const asp = Game.rand(1.05, 1.55);
-            const th = Game.rand(0, Math.PI);
-            const ct = Math.cos(th), st = Math.sin(th);
-            const sx = Math.sqrt(asp), sy = 1 / Math.sqrt(asp);
-            const R = Math.ceil(c.r * sx) + 1;
-            for (let y = c.cz - R; y <= c.cz + R; y++) {
-                for (let x = c.cx - R; x <= c.cx + R; x++) {
+        // Stamp one pond (tiles + analytic record) — shared by fresh generation
+        // and save replay so both produce the identical shoreline.
+        const stampPond = (cx, cz, r, ct, st, sx, sy) => {
+            const R = Math.ceil(r * sx) + 1;
+            for (let y = Math.max(0, cz - R); y <= Math.min(ROWS - 1, cz + R); y++) {
+                for (let x = Math.max(0, cx - R); x <= Math.min(COLS - 1, cx + R); x++) {
                     // fbm wobble so the shore meanders instead of stamping an
                     // outline — low frequency, so it varies in lobes a few
                     // tiles wide rather than single-tile notches. _pondAt
                     // samples the SAME fields so the visual waterline agrees.
-                    const wob = Game._fbm2 ? 0.72 + 0.55 * Game._fbm2(x * 0.19 + c.cx * 1.7, y * 0.19 - c.cz * 1.3) : 1;
-                    const dx = x - c.cx, dy = y - c.cz;
+                    const wob = Game._fbm2 ? 0.72 + 0.55 * Game._fbm2(x * 0.19 + cx * 1.7, y * 0.19 - cz * 1.3) : 1;
+                    const dx = x - cx, dy = y - cz;
                     const ex = (dx * ct + dy * st) / sx;
                     const ey = (-dx * st + dy * ct) / sy;
-                    if (Math.hypot(ex, ey) >= c.r * wob) continue;
+                    if (Math.hypot(ex, ey) >= r * wob) continue;
                     Game.terrain[y][x] = Game.makeTile('water');
                     Game.pondTiles.push({ tx: x, ty: y });
                 }
             }
             Game.ponds.push({
-                tx: c.cx, tz: c.cz, r: c.r, ct, st, sx, sy,
-                wx: (c.cx + 0.5) * T, wz: (c.cz + 0.5) * T, wr: c.r * T,
+                tx: cx, tz: cz, r, ct, st, sx, sy,
+                wx: (cx + 0.5) * T, wz: (cz + 0.5) * T, wr: r * T,
             });
+        };
+        // Saved maps carry their pond layout (save rec.ponds): replay it exactly.
+        // Older saves without pond metadata SUPPRESS ponds instead — pond spots
+        // come from the seeded RNG stream, which drifts whenever generation code
+        // changes, so a replayed pond can dig its dip + water sheet where the
+        // save's baked ground texture shows dry field (the "phantom puddle").
+        if (Game._pondPlan === 'suppress') {
+            // no ponds: this save predates pond metadata
+        } else if (Array.isArray(Game._pondPlan)) {
+            for (const p of Game._pondPlan) stampPond(p.tx, p.tz, p.r, p.ct, p.st, p.sx, p.sy);
+        } else {
+            const want = Game.randi(1, 3);
+            const cands = [];
+            for (let i = 0; i < 90 && cands.length < want * 6; i++) {
+                const r = Game.rand(2.0, 5.5);   // small mare up to a big field pond
+                const cx = Game.randi(8, COLS - 9), cz = Game.randi(8, ROWS - 9);
+                if (!pondClear(cx, cz, r)) continue;
+                cands.push({ cx, cz, r, h: Game.getHeight((cx + 0.5) * T, (cz + 0.5) * T) });
+            }
+            cands.sort((a, b) => a.h - b.h);   // lowest ground first
+            for (const c of cands) {
+                if (Game.ponds.length >= want) break;
+                if (Game.ponds.some(p => Math.hypot(p.tx - c.cx, p.tz - c.cz) < (p.r + c.r) * 1.3 + 8)) continue;
+                // rough circle, not a perfect one: a random egg/squeeze stretch on
+                // a random axis, on top of the fbm shore wobble in stampPond
+                const asp = Game.rand(1.05, 1.55);
+                const th = Game.rand(0, Math.PI);
+                stampPond(c.cx, c.cz, c.r, Math.cos(th), Math.sin(th), Math.sqrt(asp), 1 / Math.sqrt(asp));
+            }
         }
     }
 
