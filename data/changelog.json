@@ -1,8 +1,23 @@
 {
  "version": "v0.10.1",
- "build": "7b1bc45",
+ "build": "d2eb90f",
  "generated": "2026-07-06",
  "commits": [
+  {
+   "hash": "d2eb90f",
+   "date": "2026-07-06",
+   "subject": "fighter air support"
+  },
+  {
+   "hash": "dab229a",
+   "date": "2026-07-06",
+   "subject": "Sudden Strike garrison display, building exit orders, and SS2 controls"
+  },
+  {
+   "hash": "8409392",
+   "date": "2026-07-06",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "7b1bc45",
    "date": "2026-07-06",
@@ -57,21 +72,6 @@
    "hash": "9f0cd26",
    "date": "2026-07-05",
    "subject": "refresh changelog"
-  },
-  {
-   "hash": "0081a69",
-   "date": "2026-07-05",
-   "subject": "tilt-shift boot fix + offset control, 45deg camera, HUD fold polish, dark haze"
-  },
-  {
-   "hash": "4d2c481",
-   "date": "2026-07-05",
-   "subject": "refresh changelog"
-  },
-  {
-   "hash": "2eff25c",
-   "date": "2026-07-05",
-   "subject": "trunks were see-through (leaf soft-blend opacity applied to bark)"
   }
  ]
 }
