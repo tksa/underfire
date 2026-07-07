@@ -1,8 +1,18 @@
 {
  "version": "v0.10.1",
- "build": "3b3805e",
+ "build": "2c1f6a7",
  "generated": "2026-07-07",
  "commits": [
+  {
+   "hash": "2c1f6a7",
+   "date": "2026-07-07",
+   "subject": "window close-assault + hand-tuned foliage palette"
+  },
+  {
+   "hash": "2655748",
+   "date": "2026-07-07",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "3b3805e",
    "date": "2026-07-07",
@@ -62,16 +72,6 @@
    "hash": "7b1bc45",
    "date": "2026-07-06",
    "subject": "tank tactics, solid no-slide movement, and dynamic rerouting"
-  },
-  {
-   "hash": "3478f8b",
-   "date": "2026-07-06",
-   "subject": "refresh changelog"
-  },
-  {
-   "hash": "a404fe1",
-   "date": "2026-07-06",
-   "subject": "phantom pond on saved maps"
   }
  ]
 }
