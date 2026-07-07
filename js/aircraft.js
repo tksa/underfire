@@ -524,8 +524,13 @@ Game.updateFighters = (dt) => {
                     attacking = true;
                 }
             }
-            // Attack runs steer HARD (committed pursuit curve) — cruise legs lazy.
-            const steer = (f.steerRate || 1.5) * (attacking ? 1.7 : 1);
+            // Attack runs steer firmly but CAPPED at what a banked turn can
+            // plausibly deliver (~1.55 rad/s) — the old 1.7× multiplier hit
+            // 3+ rad/s, a flat yaw-whip onto the target that no roll could
+            // sell. Cruise legs stay lazy.
+            const steer = attacking
+                ? Math.min((f.steerRate || 1.5) * 1.4, 1.55)
+                : (f.steerRate || 1.5);
             f.angle = Game.rotateTo(f.angle, Game.angleTo(f.x, f.z, steerX, steerZ), steer * dt);
             // Gunnery is EVENT-driven, not a slow dice-roll cadence: the moment
             // the sight settles inside the firing window, shoot (short spacing
@@ -605,8 +610,11 @@ Game.updateFighters = (dt) => {
         // MEASURED turn rate below, so wander and gusts visibly rock the
         // wings without any extra code.
         if (f.state !== 'crash') {
-            const wanderVel = Math.sin(f.t * 0.7 + f.ph1) * 0.10
-                + Math.sin(f.t * 1.9 + f.ph2) * 0.05;
+            // a pilot damps his inputs on a gun run — wander/gusts quiet down
+            // while tracking a target so the sight can settle
+            const damp = f.runTargetId != null ? 0.35 : 1;
+            const wanderVel = (Math.sin(f.t * 0.7 + f.ph1) * 0.10
+                + Math.sin(f.t * 1.9 + f.ph2) * 0.05) * damp;
             f.angle += wanderVel * dt;
             f.gustT = (f.gustT == null ? Game.rand(1, 3) : f.gustT) - dt;
             if (f.gustT <= 0) {
@@ -677,8 +685,14 @@ Game.updateFighters = (dt) => {
                 const hT0 = (f.gy + f.alt) - (Game.getHeight ? Game.getHeight(rt0.x, rt0.z) : 0);
                 pitchTarget = Game.clamp(Math.atan2(Math.max(1, hT0), Math.max(3, dT0)), 0, 0.95);
             }
-            f.pitch = (f.pitch || 0) + (pitchTarget - (f.pitch || 0))
-                * Math.min(1, dt * (pitchTarget > (f.pitch || 0) ? 4.5 : 1.2));
+            // RATE-LIMITED pitch: the nose EASES over into the dive (≤0.55
+            // rad/s — no instant slam onto the target when a run starts) and
+            // recovers faster on the pull-up. An exponential lerp here snapped
+            // ~35° of nose-down in a blink, which read as the plane "rotating"
+            // onto the enemy instead of flying onto it.
+            const dPitch = pitchTarget - (f.pitch || 0);
+            const pitchRate = dPitch > 0 ? 0.55 : 1.4;
+            f.pitch = (f.pitch || 0) + Game.clamp(dPitch, -pitchRate * dt, pitchRate * dt);
             const altTarget = (f.state === 'onstation')
                 ? F.alt + Math.sin((f.ph1 || 0) * 1.31) * 1.2 - (diving ? 10 : 0)
                 : null;
