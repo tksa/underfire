@@ -1,8 +1,18 @@
 {
  "version": "v0.10.1",
- "build": "9eff509",
+ "build": "6b42ff4",
  "generated": "2026-07-07",
  "commits": [
+  {
+   "hash": "6b42ff4",
+   "date": "2026-07-07",
+   "subject": "blurred airframe-silhouette ground shadows"
+  },
+  {
+   "hash": "f4b1ec2",
+   "date": "2026-07-07",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "9eff509",
    "date": "2026-07-07",
@@ -61,16 +71,6 @@
   {
    "hash": "997985e",
    "date": "2026-07-06",
-   "subject": "refresh changelog"
-  },
-  {
-   "hash": "49ef707",
-   "date": "2026-07-06",
-   "subject": "fr_house_2 building model, thinned hamlet, prop cleanup"
-  },
-  {
-   "hash": "c9cc999",
-   "date": "2026-07-05",
    "subject": "refresh changelog"
   }
  ]
