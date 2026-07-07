@@ -144,3 +144,6 @@ Thanks to the people kicking the tyres and telling us what's broken:
   licensed under **Creative Commons Attribution 4.0** — attribution required.
   (Same author/license family as the D.520 above; confirm the exact Sketchfab
   URL before public release.)
+- `models/german_panzer3.glb` — "Panzer 3 Ausf. J" (https://skfb.ly/pA7pr) by
+  **Arthur C. Galuppo**, licensed under **Creative Commons Attribution 4.0**
+  (http://creativecommons.org/licenses/by/4.0/) — attribution required.

@@ -930,7 +930,7 @@ Game._loadUnitModel = (unit, mesh) => {
     // kinematic bicycle model (uMod.move) already gives realistic front-wheel
     // steering, and a centred body turns cleanly like the procedural trucks do.
     Game.MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT || {};
-    Game.MODEL_SCALE = Game.MODEL_SCALE || { french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35, french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1 };
+    Game.MODEL_SCALE = Game.MODEL_SCALE || { french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35, french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, german_panzer3: 1.35 };
     const MODEL_YAW = Game.MODEL_YAW, MODEL_Y_TRIM = Game.MODEL_Y_TRIM, MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT, MODEL_SCALE = Game.MODEL_SCALE;
     // Fused-mesh tanks (turret modelled into the hull, no separate node): aim by
     // rotating the whole hull. The B1 model now has a real "turret" node, so it's
@@ -961,6 +961,18 @@ Game._loadUnitModel = (unit, mesh) => {
         // 0.50 swept the whole upper deck into the "turret" so the entire top span
         // rotated. Lift the cut so only the turret proper (top ~third) traverses.
         french_s35: { yFrac: 0.72, zFracCut: 0.62, bodyYFrac: 0.82 },
+        // Panzer III Ausf. J (fused single mesh, hull along +Z = front): explicit
+        // BOX split — the fraction heuristic can't separate this layout (barrel
+        // rides high along the hull axis; the front superstructure is as tall as
+        // the turret base). Boxes are LOCAL geometry coords measured from the
+        // GLB's vertex data; pivot = turret-ring centre.
+        german_panzer3: {
+            boxes: [
+                { x: [-0.31, 0.31], y: [0.13, 0.60], z: [-0.62, 0.25] },  // turret + cupola + bustle + mantlet root
+                { x: [-0.07, 0.09], y: [0.18, 0.31], z: [0.25, 1.06] },   // 50mm barrel (thin, slightly right of centre)
+            ],
+            pivot: { x: 0, z: -0.15 },
+        },
     };
     // Models whose own textures are broken/placeholder: repaint with a realistic
     // weathered paint job. `body` colour on hull/turret/gun, `running` (dark
@@ -1180,18 +1192,33 @@ Game._loadUnitModel = (unit, mesh) => {
                     const idx = geo.index.array;
                     const turretTris = [], hullTris = [];
                     let bx = 0, bz = 0, bn = 0;
+                    const inBoxes = (cxv, cyv, czv) => {
+                        for (const B of cfg.boxes) {
+                            if (cxv >= B.x[0] && cxv <= B.x[1]
+                                && cyv >= B.y[0] && cyv <= B.y[1]
+                                && czv >= B.z[0] && czv <= B.z[1]) return true;
+                        }
+                        return false;
+                    };
                     for (let t = 0; t < idx.length; t += 3) {
                         const a = idx[t], b = idx[t + 1], c = idx[t + 2];
+                        const cxv = (pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3;
                         const cy = (pos.getY(a) + pos.getY(b) + pos.getY(c)) / 3;
                         const tzc = (pos.getZ(a) + pos.getZ(b) + pos.getZ(c)) / 3;
-                        if (cy > yThresh && Math.abs(tzc - cz) < zCut) {
+                        // Two classification modes: explicit local-space BOXES
+                        // (measured per model — robust for awkward layouts), or
+                        // the legacy height/width fraction heuristic.
+                        const isTurret = cfg.boxes
+                            ? inBoxes(cxv, cy, tzc)
+                            : (cy > yThresh && Math.abs(tzc - cz) < zCut);
+                        if (isTurret) {
                             turretTris.push(a, b, c);
-                            if (cy > bodyY) { bx += (pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3; bz += tzc; bn++; }
+                            if (cfg.boxes ? true : cy > bodyY) { bx += cxv; bz += tzc; bn++; }
                         } else { hullTris.push(a, b, c); }
                     }
                     if (turretTris.length && hullTris.length) {
-                        const pivotX = bn ? bx / bn : 0;
-                        const pivotZ = bn ? bz / bn : cz;
+                        const pivotX = cfg.pivot ? cfg.pivot.x : (bn ? bx / bn : 0);
+                        const pivotZ = cfg.pivot ? cfg.pivot.z : (bn ? bz / bn : cz);
                         const hullGeo = geo.clone(); hullGeo.setIndex(hullTris);
                         const turretGeo = geo.clone(); turretGeo.setIndex(turretTris);
                         glbMesh.geometry = hullGeo;            // original mesh keeps the hull
