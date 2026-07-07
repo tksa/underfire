@@ -13,7 +13,7 @@ Game.nearestEnemy = (unit) => {
     // so it acquires by its own sight + LOS. This gates auto-acquisition only — a
     // player-FORCED target (right-clicked) still engages via its commitment path,
     // and firing itself is still gated by unitCanSee (line of sight).
-    const fogGated = unit.team === Game.TEAM.FRENCH && Game.isFogVisible;
+    const fogGated = unit.team === Game.playerTeam && Game.isFogVisible;
     for (const other of Game.units) {
         if (!other.alive || other.team === unit.team) continue;
         if (fogGated && !Game.isFogVisible(other.x, other.z)) continue;
@@ -380,7 +380,7 @@ Game.applyShot = (shooter, target) => {
             // rare cook-off / catastrophic blast) is carried by Game.updateWreckFx.
             if (Game.isTank(target.kind) && Game.addBlastFlash) Game.addBlastFlash(target.x, target.z, 0.9);
 
-            const teamName = target.team === Game.TEAM.GERMAN ? 'Enemy' : 'French';
+            const teamName = target.team === Game.playerTeam ? 'Friendly' : 'Enemy';
             Game.pushMessage(`${teamName} ${target.label} knocked out.`, 1.4);
 
             if (target.mesh) {

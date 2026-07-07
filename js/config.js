@@ -27,6 +27,15 @@ Game.SCALE = {
 // Teams
 Game.TEAM = { FRENCH: 'french', GERMAN: 'german' };
 
+// Which side the HUMAN plays (menu-selectable, persisted). Everything
+// player-facing keys off these instead of hardcoding French: selection, fog
+// reveal, orders, voices, mission logic. The other side runs the combat AI.
+Game.playerTeam = (() => {
+  try { return localStorage.getItem('uf_side') === 'german' ? 'german' : 'french'; }
+  catch (e) { return 'french'; }
+})();
+Game.enemyTeam = () => (Game.playerTeam === Game.TEAM.FRENCH ? Game.TEAM.GERMAN : Game.TEAM.FRENCH);
+
 // Shared arrays
 Game.terrain = [];
 Game.buildings = [];

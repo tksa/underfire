@@ -5,7 +5,7 @@
  */
 
 Game.selectedPlayerUnits = () =>
-    Game.units.filter(u => u.alive && u.team === Game.TEAM.FRENCH && Game.selection.has(u.id));
+    Game.units.filter(u => u.alive && u.team === Game.playerTeam && Game.selection.has(u.id));
 
 // Compute exactly ONE destination slot per selected unit for a group move to (wx,wz).
 // Returns [{ unit, x, z }] — one entry per unit, each a distinct formation slot. The
@@ -355,7 +355,7 @@ Game.commandDelay = (unit) => {
 Game.enemyAtWorld = (x, z) => {
     let best = null, bestD = Infinity;
     for (const u of Game.units) {
-        if (!u.alive || u.team === Game.TEAM.FRENCH) continue;
+        if (!u.alive || u.team === Game.playerTeam) continue;
         if (Game.isFogVisible && !Game.isFogVisible(u.x, u.z)) continue;
         const d = Game.distSq(x, z, u.x, u.z);
         const pick = Math.max((u.size + 0.9) * (u.size + 0.9), 3.5);
@@ -640,7 +640,7 @@ Game.handleMouseSelection = () => {
         const enterInf = Game.selectedPlayerUnits().filter(u => u.alive && !Game.isTank(u.kind) && !u._garrisoned);
         if (enterInf.length) {
             const picked0 = Game.unitAtScreen && Game.unitAtScreen(mouse.dragCurrentX, mouse.dragCurrentY);
-            const onFriendly = picked0 && picked0.team === Game.TEAM.FRENCH;
+            const onFriendly = picked0 && picked0.team === Game.playerTeam;
             if (!onFriendly) {
                 const gp = Game.screenToGround(mouse.dragCurrentX, mouse.dragCurrentY);
                 const rec = (Game.buildingAtScreen && Game.buildingAtScreen(mouse.dragCurrentX, mouse.dragCurrentY))
@@ -657,7 +657,7 @@ Game.handleMouseSelection = () => {
         const groundPt = Game.screenToGround(mouse.dragCurrentX, mouse.dragCurrentY);
         if (groundPt) {
             for (const unit of Game.units) {
-                if (!unit.alive || unit.team !== Game.TEAM.FRENCH) continue;
+                if (!unit.alive || unit.team !== Game.playerTeam) continue;
                 const d = Game.distSq(groundPt.x, groundPt.z, unit.x, unit.z);
                 // Tighter pick so clicking BETWEEN clustered soldiers deselects
                 // (was ~1.7u, which re-grabbed a neighbour in dense formations).
@@ -677,7 +677,7 @@ Game.handleMouseSelection = () => {
         if (!picked) {
             let bestScreenDist = 169; // 13px squared
             for (const unit of Game.units) {
-                if (!unit.alive || unit.team !== Game.TEAM.FRENCH) continue;
+                if (!unit.alive || unit.team !== Game.playerTeam) continue;
                 const sp = Game.worldToScreen(unit.x, unit.z);
                 const sdx = sp.x - mouse.dragCurrentX;
                 const sdy = sp.y - mouse.dragCurrentY;
@@ -696,7 +696,7 @@ Game.handleMouseSelection = () => {
             if (Game._lastPickedKind === picked.kind && now - Game._lastPickedTime < 300) {
                 // Double-click: select all visible units of same kind
                 Game.units.forEach(u => {
-                    if (u.alive && u.team === Game.TEAM.FRENCH && u.kind === picked.kind) {
+                    if (u.alive && u.team === Game.playerTeam && u.kind === picked.kind) {
                         Game.selection.add(u.id);
                     }
                 });
@@ -714,7 +714,7 @@ Game.handleMouseSelection = () => {
             const bRec = (Game.buildingAtScreen && Game.buildingAtScreen(mouse.dragCurrentX, mouse.dragCurrentY))
                 || (gp2 && Game.buildingAt && Game.buildingAt(gp2.x, gp2.z));
             const occupied = bRec && !bRec.collapsed && bRec.occupants && bRec.occupants.length
-                && bRec.occupants.some(id => { const u = Game.getUnitById(id); return u && u.team === Game.TEAM.FRENCH; });
+                && bRec.occupants.some(id => { const u = Game.getUnitById(id); return u && u.team === Game.playerTeam; });
             Game.selectedBuilding = occupied ? bRec : null;
             if (Game.selectedBuilding) {
                 Game.pushMessage(`Building selected (${bRec.occupants.length}/${bRec.capacity} inside) — right-click terrain: all out · right-click the house: one out.`, 3.0);
@@ -731,7 +731,7 @@ Game.handleMouseSelection = () => {
 
         if (!Game.keys['ShiftLeft'] && !Game.keys['ShiftRight']) Game.selection.clear();
         Game.units.forEach(unit => {
-            if (!unit.alive || unit.team !== Game.TEAM.FRENCH) return;
+            if (!unit.alive || unit.team !== Game.playerTeam) return;
             // Catch a unit when the box touches its BODY, not only its ground anchor.
             // The model is drawn above its feet, so the old feet-point test forced you
             // to drag over the ground under each man. Project the body centre AND the
@@ -769,6 +769,13 @@ Game.handleInputEvents = () => {
         Game.mouse.screenY = e.clientY;
 
         if (e.button === 0) {
+            // Left-click always disarms a pending command mode (grenade/smoke/
+            // rotate/fighter/etc.) — a forgotten armed mode silently swallowed
+            // every right-click, which read as "orders do nothing".
+            if (Game._commandMode) {
+                Game.pushMessage('Order mode cancelled.', 1.0);
+                Game._commandMode = null;
+            }
             Game.mouse.down = true;
             Game.mouse.dragStartX = Game.mouse.dragCurrentX = e.clientX;
             Game.mouse.dragStartY = Game.mouse.dragCurrentY = e.clientY;
@@ -878,7 +885,7 @@ Game.handleInputEvents = () => {
                         // Pick by the actual mesh first (parallax-proof), then fall back
                         // to a world-radius search around the ground hit.
                         const picked = Game.unitAtScreen(e.clientX, e.clientY);
-                        const enemyUnit = (picked && picked.team !== Game.TEAM.FRENCH)
+                        const enemyUnit = (picked && picked.team !== Game.playerTeam)
                             ? picked
                             : Game.enemyAtWorld(ground.x, ground.z);
                         // Building under the cursor (click the house itself, not the
@@ -894,9 +901,11 @@ Game.handleInputEvents = () => {
                         } else if (onBuilding && !onBuilding.collapsed) {
                             // Right-click a building: selected infantry move in and
                             // garrison it; otherwise armed vehicles/AT shell it.
+                            // NEVER silent — if neither applies, say why.
                             const inf = Game.selectedPlayerUnits().filter(u => u.alive && !Game.isTank(u.kind) && !u._garrisoned);
                             if (inf.length) Game.orderEnterBuilding(onBuilding);
                             else if (haveArmed) Game.orderAttackGround(onBuilding.cx, onBuilding.cz);
+                            else Game.pushMessage('Select infantry to enter the building (or armed units to shell it).', 2.0);
                         } else if (Game.orderStance === 'attack') {
                             Game.orderAttackMove(ground.x, ground.z);
                         } else {

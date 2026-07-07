@@ -1750,8 +1750,8 @@
       <div class="menu-section">
         <div class="menu-section-title" data-i18n="m_side">Choose Side</div>
         <div class="side-row">
-          <div class="side-btn selected" data-side="french">🇫🇷 <span data-i18n="side_fr">French</span></div>
-          <div class="side-btn disabled" data-side="german" title="Not yet playable">🇩🇪 <span data-i18n="side_de">German</span> <span class="side-soon" data-i18n="soon">soon</span></div>
+          <div class="side-btn" data-side="french">🇫🇷 <span data-i18n="side_fr">French</span></div>
+          <div class="side-btn" data-side="german">🇩🇪 <span data-i18n="side_de">German</span></div>
         </div>
       </div>
 
@@ -1778,13 +1778,23 @@
         card.classList.add('selected');
       });
     });
-    document.querySelectorAll('.side-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (btn.classList.contains('disabled')) return; // German not playable yet
-        document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
+    // Choose Side: both sides playable. The choice persists, and switching
+    // respawns the scenario IN PLACE (Game.setPlayerSide) — no reload, the
+    // menu stays exactly where it is.
+    (function () {
+      var cur = 'french';
+      try { cur = localStorage.getItem('uf_side') === 'german' ? 'german' : 'french'; } catch (e) { }
+      document.querySelectorAll('.side-btn').forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.side === cur);
+        btn.addEventListener('click', () => {
+          if (btn.dataset.side === cur) return;
+          cur = btn.dataset.side;
+          document.querySelectorAll('.side-btn').forEach(b => b.classList.toggle('selected', b === btn));
+          if (window.Game && Game.setPlayerSide) Game.setPlayerSide(cur);
+          else { try { localStorage.setItem('uf_side', cur); } catch (e) { } }
+        });
       });
-    });
+    })();
 
     // ── Repo links — update UNDER_REPO once the GitHub repo is live ──
     const UNDER_REPO = 'https://github.com/tksa/underfire';

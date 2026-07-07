@@ -72,21 +72,32 @@ Game.findCoverPosition = (unit, threatX, threatZ) => {
  * opts.standoff: preferred fraction of weapon range (default 0.72).
  */
 Game.findFiringPosition = (unit, target, opts = {}) => {
-    const range = unit.range || 30;
+    // The stand-off ring is bounded by what the unit can actually SEE (firing
+    // is sight-gated), and — crucially — by its CURRENT distance to the
+    // target: taking a firing position means closing or flanking, never
+    // backing away (tank guns have gameRange in the hundreds, and 72% of that
+    // once sent an ordered tank driving to the map edge "to reposition").
+    const sight = unit.sight || 20;
+    const effRange = Math.min(unit.range || 30, sight * 0.95);
+    const dCur = Game.dist(unit.x, unit.z, target.x, target.z);
     const standoff = Game.clamp(opts.standoff ?? 0.72, 0.3, 0.95);
+    const ringBase = Math.min(effRange * standoff, Math.max(dCur * 0.95, 10));
     const bearing = Game.angleTo(target.x, target.z, unit.x, unit.z);   // target -> shooter side
     let best = null, bestScore = -Infinity;
-    for (const rf of [standoff, standoff - 0.15, standoff + 0.12]) {
-        const r = Game.clamp(rf, 0.25, 0.92) * range;
+    for (const rf of [1.0, 0.8, 1.15]) {
+        const r = Math.min(ringBase * rf, Math.max(dCur * 0.95, 10));
         for (let k = -4; k <= 4; k++) {
             const a = bearing + k * 0.26;                    // fan ±60° on our own side
-            const cx = Game.clamp(target.x + Math.cos(a) * r, 1, Game.WORLD_W - 1);
-            const cz = Game.clamp(target.z + Math.sin(a) * r, 1, Game.WORLD_H - 1);
+            const cx = target.x + Math.cos(a) * r;
+            const cz = target.z + Math.sin(a) * r;
+            // A spot the map can't contain is no firing position (clamping
+            // these to the border was how tanks ended up parked on the edge).
+            if (cx < 3 || cx > Game.WORLD_W - 3 || cz < 3 || cz > Game.WORLD_H - 3) continue;
             const tile = Game.getTileAtWorld(cx, cz);
             if (!tile || tile.blocked || tile.vehicleBlocked) continue;
             if (Game.lineOfSight({ x: cx, z: cz }, target) === false) continue;  // must see to shoot
             let score = 40;
-            score -= Math.abs(rf - standoff) * 30;           // hold the stand-off band
+            score -= Math.abs(rf - 1.0) * 20;                // hold the stand-off band
             score -= Game.dist(unit.x, unit.z, cx, cz) * 1.2; // shortest reposition wins
             score -= Math.abs(k) * 2.2;                      // don't cross the target's front
             score += (tile.cover || 0) * 25;                 // field edges/hedges: hull-down-ish
@@ -427,7 +438,7 @@ Game.updateSquadAI = (dt) => {
     // Group living German units by their squad tag (solo units = own squad)
     const groups = {};
     Game.units.forEach(u => {
-        if (!u.alive || u.team !== Game.TEAM.GERMAN) return;
+        if (!u.alive || u.team === Game.playerTeam) return;   // squad AI drives the NON-player side
         const g = u.group || ('solo_' + u.id);
         (groups[g] = groups[g] || []).push(u);
     });
@@ -549,7 +560,7 @@ Game.updateChainOfCommand = (dt) => {
             u._actingOfficer = true;
             u.veterancy = Math.min(1, (u.veterancy || 0) + 0.1); // a field commission steadies him
             need--;
-            if (team === Game.TEAM.FRENCH) Game.pushMessage(`${u.label} takes command.`, 2.2);
+            if (team === Game.playerTeam) Game.pushMessage(`${u.label} takes command.`, 2.2);
         }
     }
 };

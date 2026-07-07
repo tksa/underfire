@@ -1185,7 +1185,7 @@ Game.updateUnit = (unit, dt) => {
     M.scan(unit, ctx);
     if (M.bombard(unit, ctx)) return;
     M.engage(unit, ctx);
-    if (unit.team === Game.TEAM.GERMAN) Game.updateAI(unit, dt, ctx.enemy);
+    if (unit.team !== Game.playerTeam) Game.updateAI(unit, dt, ctx.enemy);
     else if (M.takeCover) M.takeCover(unit, ctx);
     M.fire(unit, ctx);
     // Idle/ambient posture (rest, at-ease, ready). Runs just before move so a

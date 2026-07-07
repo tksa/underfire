@@ -57,7 +57,7 @@ Game.crushUnit = (tank, victim) => {
     Game.craters.push({ x: victim.x, z: victim.z, r: Game.rand(0.25, 0.45) });
     Game.cameraShake = Math.max(Game.cameraShake || 0, 2);
     if (Game.Audio) Game.Audio.explosion(victim.x, victim.z);
-    const who = victim.team === Game.TEAM.FRENCH ? 'friendly' : 'enemy';
+    const who = victim.team === Game.playerTeam ? 'friendly' : 'enemy';
     Game.pushMessage(`${tank.label} ran over ${who} ${victim.label}.`, 1.6);
 };
 
@@ -1118,7 +1118,7 @@ Game.updateAirStrikes = (dt) => {
                         x: approachX, z: approachZ,
                         tx: strike.x + Game.rand(-5, 5), tz: strike.z + Game.rand(-5, 5),
                         life: 0.5, total: 0.5,
-                        team: Game.TEAM.FRENCH, big: true, mesh: null,
+                        team: Game.playerTeam, big: true, mesh: null,
                     });
                 }
                 Game.pushMessage('Air strike impact!', 2.0);
@@ -1775,7 +1775,7 @@ Game.layMine = (unit) => {
     unit._mines--;
     const mine = { x: unit.x, z: unit.z, team: unit.team, armed: true, mesh: null };
     // The laying side can see its own minefield (faint disc); enemy mines stay hidden.
-    if (mine.team === Game.TEAM.FRENCH && Game.scene && Game.THREE && Game.effectsGroup) {
+    if (mine.team === Game.playerTeam && Game.scene && Game.THREE && Game.effectsGroup) {
         const THREE = Game.THREE;
         const m = new THREE.Mesh(
             new THREE.CircleGeometry(0.5, 14),
@@ -2097,7 +2097,7 @@ Game.updateFogOfWar = (dt) => {
     }
     // Reveal around friendly units
     Game.units.forEach(u => {
-        if (!u.alive || u.team !== Game.TEAM.FRENCH) return;
+        if (!u.alive || u.team !== Game.playerTeam) return;
         const baseSight = u._binocularTimer > 0 ? u.sight * 2 : u.sight;
         // LOS refresh delay: moving units have reduced sight (SS mechanic)
         const isOfficer = Game.UNIT_STATS[u.statKey]?.supportType === 'officer';
@@ -2118,13 +2118,15 @@ Game.updateFogOfWar = (dt) => {
         }
     });
     // Friendly aircraft on station: a MASSIVE recon bubble rides the plane —
-    // the whole reason to call the sortie even with nothing to strafe.
+    // the whole reason to call the sortie even with nothing to strafe. The
+    // PATROL RING itself stays lit for the entire sortie too (second stamp):
+    // the pilot keeps eyes on his target area while swinging wide between
+    // passes, so the enemy he's lining up on never blinks back into fog.
     if (Game.fighters) {
-        for (const f of Game.fighters) {
-            if (f.state === 'crash') continue;
-            const r = Math.ceil((Game.FIGHTER.reveal || 36) * Game.FOG_RES);
-            const cx = Math.floor(f.x * Game.FOG_RES);
-            const cz = Math.floor(f.z * Game.FOG_RES);
+        const stamp = (wx, wz, radius) => {
+            const r = Math.ceil(radius * Game.FOG_RES);
+            const cx = Math.floor(wx * Game.FOG_RES);
+            const cz = Math.floor(wz * Game.FOG_RES);
             for (let dz = -r; dz <= r; dz++) {
                 for (let dx = -r; dx <= r; dx++) {
                     if (dx * dx + dz * dz > r * r) continue;
@@ -2134,6 +2136,11 @@ Game.updateFogOfWar = (dt) => {
                     }
                 }
             }
+        };
+        for (const f of Game.fighters) {
+            if (f.state === 'crash') continue;
+            stamp(f.x, f.z, Game.FIGHTER.reveal || 36);
+            if (f.state === 'onstation') stamp(f.cx, f.cz, (Game.FIGHTER.radius || 15) * 1.5);
         }
     }
     }
@@ -4403,7 +4410,7 @@ Game.boot = async () => {
     Game.initFogOfWar();
 
     // Set initial camera centered on largest concentration of player troops
-    const playerUnits = Game.units.filter(u => u.team === Game.TEAM.FRENCH && u.alive);
+    const playerUnits = Game.units.filter(u => u.team === Game.playerTeam && u.alive);
     if (playerUnits.length > 0) {
         // Find densest cluster: weight each unit by how many allies are nearby
         let bestX = 0, bestZ = 0, bestWeight = 0;
@@ -4491,7 +4498,7 @@ Game.startFromMenu = () => {
     if (Game.Audio) Game.Audio.init();
 
     // Center camera on largest troop concentration
-    const playerUnits = Game.units.filter(u => u.team === Game.TEAM.FRENCH && u.alive);
+    const playerUnits = Game.units.filter(u => u.team === Game.playerTeam && u.alive);
     if (playerUnits.length > 0) {
         let bestX = 0, bestZ = 0, bestWeight = 0;
         const clusterRadius = 15;

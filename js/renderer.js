@@ -84,7 +84,7 @@ Game.syncUnitMeshes = (dt) => {
         Game._updateModelAnimation(unit, dt);
 
         // Hide living enemies in fog of war
-        if (unit.team !== Game.TEAM.FRENCH && Game.isFogVisible && !Game.isFogVisible(unit.x, unit.z)) {
+        if (unit.team !== Game.playerTeam && Game.isFogVisible && !Game.isFogVisible(unit.x, unit.z)) {
             unit.mesh.visible = false;
             return;
         }
@@ -441,7 +441,7 @@ Game.updateTracks3D = (dt) => {
 
         // Enemy tracks must not leak movement through the fog — only show them
         // where the player currently has vision. Friendly tracks always show.
-        const enemyTrack = tr.team && tr.team !== Game.TEAM.FRENCH;
+        const enemyTrack = tr.team && tr.team !== Game.playerTeam;
         tr.mesh.visible = !enemyTrack || !Game.isFogVisible || Game.isFogVisible(tr.x, tr.z);
     }
 };
@@ -1569,7 +1569,7 @@ Game.updateMinimap = () => {
     // Units (hide enemies in fog)
     Game.units.filter(u => u.alive).forEach(u => {
         // Don't show enemies in fog
-        if (u.team !== Game.TEAM.FRENCH && Game.isFogVisible && !Game.isFogVisible(u.x, u.z)) return;
+        if (u.team !== Game.playerTeam && Game.isFogVisible && !Game.isFogVisible(u.x, u.z)) return;
         ctx.fillStyle = u.team === Game.TEAM.FRENCH ? '#9cc9ff' : '#d7dc9c';
         const px = (u.x / Game.WORLD_W) * w;
         const py = (u.z / Game.WORLD_H) * h;
@@ -1645,16 +1645,19 @@ Game.updateHUD = () => {
 
     // Mission panel
     if (Game.hud.missionPanel) {
-        const enemyAlive = Game.getTeamUnits(Game.TEAM.GERMAN).length;
-        const frenchAlive = Game.getTeamUnits(Game.TEAM.FRENCH).length;
-        let status = 'Use cover. German MG fire will pin exposed infantry.';
+        const enemyAlive = Game.getTeamUnits(Game.enemyTeam()).length;
+        const ownAlive = Game.getTeamUnits(Game.playerTeam).length;
+        const asFrench = Game.playerTeam === Game.TEAM.FRENCH;
+        let status = asFrench
+            ? 'Use cover. German MG fire will pin exposed infantry.'
+            : 'Use cover. French armor is thick — flank it or bring the PaK up.';
         if (Game.missionState.won) status = '<span class="win">Mission accomplished</span>';
         else if (Game.missionState.lost) status = '<span class="lose">Mission failed</span>';
         Game.hud.missionPanel.innerHTML = `
       <div class="hud-title">Mission</div>
-      <div class="hud-subtitle">Advance to the Dyle line</div>
+      <div class="hud-subtitle">${asFrench ? 'Advance to the Dyle line' : 'Break through at the Dyle'}</div>
       <div class="hud-text">Primary: seize the crossroads east of the village.</div>
-      <div class="hud-text">French: ${frenchAlive} • Enemy: ${enemyAlive} • ${Game.formatTime(Game.missionState.timer)}</div>
+      <div class="hud-text">${asFrench ? 'French' : 'German'}: ${ownAlive} • Enemy: ${enemyAlive} • ${Game.formatTime(Game.missionState.timer)}</div>
       <div class="hud-status">${status}</div>
     `;
     }

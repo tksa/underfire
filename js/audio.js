@@ -28,10 +28,26 @@ Game.Audio = (() => {
         fighter: 'sounds/rwm/fly_small.ogg',
     };
     // Unit voice barks (French = f_/player, German = d_/enemy) + ricochet, pooled by file
+    // Voice barks: every recorded TAKE of each phrase is listed, and voicePick
+    // chooses one at random — one pooled take per phrase made every order sound
+    // identical ("says the same thing"). French f_*, German d_*.
+    const VOICE_TAKES = {
+        f_sold_select: ['f_sold_select', 'f_sold_select.1'],
+        f_sold_move: ['f_sold_move', 'f_sold_move.1'],
+        f_sold_attack: ['f_sold_attack', 'f_sold_attack.1', 'f_sold_attack.2'],
+        f_tank_select: ['f_tank_select', 'f_tank_select.1'],
+        f_tank_move: ['f_tank_move', 'f_tank_move.1'],
+        f_tank_attack: ['f_tank_attack', 'f_tank_attack.1'],
+        f_tank_stop: ['f_tank_stop'],
+        d_select: ['d_select', 'd_select.1', 'd_select.2', 'd_select.3', 'd_select.4'],
+        d_move: ['d_move', 'd_move.1', 'd_move.2', 'd_move.3'],
+        d_attack: ['d_attack', 'd_attack.1', 'd_attack.2', 'd_attack.3'],
+        d_tank_select: ['d_tank_select', 'd_tank_select.1'],
+        d_tank_move: ['d_tank_move', 'd_tank_move.1', 'd_tank_move.2', 'd_tank_move.3', 'd_tank_move.4'],
+        d_tank_attack: ['d_tank_attack', 'd_tank_attack.1'],
+    };
     const EXTRA = [
-        'f_sold_select', 'f_tank_select', 'f_sold_move', 'f_tank_move',
-        'f_sold_attack', 'f_tank_attack', 'f_tank_stop',
-        'd_select', 'd_tank_select', 'd_move', 'd_tank_move', 'd_attack', 'd_tank_attack',
+        ...Object.values(VOICE_TAKES).flat(),
         'ricochet', 'ricochet_ground',
         'fly_heavy', 'fly_small',
     ].map(n => 'sounds/rwm/' + n + '.ogg');
@@ -73,11 +89,15 @@ Game.Audio = (() => {
         ready = true;
     };
 
-    // Start the looping beds (needs a user gesture; the Start-Mission click qualifies)
+    // Start the looping beds (needs a user gesture; the Start-Mission click
+    // qualifies). The FIGHTER loop is deliberately NOT started here — it only
+    // plays while a sortie is airborne (fighterDrone.start/stop), so no plane
+    // hum can ever leak in at mission start.
     const startLoops = () => {
         if (loopsStarted || !enabled) return;
         loopsStarted = true;
         for (const key in loops) {
+            if (key === 'fighter') continue;
             const p = loops[key].play();
             if (p && p.catch) p.catch(() => { loopsStarted = false; });
         }
@@ -172,18 +192,25 @@ Game.Audio = (() => {
             fdrState.active = true;
             fdrState.crash = false;
             fdrState.x = fdrState.z = null;
-            // loops normally start on the mission-start gesture; make sure
-            if (loops.fighter && loopsStarted) {
-                const p = loops.fighter.play();
-                if (p && p.catch) p.catch(() => { });
+            if (loops.fighter) {
+                // Fade in from TRUE silence at the start of the engine take.
+                loopVol.fighter = 0;
+                try {
+                    loops.fighter.volume = 0;
+                    loops.fighter.currentTime = 0;
+                    loops.fighter.playbackRate = 1;
+                    const p = loops.fighter.play();
+                    if (p && p.catch) p.catch(() => { });
+                } catch (e) { }
             }
         },
         setPos(x, z) { fdrState.x = x; fdrState.z = z; },
         setCrash(v) { fdrState.crash = !!v; },
         stop() {
+            // Fade handled by updateAmbient; once it reaches silence the
+            // element is PAUSED outright so nothing lingers.
             fdrState.active = false;
             fdrState.crash = false;
-            try { if (loops.fighter) loops.fighter.playbackRate = 1; } catch (e) { }
         },
     };
 
@@ -220,6 +247,17 @@ Game.Audio = (() => {
             loopVol[key] = loopVol[key] + (target[key] - loopVol[key]) * k;
             try { loops[key].volume = Game.clamp(loopVol[key], 0, 1); } catch (e) { }
         }
+        // Fighter loop: the exponential fade never quite reaches zero — once
+        // the sortie is over and the volume is effectively silent, STOP the
+        // element completely (and snap the level to 0 for the next fade-in).
+        if (!fdrState.active && loops.fighter && loopVol.fighter < 0.004) {
+            loopVol.fighter = 0;
+            try {
+                if (!loops.fighter.paused) loops.fighter.pause();
+                loops.fighter.volume = 0;
+                loops.fighter.playbackRate = 1;
+            } catch (e) { }
+        }
     };
 
     // Play a specific pooled file by name (used for voice barks + ricochet)
@@ -240,11 +278,22 @@ Game.Audio = (() => {
         } catch (e) { /* ignore */ }
     };
 
+    // Playing as Germany: the f_* command acknowledgements translate to their
+    // German (d_*) counterparts here, so every call site stays side-agnostic.
+    const VOICE_DE = {
+        f_sold_select: 'd_select', f_sold_move: 'd_move', f_sold_attack: 'd_attack',
+        f_tank_select: 'd_tank_select', f_tank_move: 'd_tank_move',
+        f_tank_attack: 'd_tank_attack', f_tank_stop: 'd_tank_move',
+    };
+
     // Unit voice acknowledgement (command feedback; throttled so it never spams)
     const voice = (file) => {
         const t = Game.gameClock || 0;
         if (t - lastVoice < 0.4) return;
         lastVoice = t;
+        if (Game.playerTeam === 'german' && VOICE_DE[file]) file = VOICE_DE[file];
+        const takes = VOICE_TAKES[file];
+        if (takes && takes.length) file = takes[Math.floor(Math.random() * takes.length)];
         playFile(file, 0.8, 0, 0, false);
     };
 
