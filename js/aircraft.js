@@ -25,7 +25,9 @@
 Game.FIGHTER = {
     alt: 34,            // patrol altitude (world units above smoothed terrain)
     radius: 15,         // patrol circle radius = the green targeting ring
-    duration: 42,       // seconds on station before flying home
+    duration: 42,       // no-targets loiter before flying home (seconds)
+    minRuns: 5,         // attack runs to deliver before egress (targets present)
+    maxOnStation: 90,   // hard cap on time over the ring
     burstMin: 0.8,      // seconds between strafing bursts
     burstMax: 1.5,
     hitChance: 0.45,
@@ -47,20 +49,35 @@ Game.FIGHTER = {
 Game.FIGHTER_TYPES = {
     d520: {
         label: 'Dewoitine D.520', model: 'models/dewoitine_d520.glb',
-        count: 2, speed: 26, rounds: 8, dmgSoft: 7, dmgHard: 0.8,
-        yaw: Math.PI / 2,
+        count: 2, baseCount: 2, speed: 26, rounds: 8, dmgSoft: 13, dmgHard: 0.8,
+        yaw: Math.PI / 2, propZ: 2.82,   // measured: nose tip 4.1 native × 7/10.19 scale
     },
     mb152: {
         label: 'Bloch MB.152', model: 'models/bloch_mb152.glb',
-        count: 2, speed: 21, rounds: 5, dmgSoft: 13, dmgHard: 2.4,
-        yaw: Math.PI / 2,
+        count: 2, baseCount: 2, speed: 21, rounds: 5, dmgSoft: 20, dmgHard: 2.4,
+        yaw: Math.PI / 2, propZ: 2.78,   // measured: prop plane 0.76 native × 7/1.91 scale
     },
 };
+// Strafing target priority: infantry first (a fighter MOWS men down), then
+// light/soft vehicles, armor last (rifle-calibre guns barely scratch it).
+Game._strafePriority = (u) => {
+    if (u.class === 'infantry' || u.class === 'support') return 0;
+    const arm = (typeof u.armor === 'number') ? u.armor : ((u.armor && u.armor.front) || 0);
+    return arm <= 12 ? 1 : 2;
+};
+
 Game.fighterTotalAvailable = () => {
     let n = 0;
     for (const k in Game.FIGHTER_TYPES) n += Game.FIGHTER_TYPES[k].count;
     return n;
 };
+
+// Playing as Germany: no Luftwaffe airframes in the hangar yet — the D.520
+// and MB.152 are French, so fighter support is grounded until a Bf 109 lands
+// in models/. (The HUD badge reads 0 and the squadron menu greys out.)
+if (Game.playerTeam === Game.TEAM.GERMAN) {
+    for (const k in Game.FIGHTER_TYPES) Game.FIGHTER_TYPES[k].count = 0;
+}
 Game.fighters = [];
 Game._fighterType = 'd520';       // type armed for the next sortie
 
@@ -94,6 +111,64 @@ Game._procFighterModel = () => {
     return wrap;
 };
 
+// ── Propeller-blur overlay ───────────────────────────────────────────────────
+// Neither GLB has a cleanly animatable prop (the MB.152 is one fused mesh), so
+// the sense of a spinning prop comes from an OVERLAY: a translucent blur disc
+// with radial streaks at the nose, rotating fast. Reads exactly like the
+// photographed prop-disc shimmer and works uniformly for any airframe.
+Game._propBlurTex = () => {
+    if (Game._propTexCache) return Game._propTexCache;
+    const S = 128, c = document.createElement('canvas');
+    c.width = c.height = S;
+    const ctx = c.getContext('2d');
+    const cx = S / 2;
+    // faint dark disc body
+    let g = ctx.createRadialGradient(cx, cx, 0, cx, cx, cx);
+    g.addColorStop(0, 'rgba(30,30,30,0.30)');
+    g.addColorStop(0.75, 'rgba(40,40,40,0.16)');
+    g.addColorStop(1, 'rgba(40,40,40,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cx, cx, 0, Math.PI * 2); ctx.fill();
+    // three lighter streak sectors (the "blades" smeared into arcs)
+    ctx.translate(cx, cx);
+    for (let b = 0; b < 3; b++) {
+        ctx.rotate(Math.PI * 2 / 3);
+        const sg = ctx.createRadialGradient(0, 0, S * 0.08, 0, 0, cx);
+        sg.addColorStop(0, 'rgba(220,220,210,0.28)');
+        sg.addColorStop(1, 'rgba(220,220,210,0)');
+        ctx.fillStyle = sg;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, cx * 0.98, -0.16, 0.16);
+        ctx.closePath();
+        ctx.fill();
+    }
+    Game._propTexCache = new Game.THREE.CanvasTexture(c);
+    return Game._propTexCache;
+};
+
+Game._attachPropBlur = (f) => {
+    if (!Game.THREE || !f.mesh) return;
+    const THREE = Game.THREE;
+    const scale = Game.FIGHTER.scale || 7;
+    const geo = new THREE.CircleGeometry(scale * 0.16, 24);
+    const mat = new THREE.MeshBasicMaterial({
+        map: Game._propBlurTex(),
+        transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    });
+    const disc = new THREE.Mesh(geo, mat);
+    // Outer-mesh space: nose = +Z after the inner yaw correction; a
+    // CircleGeometry already faces +Z, so it only needs pushing forward to
+    // the PROP PLANE. Offsets are measured from each GLB's geometry (nose tip
+    // × normalization scale ≈ 2.8-2.9 world units, NOT the 3.3 the first cut
+    // used — that floated the disc ahead of the spinner).
+    const def = (f.def || Game.FIGHTER_TYPES[f.type]) || {};
+    disc.position.set(0, 0, def.propZ != null ? def.propZ : scale * 0.405);
+    disc.raycast = () => { };
+    f.mesh.add(disc);
+    f.propMesh = disc;
+};
+
 Game._attachFighterMesh = (f) => {
     const THREE = Game.THREE;
     if (!THREE || !Game.scene) return;
@@ -105,6 +180,7 @@ Game._attachFighterMesh = (f) => {
         m.traverse(o => { o.raycast = () => { }; });   // never blocks unit picking
         f.mesh = m;
         Game.scene.add(m);
+        Game._attachPropBlur(f);                        // spinning-prop overlay
     };
     if (Game._fighterProtos[type]) { attach(Game._fighterProtos[type]); return; }
     // Procedural silhouette immediately; swap in the GLB when it arrives.
@@ -212,56 +288,76 @@ Game.damageFighter = (f, dmg) => {
 // ── Strafing pass ────────────────────────────────────────────────────────────
 Game._fighterStrafe = (f) => {
     const F = Game.FIGHTER;
-    // Targets: living enemies inside the patrol circle AND in the plane's
-    // forward cone — the guns are in the nose/wings, so fire only goes where
-    // the aircraft is pointed. Off-axis enemies wait for the orbit to bring
-    // the nose around (this is what makes the strafing read as real passes).
-    const cands = [];
-    for (const u of Game.units) {
-        if (!u.alive || u.team === Game.TEAM.FRENCH || u._garrisoned) continue;
-        if (Game.distSq(u.x, u.z, f.cx, f.cz) > (F.radius * 1.2) * (F.radius * 1.2)) continue;
-        const bearing = Game.angleTo(f.x, f.z, u.x, u.z);
-        if (Math.abs(Game.angleDiff(f.angle, bearing)) > 0.55) continue;   // not under the nose
-        cands.push(u);
-    }
-    if (!cands.length) return;      // nothing ahead this pass — next orbit leg
-    cands.sort((a, b) => (Game.isTank(a.kind) ? 1 : 0) - (Game.isTank(b.kind) ? 1 : 0));
-    const target = cands[Math.floor(Game.rand(0, Math.min(4, cands.length)))] || cands[0];
-    const hard = Game.isTank(target.kind);
+    // THE GUN FIRES WHERE THE NOSE POINTS — nothing else. A burst happens only
+    // inside the FIRING WINDOW of the current attack run:
+    //   - facing: the run target must sit within ±0.35 rad of the nose;
+    //   - depression floor: a fighter cannot shoot straight down — no fire
+    //     inside ~0.85× its own height above ground;
+    //   - range ceiling: beyond ~2.6× height the guns just plough dirt.
+    // Between "target enters the sight" and "target vanishes under the nose"
+    // there are typically one or two bursts — then the plane must come around.
+    const tgt = f.runTargetId != null ? Game.getUnitById(f.runTargetId) : null;
+    if (!tgt || !tgt.alive) return;
+    const d = Game.dist(f.x, f.z, tgt.x, tgt.z);
+    const dMin = f.alt * 0.85;
+    const dMax = Math.max(f.alt * 2.6, 60);
+    if (d < dMin || d > dMax) return;
+    const aimErr = Game.angleDiff(f.angle, Game.angleTo(f.x, f.z, tgt.x, tgt.z));
+    if (Math.abs(aimErr) > 0.15) return;            // guns don't traverse: SIGHT ON, or no shot
     const def = f.def || Game.FIGHTER_TYPES[f.type] || Game.FIGHTER_TYPES.d520;
-    // Rounds leave the NOSE, not the aircraft's centre.
-    const nx = f.x + Math.cos(f.angle) * 3.4;
+    const nx = f.x + Math.cos(f.angle) * 3.4;       // rounds leave the NOSE
     const nz = f.z + Math.sin(f.angle) * 3.4;
     const y0 = (f.gy != null ? f.gy : 0) + f.alt - 0.6;
-    f.diveT = 1.2;                  // nose down through the pass, then pull up slow
+    f.firedThisRun = true;
     for (let r = 0; r < def.rounds; r++) {
-        const sx = target.x + Game.rand(-1.6, 1.6);
-        const sz = target.z + Game.rand(-1.6, 1.6);
+        // WALKING FIRE: the burst stitches a ROW of impacts along the facing
+        // line, striding through the target's range — the classic strafe
+        // pepper line, not a random cloud.
+        const stride = 0.90 + (r / Math.max(1, def.rounds - 1)) * 0.22;
+        const rd = d * stride + Game.rand(-0.5, 0.5);
+        const ix = f.x + Math.cos(f.angle) * rd + Game.rand(-0.7, 0.7);
+        const iz = f.z + Math.sin(f.angle) * rd + Game.rand(-0.7, 0.7);
         Game.tracers.push({
-            x: nx, z: nz, tx: sx, tz: sz,
-            y0, y1: 0.5,
+            x: nx, z: nz, tx: ix, tz: iz,
+            y0, y1: 0.4,
             life: 0.22, total: 0.22,
-            team: Game.TEAM.FRENCH, big: false, mesh: null,
+            team: Game.playerTeam, big: false, mesh: null,
         });
-        const hit = Math.random() < F.hitChance;
-        if (!hit) continue;
-        if (hard) {
-            target.hp -= def.dmgHard;
-            if (Game.Audio && Math.random() < 0.3) Game.Audio.ricochet(target.x, target.z);
-        } else {
-            target.hp -= def.dmgSoft * Game.rand(0.7, 1.2);
+        // Every round chips the ground: a small dust kick at the impact —
+        // together they draw the row of gunfire across the terrain.
+        Game.smoke.push({
+            x: ix, z: iz, r: 0.3 + Math.random() * 0.22,
+            life: 0.55, total: 0.55,
+            vx: Game.rand(-0.4, 0.4), vz: Game.rand(-0.4, 0.4),
+            rise: 1.1, maxOpacity: 0.5, dust: true, mesh: null,
+        });
+        // BEATEN ZONE: a round hurts whoever actually stands at its impact —
+        // aimed man or his neighbours; a burst walks through a whole file.
+        let victim = null, vd = 1.5 * 1.5;
+        for (const u of Game.units) {
+            if (!u.alive || u.team === Game.playerTeam || u._garrisoned) continue;
+            const dd = Game.distSq(ix, iz, u.x, u.z);
+            if (dd < vd) { vd = dd; victim = u; }
         }
-        target.underFire = 0.9;
-        target._lastThreat = { x: f.cx, z: f.cz };
-        target._threatTime = Game.gameClock;
-        target.suppressionValue = Game.clamp((target.suppressionValue || 0) + 6, 0, 100);
-        if (target.hp <= 0 && target.alive) {
-            target.alive = false; target.hp = 0;
-            if (Game.selection.has(target.id)) Game.selection.delete(target.id);
-            Game.pushMessage('Strafing run: enemy ' + target.label + ' destroyed.', 1.6);
+        if (!victim) continue;
+        const prox = 1 - Math.sqrt(vd) / 1.5;         // dead-on hits hurt most
+        if (Game.isTank(victim.kind)) {
+            victim.hp -= def.dmgHard * prox;
+            if (Game.Audio && Math.random() < 0.3) Game.Audio.ricochet(victim.x, victim.z);
+        } else {
+            victim.hp -= def.dmgSoft * (0.5 + prox) * Game.rand(0.8, 1.2);
+        }
+        victim.underFire = 0.9;
+        victim._lastThreat = { x: f.x, z: f.z };
+        victim._threatTime = Game.gameClock;
+        victim.suppressionValue = Game.clamp((victim.suppressionValue || 0) + 10, 0, 100);
+        if (victim.hp <= 0 && victim.alive) {
+            victim.alive = false; victim.hp = 0;
+            if (Game.selection.has(victim.id)) Game.selection.delete(victim.id);
+            Game.pushMessage('Strafing run: enemy ' + victim.label + ' cut down.', 1.6);
         }
     }
-    if (Game.alertAllies) Game.alertAllies(target, f.cx, f.cz);
+    if (Game.alertAllies) Game.alertAllies(tgt, f.x, f.z);
     if (Game.Audio) Game.Audio.mg(f.x, f.z);
 };
 
@@ -269,12 +365,19 @@ Game._fighterStrafe = (f) => {
 Game.updateFighters = (dt) => {
     Game._updateFighterPreview();
     const F = Game.FIGHTER;
+    let rumble = 0;   // engine rumble felt by the camera from planes overhead
 
     for (let i = Game.fighters.length - 1; i >= 0; i--) {
         const f = Game.fighters[i];
         f.t += dt;
         const def = f.def || Game.FIGHTER_TYPES[f.type] || Game.FIGHTER_TYPES.d520;
         let speed = def.speed;
+        // Firing dive: bleed off horizontal speed with the nose-down pitch —
+        // buys the guns more time in the window, and from the top-down camera
+        // it reads exactly right: the plane seems to hang as it trades
+        // forward motion for the descent. Driven off f.pitch (now a REAL
+        // aiming angle up to ~50°), floored so steep dives never stall it.
+        if (f.state !== 'crash') speed *= Game.clamp(1 - (f.pitch || 0) * 0.75, 0.55, 1);
 
         if (f.state === 'inbound') {
             const want = Game.angleTo(f.x, f.z, f.cx, f.cz);
@@ -297,22 +400,113 @@ Game.updateFighters = (dt) => {
             const needNewPass = f.passX == null
                 || Game.dist(f.x, f.z, f.passX, f.passZ) < 6;
             if (needNewPass) {
-                const cross = Game.angleTo(f.x, f.z, f.cx, f.cz) + Game.rand(-0.55, 0.55);
-                const out = F.radius * Game.rand(1.6, 2.4);
-                const lat = Game.rand(-0.6, 0.6) * F.radius;
+                // Aim the next pass THROUGH a victim when one stands in the
+                // ring — a real strafing run lines up out of the TURNAROUND,
+                // not scrambling mid-approach. No targets: fly a random chord.
+                let aim = null, ad = Infinity;
+                for (const u of Game.units) {
+                    if (!u.alive || u.team === Game.playerTeam || u._garrisoned) continue;
+                    if (Game.distSq(u.x, u.z, f.cx, f.cz) > (F.radius * 1.2) * (F.radius * 1.2)) continue;
+                    // soft targets first: priority dominates, distance breaks ties
+                    const score = Game._strafePriority(u) * 1e9 + Game.distSq(f.x, f.z, u.x, u.z);
+                    if (score < ad) { ad = score; aim = u; }
+                }
+                if (aim) f.lastAimT = f.onT;
+                const baseX = aim ? aim.x : f.cx, baseZ = aim ? aim.z : f.cz;
+                const cross = Game.angleTo(f.x, f.z, baseX, baseZ)
+                    + (aim ? Game.rand(-0.12, 0.12) : Game.rand(-0.55, 0.55));
+                // The green ring bounds the TARGETS, never the flying: runs
+                // reach far outside it so every turn-in has full runway.
+                const out = F.radius * Game.rand(2.6, 3.6);
+                const lat = aim ? 0 : Game.rand(-0.6, 0.6) * F.radius;
                 const px = -Math.sin(cross), pz = Math.cos(cross);
-                f.passX = Game.clamp(f.cx + Math.cos(cross) * out + px * lat, 2, Game.WORLD_W - 2);
-                f.passZ = Game.clamp(f.cz + Math.sin(cross) * out + pz * lat, 2, Game.WORLD_H - 2);
+                f.passX = Game.clamp(baseX + Math.cos(cross) * out + px * lat, 2, Game.WORLD_W - 2);
+                f.passZ = Game.clamp(baseZ + Math.sin(cross) * out + pz * lat, 2, Game.WORLD_H - 2);
+                f.steerRate = Game.rand(1.2, 1.9);   // every turn is its own turn
             }
-            f.angle = Game.rotateTo(f.angle, Game.angleTo(f.x, f.z, f.passX, f.passZ), 1.5 * dt);
+            // ATTACK RUN: while a live target sits ahead in the ring, the run
+            // bends to FACE it — a moving target pulls the nose around with it
+            // (the guns only ever shoot along the nose, so tracking IS aiming).
+            // Once the target slips beneath the depression floor or too far
+            // off the nose, it's overflown: release it and fly the pass out.
+            let runTgt = f.runTargetId != null ? Game.getUnitById(f.runTargetId) : null;
+            if (!runTgt || !runTgt.alive
+                || Game.distSq(runTgt.x, runTgt.z, f.cx, f.cz) > (F.radius * 1.2) * (F.radius * 1.2)) {
+                runTgt = null; f.runTargetId = null;
+            }
+            // Post-pass commitment: after overflying, DON'T look for the next
+            // victim immediately — fly the pass out first. Re-acquiring while
+            // still on top of the target left no runway to line the guns up,
+            // so the plane carved tight circles without ever firing.
+            f.noAcqT = Math.max(0, (f.noAcqT || 0) - dt);
+            if (!runTgt && f.noAcqT <= 0) {
+                let bd = Infinity;
+                for (const u of Game.units) {
+                    if (!u.alive || u.team === Game.playerTeam || u._garrisoned) continue;
+                    if (Game.distSq(u.x, u.z, f.cx, f.cz) > (F.radius * 1.2) * (F.radius * 1.2)) continue;
+                    const dU = Game.dist(f.x, f.z, u.x, u.z);
+                    const err = Math.abs(Game.angleDiff(f.angle, Game.angleTo(f.x, f.z, u.x, u.z)));
+                    // RUNWAY gate: only start a run with room to align AND a
+                    // stretch of firing window before the depression floor.
+                    // Matched to the pass reach (~2.2-3.2 radii out).
+                    if (err > 1.0 || dU < f.alt * 1.2) continue;
+                    // infantry first, then soft vehicles; armor only if alone
+                    const score = Game._strafePriority(u) * 1e9 + dU;
+                    if (score < bd) { bd = score; runTgt = u; }
+                }
+                if (runTgt) f.runTargetId = runTgt.id;
+            }
+            let steerX = f.passX, steerZ = f.passZ, attacking = false;
+            if (runTgt) {
+                const dT = Game.dist(f.x, f.z, runTgt.x, runTgt.z);
+                const err = Math.abs(Game.angleDiff(f.angle, Game.angleTo(f.x, f.z, runTgt.x, runTgt.z)));
+                if (dT < f.alt * 0.75 || err > 1.5) {
+                    f.runTargetId = null;            // overflown — come around again
+                    f.pullT = 1.1;                   // ...PULL UP smartly...
+                    f.noAcqT = 1.4;                  // ...and fly OUT before rearming
+                    if (f.firedThisRun) {            // that was one delivered attack run
+                        f.runsDone = (f.runsDone || 0) + 1;
+                        f.firedThisRun = false;
+                    }
+                } else {
+                    steerX = runTgt.x; steerZ = runTgt.z;
+                    attacking = true;
+                }
+            }
+            // Attack runs steer HARD (committed pursuit curve) — cruise legs lazy.
+            const steer = (f.steerRate || 1.5) * (attacking ? 1.7 : 1);
+            f.angle = Game.rotateTo(f.angle, Game.angleTo(f.x, f.z, steerX, steerZ), steer * dt);
+            // Gunnery is EVENT-driven, not a slow dice-roll cadence: the moment
+            // the sight settles inside the firing window, shoot (short spacing
+            // between bursts) — the old random 0.8-1.5s timer kept missing the
+            // brief aligned window entirely, so the guns never spoke.
             f.burstT -= dt;
-            if (f.burstT <= 0) {
-                f.burstT = Game.rand(F.burstMin, F.burstMax);
-                Game._fighterStrafe(f);
+            if (attacking) {
+                const dT = Game.dist(f.x, f.z, runTgt.x, runTgt.z);
+                const err = Math.abs(Game.angleDiff(f.angle, Game.angleTo(f.x, f.z, runTgt.x, runTgt.z)));
+                const inWindow = dT >= f.alt * 0.85 && dT <= Math.max(f.alt * 2.6, 60);
+                if (inWindow) f.diveT = Math.max(f.diveT || 0, 0.3);   // nose down through the window
+                // FIRE DISCIPLINE: facing the target in BOTH planes — heading
+                // within the cone AND the nose pitched onto the target's
+                // depression angle (the prop centreline literally on the unit)
+                // — with wings level. Turn → roll out → nose drops onto the
+                // target → THEN guns.
+                const needPitch = Math.atan2(f.alt, Math.max(3, dT));
+                if (inWindow && err <= 0.15 && f.burstT <= 0
+                    && Math.abs(f.bank) < 0.14
+                    && Math.abs((f.pitch || 0) - needPitch) < 0.12) {
+                    f.burstT = Game.rand(0.3, 0.5);
+                    Game._fighterStrafe(f);
+                }
             }
-            if (f.onT > F.duration) {
+            // Egress: after delivering the promised attack runs — or loitering
+            // dry (no targets seen for a while) — or the hard time cap.
+            const dry = (f.onT - (f.lastAimT || 0)) > F.duration;
+            if ((f.runsDone || 0) >= (F.minRuns || 5) || dry || f.onT > (F.maxOnStation || 90)) {
                 f.state = 'egress';
-                Game.pushMessage('Fighter out of ammunition — returning to base.', 2.2);
+                Game.pushMessage((f.runsDone || 0) >= (F.minRuns || 5)
+                    ? 'Fighter out of ammunition — returning to base.'
+                    : 'Fighter returning to base.', 2.2);
             }
         } else if (f.state === 'egress') {
             f.alt += 4 * dt;   // climb out
@@ -353,13 +547,36 @@ Game.updateFighters = (dt) => {
             }
         }
 
+        // ORGANIC FLIGHT — planes are not trains on sky rails. Two blended
+        // slow sine bands (random phases per airframe) wander the heading a
+        // few degrees either way, and every 1.5-4s a small GUST kicks the nose
+        // and decays over ~half a second. The bank is computed from the
+        // MEASURED turn rate below, so wander and gusts visibly rock the
+        // wings without any extra code.
+        if (f.state !== 'crash') {
+            const wanderVel = Math.sin(f.t * 0.7 + f.ph1) * 0.10
+                + Math.sin(f.t * 1.9 + f.ph2) * 0.05;
+            f.angle += wanderVel * dt;
+            f.gustT = (f.gustT == null ? Game.rand(1, 3) : f.gustT) - dt;
+            if (f.gustT <= 0) {
+                f.gustT = Game.rand(1.5, 4);
+                f.gustV = Game.rand(-0.5, 0.5);
+            }
+            if (f.gustV) {
+                f.angle += f.gustV * dt;
+                f.gustV *= Math.max(0, 1 - dt * 2.2);
+                if (Math.abs(f.gustV) < 0.02) f.gustV = 0;
+            }
+        }
+
         // integrate along the heading; bank into the turn
         const prevA = f.prevAngle == null ? f.angle : f.prevAngle;
         const turnRate = Game.angleDiff(prevA, f.angle) / Math.max(dt, 1e-4);
         f.prevAngle = f.angle;
-        // Gentle banking: the old ±0.7 rad cap rolled the belly toward the
-        // camera in the isometric view, which read as the plane "tilting up".
-        const bankTarget = f.state === 'crash' ? -1.1 : Game.clamp(-turnRate * 0.4, -0.42, 0.42);
+        // Gentle banking INTO the turn (sign verified in play: a right-hand
+        // turn drops the right wing). Cap stays modest — a steep bank rolled
+        // the belly toward the camera and read as the plane "tilting up".
+        const bankTarget = f.state === 'crash' ? 1.1 : Game.clamp(turnRate * 0.4, -0.42, 0.42);
         f.bank += (bankTarget - f.bank) * Math.min(1, dt * 2.2);
         f.x += Math.cos(f.angle) * speed * dt;
         f.z += Math.sin(f.angle) * speed * dt;
@@ -396,14 +613,30 @@ Game.updateFighters = (dt) => {
         if (f.state !== 'crash') {
             f.diveT = Math.max(0, (f.diveT || 0) - dt);
             const diving = f.diveT > 0;
-            const pitchTarget = diving ? 0.22 : 0;
-            f.pitch = (f.pitch || 0) + (pitchTarget - (f.pitch || 0)) * Math.min(1, dt * (diving ? 4 : 1.2));
+            // AIM PITCH: on an attack run the nose points AT the unit — the
+            // prop centreline intersects the target (depression angle =
+            // atan(height / distance), 20-50° through the window), not a
+            // token cosmetic dip. No run: level, with a shallow dip while a
+            // recent window is still cooling off.
+            let pitchTarget = diving ? 0.22 : 0;
+            const rt0 = (f.state === 'onstation' && f.runTargetId != null)
+                ? Game.getUnitById(f.runTargetId) : null;
+            if (rt0 && rt0.alive) {
+                const dT0 = Game.dist(f.x, f.z, rt0.x, rt0.z);
+                const hT0 = (f.gy + f.alt) - (Game.getHeight ? Game.getHeight(rt0.x, rt0.z) : 0);
+                pitchTarget = Game.clamp(Math.atan2(Math.max(1, hT0), Math.max(3, dT0)), 0, 0.95);
+            }
+            f.pitch = (f.pitch || 0) + (pitchTarget - (f.pitch || 0))
+                * Math.min(1, dt * (pitchTarget > (f.pitch || 0) ? 4.5 : 1.2));
             const altTarget = (f.state === 'onstation')
-                ? F.alt + Math.sin((f.ph1 || 0) * 1.31) * 1.2 - (diving ? 4 : 0)
+                ? F.alt + Math.sin((f.ph1 || 0) * 1.31) * 1.2 - (diving ? 10 : 0)
                 : null;
             if (altTarget != null) {
-                // descend into the pass quickly, pull up slowly
-                f.alt += (altTarget - f.alt) * Math.min(1, dt * (altTarget < f.alt ? 1.6 : 0.45));
+                // descend into the pass quickly; after the pass (pullT, set on
+                // target release) climb out QUICKLY, otherwise drift up gently
+                f.pullT = Math.max(0, (f.pullT || 0) - dt);
+                const upRate = f.pullT > 0 ? 1.5 : 0.45;
+                f.alt += (altTarget - f.alt) * Math.min(1, dt * (altTarget < f.alt ? 1.6 : upRate));
             }
         }
 
@@ -422,7 +655,11 @@ Game.updateFighters = (dt) => {
             // never be closer than 12u to the terrain directly beneath it. The
             // crash state is the one exception — that plane is going in.
             let y = f.gy + f.alt;
-            if (f.state !== 'crash') y = Math.max(y, gUnder + 12);
+            // altitude micro-turbulence: a light bob on top of the flight path
+            if (f.state !== 'crash') {
+                y += Math.sin(f.t * 1.6 + f.ph2) * 0.35;
+                y = Math.max(y, gUnder + 12);
+            }
             f.mesh.position.set(f.x, y, f.z);
             f.mesh.rotation.order = 'YXZ';
             f.mesh.rotation.y = -f.angle + Math.PI / 2;
@@ -449,8 +686,30 @@ Game.updateFighters = (dt) => {
             f.shadowMesh.position.set(f.x, sy + 0.18, f.z);
             f.shadowMesh.material.opacity = 0.3 * Game.clamp(1 - f.alt / 80, 0.35, 1);
         }
+        // Prop-blur spin: fast rotation + slight opacity shimmer sells the
+        // running engine; a crashing plane's prop windmills down and fades.
+        if (f.propMesh) {
+            const spin = f.state === 'crash' ? 9 : 38;
+            f.propMesh.rotation.z += spin * dt;
+            f.propMesh.material.opacity = (f.state === 'crash' ? 0.55 : 0.9)
+                + Math.sin(f.t * 47) * 0.1;
+        }
+
         if (Game.Audio && Game.Audio.fighterDrone) Game.Audio.fighterDrone.setPos(f.x, f.z);
+
+        // Low flyover rumble: strongest when the plane is close to the view
+        // AND low (strafing dives shake more than high transit). Consumed by
+        // the camera as a continuous micro-vibration — see updateCamera.
+        if (Game.cam) {
+            const camD = Math.hypot(f.x - Game.cam.x, f.z - Game.cam.z);
+            const reach = (Game.cam.zoom || 20) * 2.2;
+            if (camD < reach) {
+                const altF = Game.clamp(1.5 - f.alt / (F.alt || 34), 0.35, 1.2);
+                rumble = Math.max(rumble, (1 - camD / reach) * altF);
+            }
+        }
     }
+    Game.planeRumble = rumble;
 
     // lingering green mark on the called patrol area; while a plane is
     // SELECTED its patrol circle stays marked (and right-click re-tasks it)

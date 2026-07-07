@@ -67,6 +67,17 @@ Game.updateCamera = (dt) => {
         shakeZ = Game.rand(-Game.cameraShake, Game.cameraShake) * 0.1;
         Game.cameraShake = Math.max(0, Game.cameraShake - dt * 24);
     }
+    // Aircraft rumble — a DIFFERENT kind of shake: continuous low sinusoidal
+    // vibration (blended engine harmonics) while a plane passes near overhead,
+    // instead of the sharp random jolts of explosions. Subtle but unmistakably
+    // tied to the flyover; intensity comes from updateFighters (proximity ×
+    // low-altitude factor).
+    if ((Game.planeRumble || 0) > 0.02) {
+        const t = Game.gameClock || 0;
+        const a = 0.018 * Game.planeRumble;   // felt, not seen — a light rumble
+        shakeX += (Math.sin(t * 53) + Math.sin(t * 31) * 0.6) * a;
+        shakeZ += (Math.cos(t * 47) + Math.sin(t * 37) * 0.6) * a;
+    }
 
     // Yaw the viewpoint ~23° to the right (Game.camYawDeg) so the map reads
     // obliquely instead of grid-square to the screen.
