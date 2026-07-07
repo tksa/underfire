@@ -1,8 +1,28 @@
 {
  "version": "v0.10.1",
- "build": "d2eb90f",
- "generated": "2026-07-06",
+ "build": "9eff509",
+ "generated": "2026-07-07",
  "commits": [
+  {
+   "hash": "9eff509",
+   "date": "2026-07-07",
+   "subject": "strafing realism"
+  },
+  {
+   "hash": "8c1d451",
+   "date": "2026-07-07",
+   "subject": "Germany is playable"
+  },
+  {
+   "hash": "40d8edd",
+   "date": "2026-07-07",
+   "subject": "Panzer III Ausf. J model with carved rotating turret"
+  },
+  {
+   "hash": "453c589",
+   "date": "2026-07-06",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "d2eb90f",
    "date": "2026-07-06",
@@ -50,26 +70,6 @@
   },
   {
    "hash": "c9cc999",
-   "date": "2026-07-05",
-   "subject": "refresh changelog"
-  },
-  {
-   "hash": "16cbbbc",
-   "date": "2026-07-05",
-   "subject": "drifting sun-glint sparkle + ripple controls, tuned defaults"
-  },
-  {
-   "hash": "9bba238",
-   "date": "2026-07-05",
-   "subject": "refresh changelog"
-  },
-  {
-   "hash": "e2a1a7e",
-   "date": "2026-07-05",
-   "subject": "destructible walls and fences with debris, dust, and ground scars"
-  },
-  {
-   "hash": "9f0cd26",
    "date": "2026-07-05",
    "subject": "refresh changelog"
   }
