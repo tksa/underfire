@@ -1,8 +1,18 @@
 {
  "version": "v0.10.1",
- "build": "6b42ff4",
+ "build": "3b3805e",
  "generated": "2026-07-07",
  "commits": [
+  {
+   "hash": "3b3805e",
+   "date": "2026-07-07",
+   "subject": "fly onto the target, don't rotate onto it"
+  },
+  {
+   "hash": "17d9efc",
+   "date": "2026-07-07",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "6b42ff4",
    "date": "2026-07-07",
@@ -62,16 +72,6 @@
    "hash": "a404fe1",
    "date": "2026-07-06",
    "subject": "phantom pond on saved maps"
-  },
-  {
-   "hash": "da9002c",
-   "date": "2026-07-06",
-   "subject": "infantry/tank realism overhaul"
-  },
-  {
-   "hash": "997985e",
-   "date": "2026-07-06",
-   "subject": "refresh changelog"
   }
  ]
 }
