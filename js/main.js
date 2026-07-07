@@ -3745,11 +3745,13 @@ if (dbgFlatShade) {
 // Leaves are InstancedMeshes with per-instance colours; adjustments rebuild
 // each instance colour from a saved copy of the originals, so sliders are
 // non-destructive and revert cleanly at 0/1/1. Resets on map regeneration.
+// Hand-tuned defaults (debug panel → Foliage Color, 2026-07): richer late-
+// summer canopy. h shifts hue, s/l multiply the authored per-instance colours.
 Game._foliageTint = {
-    oak: { h: 0, s: 1, l: 1 },
-    pine: { h: 0, s: 1, l: 1 },
-    birch: { h: 0, s: 1, l: 1 },
-    shrub: { h: 0, s: 1, l: 1 },
+    oak: { h: 0.27, s: 0.55, l: 0.65 },
+    pine: { h: 0.50, s: 0.95, l: 1.80 },
+    birch: { h: 0.35, s: 0.75, l: 1.05 },
+    shrub: { h: 0.40, s: 0.95, l: 1.20 },
 };
 Game._foliagePrefix = {
     oak: 'tree-leaves',
@@ -4398,6 +4400,10 @@ Game.boot = async () => {
 
     // Build 3D terrain meshes (uses heightmap)
     Game.buildTerrainMeshes();
+
+    // Apply the default foliage tints to the freshly built canopy (a saved
+    // map's own tints re-apply over these in _applySavedMap below).
+    for (const sp in Game._foliageTint) Game.applyFoliageTint(sp);
 
     // Spawn scenario
     Game.spawnScenario();

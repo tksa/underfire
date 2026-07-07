@@ -1150,6 +1150,34 @@ Game.updateUnit = (unit, dt) => {
     if (unit._garrisoned) {
         unit.path = []; unit.moving = false;
         M.scan(unit, ctx);
+        // CLOSE ASSAULT from the windows: a man upstairs drops his AT grenade
+        // bundle on enemy armor/vehicles that roll up beside the building —
+        // the classic reason tanks should never push into a held town without
+        // infantry. Same 2-bundle pocket as the field tank-hunter; works for
+        // BOTH sides' garrisons; respects hold-fire.
+        if (unit.class === 'infantry' && !unit.holdFire && Game.spawnThrownGrenade) {
+            unit._atGrenades = unit._atGrenades ?? 2;
+            if (unit._atGrenades > 0 && (unit._atNext == null || Game.gameClock >= unit._atNext)) {
+                let veh = null, bd = 8.5 * 8.5;
+                for (const e of Game.units) {
+                    if (!e.alive || e.team === unit.team) continue;
+                    if (!(Game.isTank(e.kind) || e.kind === 'fuel' || e.kind === 'supply')) continue;
+                    const ed = Game.distSq(unit.x, unit.z, e.x, e.z);
+                    if (ed < bd) { bd = ed; veh = e; }
+                }
+                if (veh) {
+                    unit._atGrenades--;
+                    unit._atNext = Game.gameClock + Game.rand(3.0, 5.0);
+                    // short, low arc — it's a DROP from a window, not a field lob
+                    Game.spawnThrownGrenade(unit.x, unit.z,
+                        veh.x + Game.rand(-0.5, 0.5), veh.z + Game.rand(-0.5, 0.5),
+                        { type: 'at', dmg: 45, blastR: 2.2, supp: 18, arc: 0.9, dur: 0.55 });
+                    if (unit.team === Game.playerTeam) {
+                        Game.pushMessage(`${unit.label} drops a grenade bundle from the window!`, 1.6);
+                    }
+                }
+            }
+        }
         M.fire(unit, ctx);
         return;
     }
