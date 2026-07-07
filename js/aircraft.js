@@ -147,6 +147,57 @@ Game._propBlurTex = () => {
     return Game._propTexCache;
 };
 
+// ── Aircraft ground shadow: a BLURRED SILHOUETTE of the actual airframe ─────
+// Splat the model's own vertices in top view (spin-space: nose up-canvas),
+// blur, cache per type. The procedural fallback silhouette is used until the
+// GLB proto arrives; the shadow swaps to the real outline automatically.
+Game._planeShadowTex = (type) => {
+    Game._shadowTexCache = Game._shadowTexCache || {};
+    const proto = Game._fighterProtos[type];
+    const key = type + (proto ? ':glb' : ':proc');
+    if (Game._shadowTexCache[key]) return { tex: Game._shadowTexCache[key], key };
+    const THREE = Game.THREE;
+    const src = proto || Game._procFighterModel();
+    src.updateMatrixWorld(true);
+    const pts = [];
+    src.traverse(o => {
+        if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+        const pos = o.geometry.attributes.position;
+        const v = new THREE.Vector3();
+        const step = Math.max(1, Math.floor(pos.count / 6000));
+        for (let i = 0; i < pos.count; i += step) {
+            v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+            pts.push([v.x, v.z]);
+        }
+    });
+    if (!pts.length) return null;
+    // Rotate into spin space (nose → +Z) with the per-type yaw correction.
+    const def = Game.FIGHTER_TYPES[type] || {};
+    const yaw = (src.userData && src.userData.procFallback) ? 0 : (def.yaw != null ? def.yaw : 0);
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    const rot = pts.map(([x, z]) => [x * cy + z * sy, -x * sy + z * cy]);
+    let m = 0;
+    rot.forEach(p => { m = Math.max(m, Math.abs(p[0]), Math.abs(p[1])); });
+    const S = 128, half = S / 2, k = (half - 8) / (m || 1);
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = S;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    rot.forEach(([x, z]) => {
+        // u right = spin +X, v up-canvas = spin +Z (the nose)
+        ctx.fillRect(half + x * k - 1.5, half - z * k - 1.5, 3, 3);
+    });
+    // blur pass: soft-edged shadow, no hard vertex speckle
+    const out = document.createElement('canvas');
+    out.width = out.height = S;
+    const octx = out.getContext('2d');
+    octx.filter = 'blur(3px)';
+    octx.drawImage(cv, 0, 0);
+    const tex = new THREE.CanvasTexture(out);
+    Game._shadowTexCache[key] = tex;
+    return { tex, key };
+};
+
 Game._attachPropBlur = (f) => {
     if (!Game.THREE || !f.mesh) return;
     const THREE = Game.THREE;
@@ -668,23 +719,39 @@ Game.updateFighters = (dt) => {
             // flight pitch (dive / crash).
             f.mesh.rotation.x = (f.state === 'crash' ? 0.35 : (f.pitch || 0)) + (def.pitchFix || 0);
         }
-        // Ground shadow: the visual anchor that makes altitude READ from the
-        // tilted camera (without it the plane looks glued to the terrain).
+        // Ground shadow: a blurred SILHOUETTE of the airframe (not a blob) —
+        // the visual anchor that makes altitude READ from the tilted camera.
+        // Locked to the flight heading; swaps from the fallback outline to the
+        // real model's outline the moment the GLB proto is available.
         if (!f.shadowMesh && Game.THREE && Game.scene) {
-            const geo = new Game.THREE.CircleGeometry(2.4, 20);
+            const sh = Game._planeShadowTex(f.type || 'd520');
+            const span = (F.scale || 7) * 1.15;
+            const geo = new Game.THREE.PlaneGeometry(span, span);
             const mat = new Game.THREE.MeshBasicMaterial({
-                color: 0x000000, transparent: true, opacity: 0.25, depthWrite: false,
+                map: sh ? sh.tex : null,
+                transparent: true, opacity: 0.4, depthWrite: false,
+                side: Game.THREE.DoubleSide,
             });
             f.shadowMesh = new Game.THREE.Mesh(geo, mat);
-            f.shadowMesh.rotation.x = -Math.PI / 2;
+            f.shadowMesh.rotation.order = 'YXZ';
+            f.shadowMesh.rotation.x = Math.PI / 2;
             f.shadowMesh.renderOrder = 3;
             f.shadowMesh.raycast = () => { };
+            f.shadowMesh.userData.texKey = sh ? sh.key : null;
             Game.scene.add(f.shadowMesh);
         }
         if (f.shadowMesh) {
+            // upgrade to the real outline once the model has loaded
+            const sh = Game._planeShadowTex(f.type || 'd520');
+            if (sh && f.shadowMesh.userData.texKey !== sh.key) {
+                f.shadowMesh.material.map = sh.tex;
+                f.shadowMesh.material.needsUpdate = true;
+                f.shadowMesh.userData.texKey = sh.key;
+            }
             const sy = Game.getHeight ? Game.getHeight(f.x, f.z) : 0;
             f.shadowMesh.position.set(f.x, sy + 0.18, f.z);
-            f.shadowMesh.material.opacity = 0.3 * Game.clamp(1 - f.alt / 80, 0.35, 1);
+            f.shadowMesh.rotation.y = -f.angle + Math.PI / 2;   // follow the heading
+            f.shadowMesh.material.opacity = 0.42 * Game.clamp(1 - f.alt / 80, 0.35, 1);
         }
         // Prop-blur spin: fast rotation + slight opacity shimmer sells the
         // running engine; a crashing plane's prop windmills down and fades.
