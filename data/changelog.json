@@ -1,8 +1,18 @@
 {
  "version": "v0.10.1",
- "build": "2c1f6a7",
- "generated": "2026-07-07",
+ "build": "27689dc",
+ "generated": "2026-07-09",
  "commits": [
+  {
+   "hash": "27689dc",
+   "date": "2026-07-09",
+   "subject": "solid building boundary so hulls stop at the wall"
+  },
+  {
+   "hash": "a2abda6",
+   "date": "2026-07-07",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "2c1f6a7",
    "date": "2026-07-07",
@@ -62,16 +72,6 @@
    "hash": "dab229a",
    "date": "2026-07-06",
    "subject": "Sudden Strike garrison display, building exit orders, and SS2 controls"
-  },
-  {
-   "hash": "8409392",
-   "date": "2026-07-06",
-   "subject": "refresh changelog"
-  },
-  {
-   "hash": "7b1bc45",
-   "date": "2026-07-06",
-   "subject": "tank tactics, solid no-slide movement, and dynamic rerouting"
   }
  ]
 }
