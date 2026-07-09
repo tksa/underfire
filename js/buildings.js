@@ -165,6 +165,41 @@ Game._populateBuildingModel = (rec, srcModel) => {
     // Hide the procedural fallback now that the model row is in.
     rec.procMeshes.forEach(m => { m.visible = false; });
     Game.setBuildingDamage(rec, rec.level);
+
+    // Seal the collision grid to the model's REAL footprint. The blocked tiles
+    // were stamped from the map-gen footprint (b.tw x b.th); a fixed-scale model
+    // row can overhang that slightly, leaving a sliver of passable tile under a
+    // visible wall that a hull could nose into. Re-stamp any passable tile the
+    // built houses actually cover so the collision truth matches what you see.
+    if (Game._sealBuildingFootprint) Game._sealBuildingFootprint(rec);
+};
+
+// Mark every currently-passable tile under a building's placed model as a solid
+// house tile, so movement/pathing can never route through the visible structure.
+// Inset a touch so roof eaves that overhang the walls don't claim a whole extra
+// tile (which could pinch a narrow street to impassable).
+Game._sealBuildingFootprint = (rec) => {
+    if (!rec || !rec.houses || !rec.houses.length) return;
+    const THREE = Game.THREE, T = Game.TILE;
+    if (!THREE || !Game.terrain || !Game.makeTile) return;
+    let box = null;
+    rec.houses.forEach(h => {
+        if (!h.root) return;
+        h.root.updateMatrixWorld(true);
+        const b = new THREE.Box3().setFromObject(h.root);
+        if (!isFinite(b.min.x) || !isFinite(b.max.x)) return;
+        if (box) box.union(b); else box = b;
+    });
+    if (!box) return;
+    const inset = 0.3;   // ignore thin roof-eave overhang
+    const tx0 = Math.floor((box.min.x + inset) / T), tx1 = Math.floor((box.max.x - inset) / T);
+    const ty0 = Math.floor((box.min.z + inset) / T), ty1 = Math.floor((box.max.z - inset) / T);
+    for (let ty = ty0; ty <= ty1; ty++) {
+        for (let tx = tx0; tx <= tx1; tx++) {
+            const t = Game.getTile(tx, ty);
+            if (t && !t.blocked) Game.terrain[ty][tx] = Game.makeTile('house');
+        }
+    }
 };
 
 // The undamaged building texture has grime/AO baked onto the terracotta roof,

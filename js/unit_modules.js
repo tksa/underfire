@@ -976,15 +976,28 @@ Game.uMod.move = (unit, ctx) => {
     unit.x = Game.clamp(unit.x, 0.5, Game.WORLD_W - 0.5);
     unit.z = Game.clamp(unit.z, 0.5, Game.WORLD_H - 0.5);
 
-    const tileNow = Game.getTileAtWorld(unit.x, unit.z);
     // Block movement onto solid terrain (walls/houses/water) and impassable vehicle
     // terrain — EXCEPT dense forest, which tanks crush through (so they don't bounce
-    // off the tree line they were routed into).
-    if (tileNow && (tileNow.blocked
-        || (isVeh && tileNow.vehicleBlocked && tileNow.type !== 'dense_forest'))) {
-        unit.x = prevX;
-        unit.z = prevZ;
-        unit.currentSpeed = 0;
+    // off the tree line they were routed into). The unit's whole BODY footprint is
+    // tested, not just its centre tile: a hull stops with its nose AT the wall face
+    // instead of driving a half-length into the building before the centre notices.
+    // A unit already overlapping a structure may still take a step that doesn't put
+    // MORE of it inside (so it can extract itself rather than freeze).
+    if (Game._bodySolidCount) {
+        const solidNew = Game._bodySolidCount(unit, unit.x, unit.z);
+        if (solidNew > 0 && solidNew > Game._bodySolidCount(unit, prevX, prevZ)) {
+            unit.x = prevX;
+            unit.z = prevZ;
+            unit.currentSpeed = 0;
+        }
+    } else {
+        const tileNow = Game.getTileAtWorld(unit.x, unit.z);
+        if (tileNow && (tileNow.blocked
+            || (isVeh && tileNow.vehicleBlocked && tileNow.type !== 'dense_forest'))) {
+            unit.x = prevX;
+            unit.z = prevZ;
+            unit.currentSpeed = 0;
+        }
     }
 
     // SOLID HULLS (vehicles): a vehicle may never end a frame deeper inside

@@ -24,6 +24,14 @@ Game.tileCost = (unit, tx, ty) => {
         let cost = tile.move;
         if (tile.type === 'forest' || tile.type === 'hedge') cost += 0.8;
         if (tile.type === 'mud') cost += 0.9;
+        // Keep a hull's clearance from building/wall faces: a tile touching a
+        // structure is surcharged (not blocked) so routes prefer to stand off a
+        // tile rather than scrape the hull along a wall — while a vehicle boxed
+        // in beside a building can still path out when there's no other way.
+        for (let k = 0; k < 4; k++) {
+            const nt = Game.getTile(tx + (k === 0 ? 1 : k === 1 ? -1 : 0), ty + (k === 2 ? 1 : k === 3 ? -1 : 0));
+            if (nt && nt.blocked && (nt.type === 'house' || nt.type === 'wall')) { cost += 6; break; }
+        }
         return cost + dyn;
     }
     return tile.move + dyn;

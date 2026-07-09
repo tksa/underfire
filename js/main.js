@@ -130,6 +130,57 @@ Game._vehPenetration = (unit, x, z) => {
 };
 
 /**
+ * How many samples across a unit's BODY footprint at (x, z) land on a solid tile
+ * (wall / house / water — and, for vehicles, any genuinely impassable vehicle
+ * terrain except dense forest, which tanks crush through). 0 = fully clear.
+ *
+ * The move gate used to test only the unit's CENTRE tile, so a hull could drive
+ * up to a half-length into a building before its centre crossed the blocked tile
+ * — the "tank stuck inside the house" clipping. Sampling the whole oriented hull
+ * (foot troops: a small ring) makes a unit stop with its BODY at the wall face.
+ * Callers compare new-vs-previous counts so a unit that already overlaps a
+ * structure (e.g. spawned clipping one) can still back out — it is only refused a
+ * step that puts MORE of itself inside solid than before.
+ */
+Game._bodySolidCount = (unit, x, z) => {
+    if (!Game.getTileAtWorld) return 0;
+    const isVeh = Game.isTank(unit.kind) || unit.kind === 'fuel' || unit.kind === 'supply';
+    const solidAt = (sx, sz) => {
+        const t = Game.getTileAtWorld(sx, sz);
+        if (!t) return true;                                  // off-map reads as solid
+        if (t.blocked) return true;
+        if (isVeh && t.vehicleBlocked && t.type !== 'dense_forest') return true;
+        return false;
+    };
+    let hits = 0;
+    if (isVeh) {
+        const c = Math.cos(unit.angle), s = Math.sin(unit.angle);
+        const hl = unit.size * (Game.TANK_BOX_LEN || 1.5);
+        const hw = unit.size * (Game.TANK_BOX_WID || 1.0);
+        // Sample a grid over the hull spaced <= ~1.2 units so no 3-unit blocked
+        // tile can slip between samples unnoticed.
+        const nl = Math.max(2, Math.ceil((2 * hl) / 1.2));
+        const nw = Math.max(2, Math.ceil((2 * hw) / 1.2));
+        for (let i = 0; i <= nl; i++) {
+            const lx = -hl + (2 * hl) * (i / nl);
+            for (let j = 0; j <= nw; j++) {
+                const lz = -hw + (2 * hw) * (j / nw);
+                if (solidAt(x + lx * c - lz * s, z + lx * s + lz * c)) hits++;
+            }
+        }
+        return hits;
+    }
+    // Foot troops: centre + a ring at the collision radius.
+    if (solidAt(x, z)) hits++;
+    const r = (unit.size || 0.5) * 1.1 + 0.15;
+    for (let a = 0; a < 8; a++) {
+        const ang = a * Math.PI / 4;
+        if (solidAt(x + Math.cos(ang) * r, z + Math.sin(ang) * r)) hits++;
+    }
+    return hits;
+};
+
+/**
  * How much a tank should ease off for units CROSSING its path (1 = full speed,
  * 0 = stop). It yields to anyone moving ACROSS its nose (so it doesn't bulldoze
  * through troops who are meant to pass), then resumes once they clear. It does NOT
