@@ -1,8 +1,18 @@
 {
- "version": "v0.10.1",
- "build": "27689dc",
- "generated": "2026-07-09",
+ "version": "v0.11.0",
+ "build": "8505aaf",
+ "generated": "2026-07-10",
  "commits": [
+  {
+   "hash": "8505aaf",
+   "date": "2026-07-10",
+   "subject": "add Renault troop transport"
+  },
+  {
+   "hash": "f8ad618",
+   "date": "2026-07-09",
+   "subject": "refresh changelog"
+  },
   {
    "hash": "27689dc",
    "date": "2026-07-09",
@@ -62,16 +72,6 @@
    "hash": "453c589",
    "date": "2026-07-06",
    "subject": "refresh changelog"
-  },
-  {
-   "hash": "d2eb90f",
-   "date": "2026-07-06",
-   "subject": "fighter air support"
-  },
-  {
-   "hash": "dab229a",
-   "date": "2026-07-06",
-   "subject": "Sudden Strike garrison display, building exit orders, and SS2 controls"
   }
  ]
 }

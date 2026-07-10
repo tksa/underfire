@@ -1842,17 +1842,19 @@
     // data/changelog.json is generated from the git commit log at deploy time
     // (scripts/gen-changelog.mjs) and fetched here — no build step. Falls back to
     // a short built-in list if it can't be loaded.
-    const UNDER_VERSION = 'v0.10.1';
+    const UNDER_VERSION = 'v0.11.0';
     const vEl = document.getElementById('menuVersion');
     const upEl = document.getElementById('menuUpdates');
     if (vEl) vEl.textContent = UNDER_VERSION;
 
     const FALLBACK_NOTES = [
+      'New Renault AHN troop transport carries up to 10 infantry, with targeted unloading and visible passenger counts.',
+      'Transport trucks can tow one anti-tank gun and now recover from blocked turns by reversing and correcting their approach.',
+      'French medic, mechanic, officer, and sapper now use dedicated fusilier-based skins, including a lighter red-cross medic uniform.',
       'Terrain overhaul: roads now render as smooth corridors that follow diagonals naturally (no more staircased square tiles).',
       'Gravel road texture with tyre tracks that run along the road direction, plus a grass fringe softening the road edges.',
       'Softer "melting point" seams where terrain types meet, more shrub/bush variety, and subtle natural ditches and rises across the map.',
       'New skinned 3D soldier model for infantry, with per-faction skins and smooth crossfaded animations.',
-      'New French vehicles: Somua S35, Hotchkiss H35, Renault R35, Panhard 178, plus AHN3 supply & Laffly fuel trucks.',
     ];
     const renderUpdates = (version, date, notes) => {
       if (!upEl) return;
