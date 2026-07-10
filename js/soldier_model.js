@@ -128,10 +128,29 @@ Game.setSoldierClip = (name, a, b) => {
 // Textures can be small — soldiers render tiny; these are 512.
 Game.SOLDIER_SKINS = {
     fr_rifle: 'textures/fr_skin_infantry_rifle.png',
+    // Separate source maps make each role independently repaintable. They begin
+    // as copies of the fusilier map and get their current look from role tints.
+    fr_medic:    'textures/fr_skin_medic.png',
+    fr_mechanic: 'textures/fr_skin_mechanic.png',
+    fr_sapper:   'textures/fr_skin_sapper.png',
+    fr_officer:  'textures/fr_skin_officer.png',
 };
 Game.SOLDIER_TEAM_ABBR = { french: 'fr', german: 'de' };
-Game.SOLDIER_KIND_ROLE = { fusilier: 'rifle', dragoon: 'rifle', grenadier: 'rifle', smg: 'smg', sturmtrupp: 'smg', fm24: 'mg', mg34: 'mg', sniper: 'sniper' };
+Game.SOLDIER_KIND_ROLE = {
+    fusilier: 'rifle', dragoon: 'rifle', grenadier: 'rifle',
+    smg: 'smg', sturmtrupp: 'smg', fm24: 'mg', mg34: 'mg', sniper: 'sniper',
+    medic: 'medic', mechanic: 'mechanic', sapper: 'sapper', officer: 'officer',
+};
 Game.SOLDIER_SKIN_TINT = { german: 0xffffff, french: 0x93a3b4 };   // fallback tint when no painted skin exists
+// Colour multipliers turn the French fusilier texture into lightweight role
+// variants. Values may exceed 1 to brighten the baked texture (notably the
+// medic); keeping this separate from SOLDIER_SKINS avoids four duplicate maps.
+Game.SOLDIER_ROLE_TINT = {
+    fr_medic:    [1.22, 1.22, 1.18], // pale, easy to pick out as medical staff
+    fr_mechanic: [0.78, 0.91, 1.08], // cooler workshop blue
+    fr_sapper:   [0.92, 0.78, 0.60], // dusty earth tone
+    fr_officer:  [1.08, 0.93, 0.68], // restrained warm command tone
+};
 
 // Body/gun material tuning (live-tunable in the debug panel). brightness adds
 // self-illumination from the base texture to lift the shadows (the source model
@@ -181,13 +200,22 @@ Game.applySoldierSkin = (model, team, kind) => {
     const url = Game.SOLDIER_SKINS[abbr + '_' + role] || Game.SOLDIER_SKINS[abbr + '_rifle'];
     const tex = url ? Game._soldierSkinTex(url) : null;
     const tint = (team in Game.SOLDIER_SKIN_TINT) ? Game.SOLDIER_SKIN_TINT[team] : 0xffffff;
+    const roleTint = Game.SOLDIER_ROLE_TINT[abbr + '_' + role];
     model.traverse(o => {
         if (!o.isMesh || !o.material) return;
         const isGun = /lambert1|mauser|k98|k_98/i.test((o.material.name || '') + ' ' + (o.name || ''));
+        // The medic is a non-combatant: same body, no rifle in his hands.
+        if (isGun && kind === 'medic') o.visible = false;
         const mats = (Array.isArray(o.material) ? o.material : [o.material]).map(m => {
             const c = m.clone();          // own material per unit -> no leak to the shared source
             if (!isGun) {
-                if (tex) { c.map = tex; if (c.color) c.color.setHex(0xffffff); }
+                if (tex) {
+                    c.map = tex;
+                    if (c.color) {
+                        if (roleTint) c.color.setRGB(roleTint[0], roleTint[1], roleTint[2]);
+                        else c.color.setHex(0xffffff);
+                    }
+                }
                 else if (c.color) c.color.setHex(tint);   // no painted skin -> tint the German base
             }
             Game._soldierMatTune(c, isGun);   // metalness/roughness/brightness (fixes the dark look)

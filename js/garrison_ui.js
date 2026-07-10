@@ -8,7 +8,7 @@
  * missing it simply renders nothing.
  */
 
-Game._garrisonUI = { container: null, labels: new Map(), vec: null };
+Game._garrisonUI = { container: null, labels: new Map(), transportLabels: new Map(), vec: null };
 
 Game._ensureGarrisonContainer = () => {
     if (Game._garrisonUI.container) return Game._garrisonUI.container;
@@ -35,7 +35,8 @@ Game.updateGarrisonUI = () => {
 
     // Does the current selection contain infantry that could still enter?
     const selInf = Game.selectedPlayerUnits
-        ? Game.selectedPlayerUnits().filter(u => u.alive && !Game.isTank(u.kind) && !u._garrisoned)
+        ? Game.selectedPlayerUnits().filter(u => u.alive && u.class === 'infantry'
+            && !u._garrisoned && u._inVehicle == null)
         : [];
     const canEnter = selInf.length > 0;
 
@@ -47,12 +48,19 @@ Game.updateGarrisonUI = () => {
         if (hover && hover.collapsed) hover = null;
     }
     Game.hoverBuilding = hover;
+    const hoverUnit = canEnter && Game.mouse && Game.unitAtScreen
+        ? Game.unitAtScreen(Game.mouse.screenX, Game.mouse.screenY) : null;
+    const hoverTransport = hoverUnit && hoverUnit.team === Game.playerTeam
+        && hoverUnit.supportType === 'transport' ? hoverUnit : null;
+    Game.hoverTransport = hoverTransport;
 
     // Cursor affordance: a door+chevron over an enterable building (with room)
     // while infantry are selected — but not while an attack/command mode owns the
     // cursor. This is what signals "click to enter"; empty buildings get no label.
     const inCmd = !!Game._commandMode || Game.orderStance === 'attack';
-    const wantEnter = !!hover && canEnter && !inCmd && Game.buildingHasRoom(hover);
+    const canEnterBuilding = !!hover && Game.buildingHasRoom(hover);
+    const canEnterTransport = !!hoverTransport && Game.transportHasRoom(hoverTransport);
+    const wantEnter = canEnter && !inCmd && (canEnterBuilding || canEnterTransport);
     const vp = document.getElementById('viewport');
     if (vp) vp.classList.toggle('cmd-enter', wantEnter);
 
@@ -60,6 +68,14 @@ Game.updateGarrisonUI = () => {
     if (Game.selectedBuilding && (Game.selectedBuilding.collapsed
         || !Game.selectedBuilding.occupants || !Game.selectedBuilding.occupants.length)) {
         Game.selectedBuilding = null;
+    }
+
+    // Occupancy stacks are opt-in like HP/Ammo/Fuel overlays. Keep the entry
+    // cursor logic above active even while these labels are hidden.
+    if (!Game.overlay || !Game.overlay.units) {
+        for (const el of Game._garrisonUI.labels.values()) el.style.display = 'none';
+        for (const el of Game._garrisonUI.transportLabels.values()) el.style.display = 'none';
+        return;
     }
 
     const seen = new Set();
@@ -115,5 +131,51 @@ Game.updateGarrisonUI = () => {
     // Drop labels for buildings that no longer have occupants.
     for (const [rec, el] of Game._garrisonUI.labels) {
         if (!seen.has(rec)) { el.remove(); Game._garrisonUI.labels.delete(rec); }
+    }
+
+    // Occupied transports use the same always-visible status stack as occupied
+    // buildings: count/capacity plus one health/ammo row per passenger.
+    const seenTransports = new Set();
+    for (const truck of Game.units || []) {
+        if (!truck.alive || truck.supportType !== 'transport'
+            || !truck._passengers || !truck._passengers.length) continue;
+        seenTransports.add(truck);
+        let el = Game._garrisonUI.transportLabels.get(truck);
+        if (!el) {
+            el = document.createElement('div');
+            el.style.cssText = 'position:absolute;transform:translate(-50%,-100%);'
+                + 'font:600 11px system-ui,Segoe UI,sans-serif;color:#eee;white-space:nowrap;'
+                + 'padding:3px 6px;border-radius:5px;background:rgba(20,22,18,0.72);'
+                + 'border:1px solid rgba(255,255,255,0.15);text-shadow:0 1px 2px #000;';
+            c.appendChild(el);
+            Game._garrisonUI.transportLabels.set(truck, el);
+        }
+        const rows = [];
+        let count = 0;
+        for (const id of truck._passengers) {
+            const u = Game.getUnitById ? Game.getUnitById(id) : null;
+            if (!u || !u.alive) continue;
+            count++;
+            const hp = Game.clamp(u.hp / (u.maxHp || 1), 0, 1);
+            const am = u.maxAmmo > 0 ? Game.clamp(u.ammo / u.maxAmmo, 0, 1) : 1;
+            const hpc = hp > 0.66 ? '#5ec95e' : hp > 0.33 ? '#e0c46a' : '#e06a5a';
+            rows.push('<div style="margin:2px 0">'
+                + '<div style="width:32px;height:3px;background:#2a2a2a;border-radius:1px">'
+                + `<div style="width:${Math.round(hp * 100)}%;height:3px;background:${hpc};border-radius:1px"></div></div>`
+                + '<div style="width:32px;height:2px;background:#2a2a2a;margin-top:1px;border-radius:1px">'
+                + `<div style="width:${Math.round(am * 100)}%;height:2px;background:#d8b93c;border-radius:1px"></div></div>`
+                + '</div>');
+        }
+        el.innerHTML = `<div style="font-size:10px;text-align:center;margin-bottom:1px">👥 ${count}/${Game.carrierCapacity(truck)}</div>`
+            + rows.join('');
+        const selected = Game.selection && Game.selection.has(truck.id);
+        el.style.borderColor = selected ? '#ffd24a' : 'rgba(255,255,255,0.15)';
+        el.style.boxShadow = selected ? '0 0 6px rgba(255,210,74,0.55)' : 'none';
+        const p = Game._projWorld(truck.x, (truck.y || 0) + 2.4, truck.z);
+        if (p.vis) { el.style.display = 'block'; el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; }
+        else el.style.display = 'none';
+    }
+    for (const [truck, el] of Game._garrisonUI.transportLabels) {
+        if (!seenTransports.has(truck)) { el.remove(); Game._garrisonUI.transportLabels.delete(truck); }
     }
 };

@@ -49,7 +49,8 @@ Game._buildDynObstacles = (unit) => {
     const T = Game.TILE;
     for (const o of Game.units) {
         if (!o.alive || o.id === unit.id) continue;
-        if (!(Game.isTank(o.kind) || o.kind === 'fuel' || o.kind === 'supply')) continue;
+        if (unit._enterCarrierId === o.id) continue; // the assigned tailgate is a destination, not an obstacle
+        if (!(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
         if ((o.currentSpeed || 0) > 0.15 || (o.path && o.path.length)) continue;   // moving: not baked
         const r = o.size * (Game.TANK_BOX_LEN || 1.5) * 0.9;
         const tx0 = Math.floor((o.x - r) / T), tx1 = Math.floor((o.x + r) / T);

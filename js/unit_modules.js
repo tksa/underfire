@@ -294,7 +294,7 @@ Game.uMod.engage = (unit, ctx) => {
 // dashes a short distance. The enemy AI has its own version of this in ai.js.
 Game.uMod.takeCover = (unit, ctx) => {
     if (ctx.isVeh || unit.class !== 'infantry') return;
-    if (unit.deployable || unit.entrenched || unit._garrisoned || unit._enterRec) return;
+    if (unit.deployable || unit.entrenched || unit._garrisoned || unit._enterRec || unit._enterCarrierId != null) return;
     if (unit.forcedTargetId != null || unit.orderMode === 'retreat' || unit.retreating
         || unit.orderMode === 'hold') return;
     if (unit.path && unit.path.length) return;             // busy moving (order or dash)
@@ -420,7 +420,7 @@ Game.uMod.fire = (unit, ctx) => {
 Game.uMod.move = (unit, ctx) => {
     const dt = ctx.dt;
     const isVeh = ctx.isVeh;
-    const isTruck = unit.kind === 'fuel' || unit.kind === 'supply';   // wheeled, bicycle-model steering
+    const isTruck = Game.isTruck(unit.kind);   // wheeled, bicycle-model steering
     const enemy = ctx.enemy;
     const hasTurret = ctx.hasTurret;
     const aimAngleToEnemy = ctx.aimAngleToEnemy;
@@ -492,7 +492,8 @@ Game.uMod.move = (unit, ctx) => {
 
     // Foot-column pacing: ease off behind the man directly ahead so packed
     // files FLOW instead of accordion-stopping into each other's backs.
-    if (!isVeh && !isTruck && maxSpeed > 0 && unit.path && unit.path.length && Game._infantryFollow) {
+    if (!isVeh && !isTruck && unit._enterCarrierId == null && !unit._unloading
+        && maxSpeed > 0 && unit.path && unit.path.length && Game._infantryFollow) {
         maxSpeed *= Game._infantryFollow(unit);
     }
 
@@ -560,7 +561,7 @@ Game.uMod.move = (unit, ctx) => {
         // near the slot, so a unit still en route keeps trying for its exact circle
         // rather than giving up far away. Progress-based; a lone unit arrives precisely.
         const settleNear = (isVeh || isTruck) ? 4.0 : 3.2;
-        if (unit.path.length === 1 && d < settleNear) {
+        if (unit.path.length === 1 && d < settleNear && !unit._reverseMove && !unit._detour) {
             if (unit._lastGoalD != null && d > unit._lastGoalD - 0.05) {
                 unit._settleT = (unit._settleT || 0) + dt;
                 if (unit._settleT > 0.6) {
@@ -576,7 +577,25 @@ Game.uMod.move = (unit, ctx) => {
         }
 
         while (unit.path.length && d < arrivalDist) {
+            const arrivedWaypoint = unit.path[0];
             unit.path.shift();
+
+            // End of a truck's deliberate back-up recovery. Stop reversing and
+            // rebuild the player's original forward route from the new clearance.
+            if (arrivedWaypoint && arrivedWaypoint._endTruckReverse && unit._truckRecoveryGoal) {
+                const recovery = unit._truckRecoveryGoal;
+                const goal = recovery.goal;
+                unit._truckRecoveryGoal = null;
+                unit._reverseMove = false; unit._reversing = false; unit.currentSpeed = 0;
+                unit._detour = null; unit._drvCmd = null;
+                if (recovery.via) {
+                    const rest = Game.findPath(unit, recovery.via.x, recovery.via.z, goal.x, goal.z);
+                    unit.path = [{ x: recovery.via.x, z: recovery.via.z, _recoveryVia: true }].concat(rest);
+                } else {
+                    unit.path = Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
+                }
+                unit.moving = unit.path.length > 0;
+            }
 
             if (isVeh || isTruck) {
                 while (unit.path.length > 1) {
@@ -860,7 +879,10 @@ Game.uMod.move = (unit, ctx) => {
                 // turn-radius-per-length instead of pivoting tightly on the spot —
                 // that tight pivot under a long body is what read as "drifting".
                 const mScale = (Game.MODEL_SCALE && Game.MODEL_SCALE[unit.team + '_' + unit.kind]) || 1;
-                const WHEELBASE = Math.max(0.8, (unit.size || 0.85) * (Game.TRUCK_WHEELBASE ?? 3.2) * mScale);
+                // Match the axle span to the rendered lorry. The old 3.2 factor
+                // produced a ~5.7u wheelbase on a ~3.4u model, making ordinary
+                // avoidance turns geometrically impossible even after reversing.
+                const WHEELBASE = Math.max(0.8, (unit.size || 0.85) * (Game.TRUCK_WHEELBASE ?? 1.7) * mScale);
                 const steer = Game.clamp(headErr, -MAX_STEER, MAX_STEER);
 
                 // Smooth accel/brake; ease off for sharp turns and on approach, but
@@ -1013,6 +1035,43 @@ Game.uMod.move = (unit, ctx) => {
             unit.z = prevZ;
             unit.currentSpeed = 0;
             unit._crawlT = Math.max(unit._crawlT || 0, 0.5);
+            unit._hullBlockT = (unit._hullBlockT || 0) + dt;
+            if (isTruck && !unit._reverseMove && unit.path.length && unit._hullBlockT > 0.8) {
+                const goal = unit.path[unit.path.length - 1];
+                let via = unit._detour ? { x: unit._detour.x, z: unit._detour.z } : null;
+                if (!via) {
+                    let blocker = null, bd = Infinity;
+                    for (const o of Game.units) {
+                        if (!o.alive || o.id === unit.id || !(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
+                        const od = Game.distSq(unit.x, unit.z, o.x, o.z);
+                        if (od < bd) { bd = od; blocker = o; }
+                    }
+                    if (blocker) {
+                        const hx = Math.cos(unit.angle), hz = Math.sin(unit.angle);
+                        const lateral = (blocker.x - unit.x) * -hz + (blocker.z - unit.z) * hx;
+                        const side = lateral >= 0 ? -1 : 1;
+                        const off = (unit.size + blocker.size) * (Game.TANK_SEP_RADIUS || 1.3) + 2;
+                        const gx = goal.x - blocker.x, gz = goal.z - blocker.z;
+                        const gl = Math.hypot(gx, gz) || 1;
+                        via = {
+                            x: Game.clamp(blocker.x + (-hz * side) * off + gx / gl * 2, 1, Game.WORLD_W - 1),
+                            z: Game.clamp(blocker.z + (hx * side) * off + gz / gl * 2, 1, Game.WORLD_H - 1),
+                        };
+                    }
+                }
+                unit._truckRecoveryGoal = { goal: { x: goal.x, z: goal.z }, via };
+                unit._detour = null; unit._drvCmd = null;
+                unit._reverseMove = true; unit._reversing = true;
+                unit.path = [{
+                    x: Game.clamp(unit.x - Math.cos(unit.angle) * 3, 1, Game.WORLD_W - 1),
+                    z: Game.clamp(unit.z - Math.sin(unit.angle) * 3, 1, Game.WORLD_H - 1),
+                    _endTruckReverse: true,
+                }];
+                unit.moving = true;
+                unit._hullBlockT = 0;
+            }
+        } else {
+            unit._hullBlockT = 0;
         }
     }
 
@@ -1044,12 +1103,37 @@ Game.uMod.move = (unit, ctx) => {
                 unit._stuckT = 0;
                 unit._stuckReplans = (unit._stuckReplans || 0) + 1;
                 if (unit._stuckReplans > 2) {
-                    // Tried a couple of fresh routes and still wedged (usually crowded out
-                    // at a packed objective, where it's already standing): settle here
-                    // quickly. (Re-routing it back to the objective centre was tried and
-                    // backfired — it just piled the unit back into the crowd and doubled
-                    // the stuck time.)
-                    unit.path = []; unit.moving = false; unit._stuckReplans = 0;
+                    if (isTruck) {
+                        // A lorry cannot pivot at contact. Back up along its own
+                        // axis to create steering room, then the arrival block above
+                        // restores the original goal for a fresh forward approach.
+                        const goal = unit.path[unit.path.length - 1];
+                        const via = unit._detour ? { x: unit._detour.x, z: unit._detour.z } : null;
+                        unit._truckRecoveryGoal = { goal: { x: goal.x, z: goal.z }, via };
+                        unit._detour = null; unit._drvCmd = null;
+                        unit._reverseMove = true; unit._reversing = true;
+                        unit.currentSpeed = 0;
+                        unit.path = [{
+                            x: Game.clamp(unit.x - Math.cos(unit.angle) * 2.5, 1, Game.WORLD_W - 1),
+                            z: Game.clamp(unit.z - Math.sin(unit.angle) * 2.5, 1, Game.WORLD_H - 1),
+                            _endTruckReverse: true,
+                        }];
+                        unit.moving = true;
+                        unit._stuckReplans = 0;
+                    } else if (isVeh) {
+                        // A vehicle stopped against a hull has not "arrived". Keep
+                        // the player's destination, discard the stale local maneuver,
+                        // and rebuild the route so it gets another wider approach.
+                        const goal = unit.path[unit.path.length - 1];
+                        unit._detour = null; unit._drvCmd = null;
+                        unit.path = Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
+                        unit.moving = unit.path.length > 0;
+                        unit._crawlT = Math.max(unit._crawlT || 0, 0.5);
+                        unit._stuckReplans = 0;
+                    } else {
+                        // Packed infantry at an objective settle instead of churning.
+                        unit.path = []; unit.moving = false; unit._stuckReplans = 0;
+                    }
                 } else {
                     const goal = unit.path[unit.path.length - 1];
                     unit._detour = null;
@@ -1120,11 +1204,13 @@ Game.uMod.move = (unit, ctx) => {
     // man can never glide without his legs moving — and never runs on the spot.
     unit._dispSpeed = dt > 0 ? Math.hypot(unit.x - prevX, unit.z - prevZ) / dt : 0;
 
-    if (isVeh && Game.getVehicleHeight) {
+    if ((isVeh || isTruck) && Game.getVehicleHeight) {
         unit.y = Game.getVehicleHeight(unit.x, unit.z, unit.size, unit.angle);
     } else {
         unit.y = Game.getHeight(unit.x, unit.z);
     }
+
+    if (unit._unloading && (!unit.path || !unit.path.length)) unit._unloading = false;
 
     // Retreat ends on arrival: drop the flag; a player retreat settles into hold.
     if (unit.retreating && (!unit.path || !unit.path.length)) {
@@ -1174,7 +1260,7 @@ Game.updateUnit = (unit, dt) => {
                 let veh = null, bd = 8.5 * 8.5;
                 for (const e of Game.units) {
                     if (!e.alive || e.team === unit.team) continue;
-                    if (!(Game.isTank(e.kind) || e.kind === 'fuel' || e.kind === 'supply')) continue;
+                    if (!(Game.isTank(e.kind) || Game.isTruck(e.kind))) continue;
                     const ed = Game.distSq(unit.x, unit.z, e.x, e.z);
                     if (ed < bd) { bd = ed; veh = e; }
                 }

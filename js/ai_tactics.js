@@ -67,7 +67,7 @@ Game.AI.ambientCfg = {
  */
 Game.uMod.ambient = (unit, ctx) => {
     if (!unit.alive || unit.class !== 'infantry') return;
-    if (unit._garrisoned || unit._enterRec || unit._inVehicle != null || unit._towed) return;
+    if (unit._garrisoned || unit._enterRec || unit._enterCarrierId != null || unit._inVehicle != null || unit._towed) return;
 
     const cfg = Game.AI.ambientCfg;
     const now = Game.gameClock || 0;

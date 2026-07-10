@@ -26,7 +26,7 @@ Game.computeFormationTargets = (chosen, wx, wz) => {
     let spacing = 2.5;
     for (const u of chosen) {
         if (Game.isTank(u.kind)) spacing = Math.max(spacing, (u.size || 1) * (Game.TANK_BOX_LEN || 1.5) * 2 * 0.85 + 0.8);
-        else if (u.kind === 'fuel' || u.kind === 'supply') spacing = Math.max(spacing, (u.size || 1) * 2.4);
+        else if (Game.isTruck(u.kind)) spacing = Math.max(spacing, (u.size || 1) * 2.4);
     }
     spacing = Math.min(spacing, 5.0);
 
@@ -36,7 +36,7 @@ Game.computeFormationTargets = (chosen, wx, wz) => {
         z: Game.clamp(wz + o.x * sinA + o.z * cosA, 1, Game.WORLD_H - 1),
     }));
 
-    const isVeh = u => Game.isTank(u.kind) || u.kind === 'fuel' || u.kind === 'supply';
+    const isVeh = u => Game.isTank(u.kind) || Game.isTruck(u.kind);
     const vehicles = chosen.filter(isVeh);
     const others = chosen.filter(u => !isVeh(u));
     const taken = new Array(n).fill(false);
@@ -89,12 +89,12 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
     // orders. Halt them, then drop them so the rest of the group advances without them.
     if (mode === 'attack') {
         for (const u of chosen) {
-            if (u.kind === 'fuel' || u.kind === 'supply') {
+            if (Game.isTruck(u.kind)) {
                 u.path = []; u.moving = false; u.orderMode = 'hold';
                 u._reverseMove = false; u._groupMoveActive = false;
             }
         }
-        chosen = chosen.filter(u => u.kind !== 'fuel' && u.kind !== 'supply');
+        chosen = chosen.filter(u => !Game.isTruck(u.kind));
         if (!chosen.length) return;
     }
     // Waypoint queuing (Ctrl/Cmd + move): append a leg to the existing route
@@ -117,7 +117,7 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
     // don't, so compare like-for-like here and let the move module cap to this.
     const effSpeed = (u) => {
         let s = u.speed || 0;
-        if (!Game.isTank(u.kind) && u.kind !== 'fuel' && u.kind !== 'supply') {
+        if (!Game.isTank(u.kind) && !Game.isTruck(u.kind)) {
             const stanceF = ({ prone: 0.28, crouch: 0.55, stand: 1.0, run: 1.5 })[u.stance] ?? 1.0;
             s *= 0.6 * stanceF;
         }
@@ -139,6 +139,7 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
         unit._bombarding = false;
         unit._faceAngle = null; unit._faceUntil = 0;
         unit._enterRec = null;
+        unit._enterCarrierId = null;
         if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(unit); // ends guard/at-ease
         // Group pace cap: armor/trucks wait for the slowest member (cleared on arrival).
         if (groupMove && !isQueued) { unit._groupSpeed = groupSpeed; unit._groupMoveActive = true; }
@@ -186,7 +187,7 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
         // it in rather than swinging the whole hull around. Tanks + trucks only.
         unit._reverseMove = false;
         if (mode === 'move' && !isQueued
-            && (Game.isTank(unit.kind) || unit.kind === 'fuel' || unit.kind === 'supply')) {
+            && (Game.isTank(unit.kind) || Game.isTruck(unit.kind))) {
             const gAng = Math.atan2(tz - unit.z, tx - unit.x);
             const gd = Math.hypot(tx - unit.x, tz - unit.z);
             // In contact with an enemy roughly ahead of the hull, prefer backing
@@ -281,6 +282,7 @@ Game.orderRetreat = (x, z) => {
         u.forcedTargetId = null;
         u.bombardX = null; u.bombardZ = null; u._bombarding = false;
         u._enterRec = null;
+        u._enterCarrierId = null;
         u._assaultGoal = null;
         if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
         u.orderMode = 'retreat';
@@ -314,6 +316,7 @@ Game.orderAttackGround = (x, z) => {
         if (!w || w.fireType === 'none' || (w.gameRange || 0) <= 0) return; // unarmed
         any = true;
         u._enterRec = null;
+        u._enterCarrierId = null;
         if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
         u.bombardX = x; u.bombardZ = z;
         u.forcedTargetId = null;
@@ -378,6 +381,7 @@ Game.orderAttackTarget = (target) => {
         if (!w || w.fireType === 'none' || (w.gameRange || 0) <= 0) return; // unarmed
         any = true;
         u._enterRec = null;
+        u._enterCarrierId = null;
         if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
         if (w.fireType === 'indirect') {
             u.bombardX = target.x; u.bombardZ = target.z;
@@ -501,7 +505,7 @@ Game._showFormationPreview = (wx, wz) => {
     targets.forEach(t => {
         const px = t.x, pz = t.z;
         const py = Game.getHeight ? Game.getHeight(px, pz) : 0;
-        const veh = Game.isTank(t.unit.kind) || t.unit.kind === 'fuel' || t.unit.kind === 'supply';
+        const veh = Game.isTank(t.unit.kind) || Game.isTruck(t.unit.kind);
         const r = veh ? (t.unit.size || 1) * 0.7 : 0.4;
         const geo = new THREE.RingGeometry(r - 0.15, r, 16);
         const mat = new THREE.MeshBasicMaterial({
@@ -637,9 +641,14 @@ Game.handleMouseSelection = () => {
         // Enter-building: if infantry are selected and the click lands on a
         // building (and not on a friendly unit you meant to select instead),
         // send the selected infantry in rather than changing the selection.
-        const enterInf = Game.selectedPlayerUnits().filter(u => u.alive && !Game.isTank(u.kind) && !u._garrisoned);
+        const enterInf = Game.selectedPlayerUnits().filter(u => u.alive && u.class === 'infantry'
+            && !u._garrisoned && u._inVehicle == null);
         if (enterInf.length) {
             const picked0 = Game.unitAtScreen && Game.unitAtScreen(mouse.dragCurrentX, mouse.dragCurrentY);
+            if (picked0 && picked0.team === Game.playerTeam && picked0.supportType === 'transport') {
+                Game.orderEnterCarrier(picked0);
+                return;
+            }
             const onFriendly = picked0 && picked0.team === Game.playerTeam;
             if (!onFriendly) {
                 const gp = Game.screenToGround(mouse.dragCurrentX, mouse.dragCurrentY);
@@ -657,7 +666,7 @@ Game.handleMouseSelection = () => {
         const groundPt = Game.screenToGround(mouse.dragCurrentX, mouse.dragCurrentY);
         if (groundPt) {
             for (const unit of Game.units) {
-                if (!unit.alive || unit.team !== Game.playerTeam) continue;
+                if (!unit.alive || unit.team !== Game.playerTeam || unit._inVehicle != null) continue;
                 const d = Game.distSq(groundPt.x, groundPt.z, unit.x, unit.z);
                 // Tighter pick so clicking BETWEEN clustered soldiers deselects
                 // (was ~1.7u, which re-grabbed a neighbour in dense formations).
@@ -677,7 +686,7 @@ Game.handleMouseSelection = () => {
         if (!picked) {
             let bestScreenDist = 169; // 13px squared
             for (const unit of Game.units) {
-                if (!unit.alive || unit.team !== Game.playerTeam) continue;
+                if (!unit.alive || unit.team !== Game.playerTeam || unit._inVehicle != null) continue;
                 const sp = Game.worldToScreen(unit.x, unit.z);
                 const sdx = sp.x - mouse.dragCurrentX;
                 const sdy = sp.y - mouse.dragCurrentY;
@@ -696,7 +705,7 @@ Game.handleMouseSelection = () => {
             if (Game._lastPickedKind === picked.kind && now - Game._lastPickedTime < 300) {
                 // Double-click: select all visible units of same kind
                 Game.units.forEach(u => {
-                    if (u.alive && u.team === Game.playerTeam && u.kind === picked.kind) {
+                    if (u.alive && u.team === Game.playerTeam && u.kind === picked.kind && u._inVehicle == null) {
                         Game.selection.add(u.id);
                     }
                 });
@@ -731,7 +740,7 @@ Game.handleMouseSelection = () => {
 
         if (!Game.keys['ShiftLeft'] && !Game.keys['ShiftRight']) Game.selection.clear();
         Game.units.forEach(unit => {
-            if (!unit.alive || unit.team !== Game.playerTeam) return;
+            if (!unit.alive || unit.team !== Game.playerTeam || unit._inVehicle != null) return;
             // Catch a unit when the box touches its BODY, not only its ground anchor.
             // The model is drawn above its feet, so the old feet-point test forced you
             // to drag over the ground under each man. Project the body centre AND the
@@ -861,6 +870,11 @@ Game.handleInputEvents = () => {
                     if (thrower) Game.throwSmoke(thrower, ground.x, ground.z);
                     else Game.pushMessage('Select infantry to throw smoke.', 1.5);
                     Game._commandMode = null;
+                } else if (Game._commandMode === 'unload') {
+                    const carrier = Game.getUnitById(Game._unloadCarrierId);
+                    if (carrier && carrier.alive) Game.unloadCarrier(carrier, ground.x, ground.z);
+                    Game._unloadCarrierId = null;
+                    Game._commandMode = null;
                 } else if (Game._commandMode === 'rotate') {
                     Game.orderFace(ground.x, ground.z);
                     Game._commandMode = null;
@@ -888,6 +902,8 @@ Game.handleInputEvents = () => {
                         const enemyUnit = (picked && picked.team !== Game.playerTeam)
                             ? picked
                             : Game.enemyAtWorld(ground.x, ground.z);
+                        const onTransport = picked && picked.team === Game.playerTeam
+                            && picked.supportType === 'transport' ? picked : null;
                         // Building under the cursor (click the house itself, not the
                         // ground behind it) or at the ground hit.
                         const onBuilding = (Game.buildingAtScreen && Game.buildingAtScreen(e.clientX, e.clientY))
@@ -898,6 +914,8 @@ Game.handleInputEvents = () => {
                         });
                         if (enemyUnit) {
                             Game.orderAttackTarget(enemyUnit);
+                        } else if (onTransport && Game.selectedPlayerUnits().some(u => u.class === 'infantry')) {
+                            Game.orderEnterCarrier(onTransport);
                         } else if (onBuilding && !onBuilding.collapsed) {
                             // Right-click a building: selected infantry move in and
                             // garrison it; otherwise armed vehicles/AT shell it.
@@ -1261,17 +1279,12 @@ Game.handleInputEvents = () => {
             const tower = Game.selectedPlayerUnits().find(u => Game.canTow(u));
             if (!tower) { Game.pushMessage('Select a vehicle or truck to tow with.', 1.5); }
             else {
-                const towing = Game.units.find(u => u._towed && u._towedBy === tower.id);
+                const towing = Game.towedBy(tower);
                 if (towing) { Game.untowUnit(towing); }
                 else {
-                    let best = null, bd = 8 * 8;
-                    Game.units.forEach(u => {
-                        if (!u.alive || u.team !== tower.team || !u.deployable || u._towed) return;
-                        const d = Game.distSq(tower.x, tower.z, u.x, u.z);
-                        if (d < bd) { bd = d; best = u; }
-                    });
+                    const best = Game.nearTowTarget(tower);
                     if (best) Game.towUnit(tower, best);
-                    else Game.pushMessage('No gun within reach to tow.', 1.5);
+                    else Game.pushMessage('Back the vehicle up to an anti-tank gun first.', 1.5);
                 }
             }
         }

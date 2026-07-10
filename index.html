@@ -753,6 +753,10 @@
       width: 100%;
       margin-top: 5px;
     }
+    /* Sudden Strike-style contextual orders occupy the first visible slots;
+       otherwise transport actions appended after the combat commands overflow
+       below this fixed two-row grid. */
+    #cmdTow, #cmdCarrier, #cmdUnload { order: -1; }
     /* Move / Attack-move stance switch — the default right-click order mode */
     .stance-switch {
       display: flex;
@@ -1570,6 +1574,7 @@
           <span class="ov-chip" data-ov="hp">HP</span>
           <span class="ov-chip" data-ov="ammo">Ammo</span>
           <span class="ov-chip" data-ov="fuel">Fuel</span>
+          <span class="ov-chip" data-ov="units">Units</span>
         </div>
       </div>
       <div class="hud-section" id="missionPanel" style="display:none"></div>
@@ -1598,6 +1603,12 @@
               class="cmd-label">Crawl</span></div>
           <div class="cmd-btn" id="cmdAttackGround" title="Attack ground — fire on a spot (F)"><span class="cmd-icon"><img class="ui-ico" src="icons/artillery-shell.svg" alt=""></span><span
               class="cmd-label">Ground</span></div>
+          <div class="cmd-btn" id="cmdTow" title="Join or unjoin a nearby anti-tank gun" style="display:none"><span class="cmd-icon">⛓</span><span
+              class="cmd-label">Join</span></div>
+          <div class="cmd-btn" id="cmdCarrier" title="Load or unload infantry" style="display:none"><span class="cmd-icon">⇥</span><span
+              class="cmd-label">Load</span></div>
+          <div class="cmd-btn" id="cmdUnload" title="Unload infantry" style="display:none"><span class="cmd-badge" id="unloadBadge">0</span><span class="cmd-icon">⇤</span><span
+              class="cmd-label">Unload</span></div>
         </div>
       </div>
       <div class="hud-section fm-section">
@@ -1817,7 +1828,7 @@
       if (window.Game) Game._paused = true;
     });
 
-    // ── Unit overlay toggles (HP / Ammo / Fuel above units) ──
+    // ── Unit overlay toggles (HP / Ammo / Fuel / occupants above units) ──
     document.querySelectorAll('.ov-chip').forEach(chip => {
       const key = chip.getAttribute('data-ov');
       const sync = () => chip.classList.toggle('active', !!(window.Game && Game.overlay && Game.overlay[key]));

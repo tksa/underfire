@@ -295,8 +295,18 @@ Game.UNIT_STATS = {
         weapon: 'none',
         speed: 5.0, hp: 80, size: 0.85,
         armor: { front: 2, side: 1, rear: 1 },
+        driveType: 'wheeled',
         sight: 16, rotationSpeed: 2,
         color: '#8b8d6b', cost: 2,
+    },
+    french_transport_truck: {
+        label: 'Renault AHN Transport Truck', kind: 'transport', class: 'support', supportType: 'transport',
+        weapon: 'none',
+        speed: 5.0, hp: 80, size: 0.85,
+        armor: { front: 2, side: 1, rear: 1 },
+        driveType: 'wheeled',
+        sight: 16, rotationSpeed: 2,
+        color: '#7f8568', cost: 2,
     },
     french_fuel_truck: {
         label: 'Laffly S20 Fuel Truck', kind: 'fuel', class: 'support', supportType: 'fuel',
@@ -372,6 +382,8 @@ Game.isTank = (kind) => {
     // Check all possible vehicle kinds
     return ['s35', 'h35', 'r35', 'b1', 'panhard', 'panzer1', 'panzer2', 'panzer3', 'panzer4', 'sdkfz'].includes(kind);
 };
+
+Game.isTruck = (kind) => ['fuel', 'supply', 'transport'].includes(kind);
 
 Game.isSupport = (kind) => {
     return ['hmg', 'mortar50', 'mortar60', 'mortar81', 'pak36', 'at25', 'at47'].includes(kind);
@@ -906,7 +918,13 @@ Game._loadUnitModel = (unit, mesh) => {
     // Foot infantry share one skinned soldier model (per-faction skin + named
     // sub-clips split from its baked animation). A team/kind-specific GLB still
     // wins if present; otherwise every rifleman falls back to the soldier.
-    if (Game.USE_SOLDIER_MODEL && !isVeh && !isSup && unit.class === 'infantry') {
+    // French support PERSONNEL (medic/mechanic/sapper/officer) use the same
+    // fusilier body too — told apart by their painted role skins (see
+    // SOLDIER_SKINS in soldier_model.js). France only for now.
+    const soldierSupport = unit.team === Game.TEAM.FRENCH
+        && ['medic', 'mechanic', 'sapper', 'officer'].includes(unit.kind);
+    if (Game.USE_SOLDIER_MODEL && !isVeh
+        && ((!isSup && unit.class === 'infantry') || soldierSupport)) {
         paths = [`models/${teamKind}.glb`, Game.SOLDIER_MODEL_PATH || 'models/soldier.glb'];
     }
 
@@ -922,7 +940,7 @@ Game._loadUnitModel = (unit, mesh) => {
     //    it wins over the ground-snap + Y_TRIM. This is the value the debug panel's
     //    "Scan Nodes → Wrapper Y" slider writes, so what you set there persists,
     //    survives a model reload, and shows up in the copy-config.
-    Game.MODEL_YAW = Game.MODEL_YAW || { french_s35: Math.PI, french_fuel: Math.PI, french_supply: Math.PI };
+    Game.MODEL_YAW = Game.MODEL_YAW || { french_s35: Math.PI, french_fuel: Math.PI, french_supply: Math.PI, french_transport: Math.PI };
     Game.MODEL_Y_TRIM = Game.MODEL_Y_TRIM || {};
     Game.MODEL_WRAPPER_Y = Game.MODEL_WRAPPER_Y || { french_r35: 0.80 };
     // STEER_PIVOT offsets the body from the unit's rotation centre. That makes a
@@ -930,7 +948,7 @@ Game._loadUnitModel = (unit, mesh) => {
     // kinematic bicycle model (uMod.move) already gives realistic front-wheel
     // steering, and a centred body turns cleanly like the procedural trucks do.
     Game.MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT || {};
-    Game.MODEL_SCALE = Game.MODEL_SCALE || { french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35, french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, german_panzer3: 1.35 };
+    Game.MODEL_SCALE = Game.MODEL_SCALE || { french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35, french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1, german_panzer3: 1.35 };
     const MODEL_YAW = Game.MODEL_YAW, MODEL_Y_TRIM = Game.MODEL_Y_TRIM, MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT, MODEL_SCALE = Game.MODEL_SCALE;
     // Fused-mesh tanks (turret modelled into the hull, no separate node): aim by
     // rotating the whole hull. The B1 model now has a real "turret" node, so it's
@@ -1425,7 +1443,7 @@ Game._loadUnitModel = (unit, mesh) => {
 Game._unitFootprint = (kindOrUnit, size) => {
     const kind = (kindOrUnit && kindOrUnit.kind !== undefined) ? kindOrUnit.kind : kindOrUnit;
     const sz = size != null ? size : ((kindOrUnit && kindOrUnit.size) || 0.85);
-    const big = Game.isTank(kind) || kind === 'fuel' || kind === 'supply';
+    const big = Game.isTank(kind) || Game.isTruck(kind);
     return sz * (big ? (Game.TANK_SEP_RADIUS || 1.3) : 0.7);
 };
 
@@ -1435,7 +1453,7 @@ Game._unitFootprint = (kindOrUnit, size) => {
 Game._findClearSpawn = (x, z, base) => {
     if (!Game.units || !Game.units.length) return { x, z };
     const myR = Game._unitFootprint(base.kind, base.size);
-    const big = Game.isTank(base.kind) || base.kind === 'fuel' || base.kind === 'supply';
+    const big = Game.isTank(base.kind) || Game.isTruck(base.kind);
     const clearOf = (cx, cz) => {
         for (const u of Game.units) {
             if (!u.alive) continue;
@@ -1653,11 +1671,11 @@ Game.formationOffsets = (count, spacing = 2.0, type) => {
 //  - MODEL_STEER_PIVOT: body shift; left empty (caused turning "skid").
 //  - MODEL_WRAPPER_Y: absolute wrapper-Y override (debug "Scan Nodes → Wrapper Y");
 //    wins over ground-snap + trim, persists, survives reload, shows in copy-config.
-Game.MODEL_YAW = Game.MODEL_YAW || { french_s35: Math.PI, french_fuel: Math.PI, french_supply: Math.PI };
+Game.MODEL_YAW = Game.MODEL_YAW || { french_s35: Math.PI, french_fuel: Math.PI, french_supply: Math.PI, french_transport: Math.PI };
 Game.MODEL_Y_TRIM = Game.MODEL_Y_TRIM || {};
 Game.MODEL_WRAPPER_Y = Game.MODEL_WRAPPER_Y || { french_r35: 0.80 };
 Game.MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT || {};
-Game.MODEL_SCALE = Game.MODEL_SCALE || { french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35, french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1 };
+Game.MODEL_SCALE = Game.MODEL_SCALE || { french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35, french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1 };
 
 // Rebuild the loaded model for every live unit of a teamKind, re-reading the
 // current Game.MODEL_* values. The GLB is cached (Game.loadModel clones it), so

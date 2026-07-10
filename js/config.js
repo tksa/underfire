@@ -95,7 +95,7 @@ Game.orderStance = 'move';
 // Which status bars to draw above units (player-toggleable from the bottom bar).
 // All off by default — a clean battlefield; the player opts in. Fuel only
 // applies to vehicles; ammo only to units that carry ammo.
-Game.overlay = { hp: false, ammo: false, fuel: false };
+Game.overlay = { hp: false, ammo: false, fuel: false, units: false };
 
 // Mission state
 Game.missionState = {

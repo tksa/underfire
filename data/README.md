@@ -20,7 +20,7 @@ asks for, so the extra entries are data you can draw on, not active units.
 | `key` | unique id, `team_kind` (e.g. `french_s35`). The merge key. |
 | `team` | `french` / `german` / `american` / `russian` / … (nation) |
 | `kind`, `class` | `class` ∈ infantry / support / vehicle / aircraft / ship / train |
-| `supportType` | medic / mechanic / supply / fuel / officer / sapper (optional) |
+| `supportType` | medic / mechanic / supply / fuel / transport / officer / sapper (optional) |
 | `label` | display name |
 | `weapon` | key into `Game.WEAPONS`. Imported units use a synthesized `rwm_*` weapon (see `w_*`). |
 | `secondaryWeapon` | optional second weapon key |

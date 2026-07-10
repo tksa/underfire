@@ -79,6 +79,13 @@ Game.syncUnitMeshes = (dt) => {
         // Garrisoned troops are inside the building — keep their mesh hidden
         // (they still scan + fire; tracers come from the building).
         if (unit._garrisoned) { unit.mesh.visible = false; return; }
+        if (unit._inVehicle != null) {
+            const carrier = Game.getUnitById(unit._inVehicle);
+            if (!carrier || carrier.supportType !== 'transport') {
+                unit.mesh.visible = false;
+                return;
+            }
+        }
 
         // Drive skeletal animation (clip chosen from unit state) + advance mixer
         Game._updateModelAnimation(unit, dt);
@@ -1609,6 +1616,35 @@ Game.updateHUD = () => {
     if (holdBtn) {
         const sel = Game.selectedPlayerUnits();
         holdBtn.classList.toggle('active', sel.length > 0 && sel.every(u => u.holdFire));
+    }
+
+    // Dedicated Renault transport actions. Tow appears only when its rear hitch
+    // is close enough to an AT gun (or while one is attached); troop loading is
+    // always available while the transport is selected.
+    const transport = Game.selectedPlayerUnits().find(u => u.supportType === 'transport');
+    const towBtn = document.getElementById('cmdTow');
+    if (towBtn) {
+        const attached = transport && Game.towedBy(transport);
+        const nearby = transport && !attached && Game.nearTowTarget(transport);
+        towBtn.style.display = (attached || nearby) ? 'flex' : 'none';
+        towBtn.classList.remove('disabled');
+        const label = towBtn.querySelector('.cmd-label');
+        if (label) label.textContent = attached ? 'Unjoin' : 'Join';
+        towBtn.title = attached ? `Unjoin ${attached.label}` : (nearby ? `Join ${nearby.label}` : 'Join anti-tank gun');
+    }
+    const carrierBtn = document.getElementById('cmdCarrier');
+    const loaded = transport && transport._passengers && transport._passengers.length;
+    if (carrierBtn) {
+        carrierBtn.style.display = transport && !loaded ? 'flex' : 'none';
+        carrierBtn.title = 'Load nearby infantry';
+    }
+    const unloadBtn = document.getElementById('cmdUnload');
+    const unloadBadge = document.getElementById('unloadBadge');
+    if (unloadBtn) {
+        unloadBtn.style.display = loaded ? 'flex' : 'none';
+        unloadBtn.classList.toggle('armed', loaded && Game._commandMode === 'unload');
+        unloadBtn.title = loaded ? `Unload ${transport._passengers.length} infantry to a chosen position` : 'Unload infantry';
+        if (unloadBadge) unloadBadge.textContent = loaded ? String(transport._passengers.length) : '0';
     }
 
     // Air strike button: badge shows planes-to-use / available; armed + dimmed states

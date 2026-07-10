@@ -181,6 +181,13 @@ Game.spawnScenario = () => {
         Game.makeUnit(FRENCH, 'medic', 3 * T, 8 * T, { group: 'S', aiState: 'player' });
         Game.makeUnit(FRENCH, 'mechanic', 3.5 * T, 11.5 * T, { group: 'S', aiState: 'player' });
         Game.makeUnit(FRENCH, 'supply_truck', 1.5 * T, 12 * T, { group: 'S', aiState: 'player' });
+        // Tailgates face south into open ground. Random headings could put the
+        // rear entry point directly against the fuel truck / AT-gun line, making
+        // a valid boarding route impossible at mission spawn.
+        Game.makeUnit(FRENCH, 'transport_truck', 2.3 * T, 14.5 * T,
+            { group: 'Transport', aiState: 'player', angle: -Math.PI / 2 });
+        Game.makeUnit(FRENCH, 'transport_truck', 3.8 * T, 15 * T,
+            { group: 'Transport', aiState: 'player', angle: -Math.PI / 2 });
         Game.makeUnit(FRENCH, 'fuel_truck', 1.5 * T, 13.5 * T, { group: 'S', aiState: 'player' });
         Game.makeUnit(FRENCH, 'sapper', 5 * T, 13 * T, { group: 'S', aiState: 'player' });
         Game.makeUnit(FRENCH, 'officer', 4.5 * T, 8 * T, { group: 'A', aiState: 'player' });

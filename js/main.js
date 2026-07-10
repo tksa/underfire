@@ -119,7 +119,7 @@ Game._vehPenetration = (unit, x, z) => {
     let depth = 0;
     for (const o of Game.units) {
         if (!o.alive || o.id === unit.id) continue;
-        if (!(Game.isTank(o.kind) || o.kind === 'fuel' || o.kind === 'supply')) continue;
+        if (!(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
         if (Game.distSq(x, z, o.x, o.z) > 80) continue;
         for (const t of [-halfLen, 0, halfLen]) {
             const p = Game._tankBoxPush(x + c * t, z + s * t, o, r, 0.02);
@@ -144,7 +144,7 @@ Game._vehPenetration = (unit, x, z) => {
  */
 Game._bodySolidCount = (unit, x, z) => {
     if (!Game.getTileAtWorld) return 0;
-    const isVeh = Game.isTank(unit.kind) || unit.kind === 'fuel' || unit.kind === 'supply';
+    const isVeh = Game.isTank(unit.kind) || Game.isTruck(unit.kind);
     const solidAt = (sx, sz) => {
         const t = Game.getTileAtWorld(sx, sz);
         if (!t) return true;                                  // off-map reads as solid
@@ -200,7 +200,7 @@ Game._vehicleFollow = (unit) => {
     let factor = 1;
     for (const o of Game.units) {
         if (!o.alive || o.id === unit.id || o.team !== unit.team) continue;
-        if (!(Game.isTank(o.kind) || o.kind === 'fuel' || o.kind === 'supply')) continue;
+        if (!(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
         if ((o.currentSpeed || 0) < 0.25) continue;            // stopped -> detour around it, don't follow
         const rx = o.x - unit.x, rz = o.z - unit.z;
         const ahead = rx * hx + rz * hz;
@@ -229,7 +229,7 @@ Game._infantryFollow = (unit) => {
     let factor = 1;
     for (const o of Game.units) {
         if (!o.alive || o.id === unit.id || o.team !== unit.team) continue;
-        if (Game.isTank(o.kind) || o.kind === 'fuel' || o.kind === 'supply') continue;
+        if (Game.isTank(o.kind) || Game.isTruck(o.kind)) continue;
         if (o._garrisoned || o._inVehicle != null) continue;
         const rx = o.x - unit.x, rz = o.z - unit.z;
         if (rx * rx + rz * rz > 4) continue;                 // only the man right ahead
@@ -268,7 +268,7 @@ Game._tankDriverPlan = (unit, maxSpeed) => {
     const nbrs = [];
     for (const o of Game.units) {
         if (!o.alive || o.id === unit.id) continue;
-        if (!(Game.isTank(o.kind) || o.kind === 'fuel' || o.kind === 'supply')) continue;
+        if (!(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
         if (Game.distSq(unit.x, unit.z, o.x, o.z) > 26 * 26) continue;
         const dir = o._reversing ? -1 : 1;
         nbrs.push({
@@ -375,7 +375,7 @@ Game._vehicleCrossingYield = (unit) => {
     let factor = 1;
     for (const o of Game.units) {
         if (!o.alive || o.id === unit.id) continue;
-        if (!(Game.isTank(o.kind) || o.kind === 'fuel' || o.kind === 'supply')) continue;
+        if (!(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
         if ((o.currentSpeed || 0) < 0.3) continue;             // parked: detour handles it
         const rx = o.x - unit.x, rz = o.z - unit.z;
         if (rx * rx + rz * rz > 900) continue;                 // 30u interest radius
@@ -553,7 +553,7 @@ Game.buildMoveRecUI = () => {
 
 Game.applySeparation = (unit, dt) => {
     let sepX = 0, sepZ = 0;
-    const isVeh = Game.isTank(unit.kind);
+    const isVeh = Game.isTank(unit.kind) || Game.isTruck(unit.kind);
     const radMult = Game.TANK_SEP_RADIUS || 1.3;
     const myRadius = isVeh ? unit.size * radMult : unit.size * 0.7;
     // A tank rolling at speed crushes anyone under its hull.
@@ -563,13 +563,14 @@ Game.applySeparation = (unit, dt) => {
     let blockedAhead = false;
 
     for (const other of Game.units) {
-        if (!other.alive || other.id === unit.id) continue;
+        if (!other.alive || other.id === unit.id || other._inVehicle != null || other._garrisoned) continue;
+        if (unit._enterCarrierId === other.id) continue; // exact final waypoint is the assigned rear tailgate
 
         const dx = unit.x - other.x;
         const dz = unit.z - other.z;
         const distSq = dx * dx + dz * dz;
 
-        const otherVeh = Game.isTank(other.kind);
+        const otherVeh = Game.isTank(other.kind) || Game.isTruck(other.kind);
 
         // MAKE WAY: a foot soldier standing in the path of an ADVANCING FRIENDLY
         // tank scrambles aside before it arrives, so the tank isn't blocked by its
@@ -732,7 +733,11 @@ Game.applySeparation = (unit, dt) => {
             // forests (clearing the way); smaller ones give way.
             const yieldToOther = !otherMoving || other.size > unit.size + 0.01
                 || (Math.abs(other.size - unit.size) <= 0.01 && other.id < unit.id);
-            if (otherAhead && !following && yieldToOther) blockedAhead = true;
+            // Once a vehicle has committed to a detour it must retain rolling
+            // steering authority. Another nearby parked hull may still be in its
+            // forward half-plane, but hard-stopping here freezes bicycle steering.
+            // The solid-hull gate remains the final collision authority.
+            if (otherAhead && !following && yieldToOther && !unit._detour) blockedAhead = true;
         } else if (isVeh && !otherVeh) {
             // Tank vs infantry: a tank is immovable by men (no push on the tank).
         } else {
@@ -781,13 +786,14 @@ Game._pathBlockedByVehicle = (unit, lookAhead = 12) => {
     const parked = [];
     for (const o of Game.units) {
         if (!o.alive || o.id === unit.id) continue;
-        if (!(Game.isTank(o.kind) || o.kind === 'fuel' || o.kind === 'supply')) continue;
+        if (unit._enterCarrierId === o.id) continue; // allow the boarding route to terminate at its truck
+        if (!(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
         if ((o.currentSpeed || 0) > 0.15 || (o.path && o.path.length)) continue;
         if (Game.distSq(unit.x, unit.z, o.x, o.z) > (lookAhead + 8) * (lookAhead + 8)) continue;
         parked.push(o);
     }
     if (!parked.length) return null;
-    const vehSized = Game.isTank(unit.kind) || unit.kind === 'fuel' || unit.kind === 'supply';
+    const vehSized = Game.isTank(unit.kind) || Game.isTruck(unit.kind);
     const r = unit.size * (vehSized ? 1.0 : 0.7);
     let px = unit.x, pz = unit.z, travelled = 0;
     for (let i = 0; i < unit.path.length && travelled < lookAhead; i++) {
@@ -820,7 +826,7 @@ Game._vehicleAvoid = (unit) => {
     }
     const radMult = Game.TANK_SEP_RADIUS || 1.3;
     const selfIsTank = Game.isTank(unit.kind);
-    const isTruck = unit.kind === 'fuel' || unit.kind === 'supply';
+    const isTruck = Game.isTruck(unit.kind);
     const vehSized = selfIsTank || isTruck;              // vehicle-sized footprint
     const myR = vehSized ? unit.size * radMult : unit.size * 0.7;
     const goal = unit.path[unit.path.length - 1];
@@ -834,7 +840,7 @@ Game._vehicleAvoid = (unit) => {
     // call it arrived instead of orbiting the hull forever trying to step onto it.
     if (unit.path.length === 1) {
         for (const o of Game.units) {
-            if (!o.alive || o.id === unit.id || !Game.isTank(o.kind)) continue;
+            if (!o.alive || o.id === unit.id || !(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
             const tr = o.size * radMult;
             if (Game.distSq(goal.x, goal.z, o.x, o.z) < (tr + 0.4) * (tr + 0.4)
                 && Game.distSq(unit.x, unit.z, o.x, o.z) < (tr + myR + 0.8) * (tr + myR + 0.8)) {
@@ -851,7 +857,7 @@ Game._vehicleAvoid = (unit) => {
     let block = null, blockD = Infinity;
     const lookAhead = myR + (isTruck ? 9 : (selfIsTank ? 6 : 3.5));
     for (const o of Game.units) {
-        if (!o.alive || o.id === unit.id || !Game.isTank(o.kind)) continue;
+        if (!o.alive || o.id === unit.id || !(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
         const rx = o.x - unit.x, rz = o.z - unit.z;
         const ahead = rx * hx + rz * hz;                 // along heading
         if (ahead <= 0.3 || ahead > lookAhead) continue;
@@ -924,7 +930,10 @@ Game._vehicleAvoid = (unit) => {
         const lateral = (block.x - unit.x) * -hz + (block.z - unit.z) * hx;
         side = lateral > 0 ? -1 : 1;                     // stationary: side the hull isn't on
     }
-    const off = myR + block.size * radMult + 0.8;
+    // Long-wheelbase trucks need a wider side point than tracked vehicles: if
+    // the waypoint merely clears the collision box, the lorry reaches contact
+    // before its nose can arc toward it and stalls against the tank.
+    const off = myR + block.size * radMult + (isTruck ? 2.0 : 0.8);
     let px = -hz * side, pz = hx * side;
     let gx = block.x + px * off, gz = block.z + pz * off;
     if (blockMoving) {                                   // bias the waypoint toward the tank's rear
@@ -1909,12 +1918,33 @@ Game.updateMines = (dt) => {
 // ═══════════════════════════════════════════════════════
 
 // Anything with an engine can tow: tanks, armored cars, and the trucks.
-Game.canTow = (u) => Game.isVehicle(u) || ['supply', 'fuel'].includes(u.supportType);
+Game.canTow = (u) => Game.isVehicle(u) || ['supply', 'fuel', 'transport'].includes(u.supportType);
+Game.isTowableAT = (u) => !!u && u.deployable && u.kind !== 'hmg';
+Game.towedBy = (tower) => Game.units.find(u => u.alive && u._towed && u._towedBy === tower.id) || null;
+Game.towHitchPoint = (tower) => ({
+    x: tower.x - Math.cos(tower.angle) * 2.0,
+    z: tower.z - Math.sin(tower.angle) * 2.0,
+});
+Game.transportEntryPoint = (carrier) => ({
+    x: carrier.x - Math.cos(carrier.angle) * 1.82,
+    z: carrier.z - Math.sin(carrier.angle) * 1.82,
+});
+Game.nearTowTarget = (tower, radius = 2.8) => {
+    const hitch = Game.towHitchPoint(tower);
+    let best = null, bd = radius * radius;
+    Game.units.forEach(u => {
+        if (!u.alive || u.team !== tower.team || !Game.isTowableAT(u) || u._towed) return;
+        const d = Game.distSq(hitch.x, hitch.z, u.x, u.z);
+        if (d < bd) { bd = d; best = u; }
+    });
+    return best;
+};
 
 Game.towUnit = (tower, target) => {
     if (!tower.alive || !target.alive) return;
     if (!Game.canTow(tower)) return;
-    if (!target.deployable) { Game.pushMessage('Only guns can be towed.', 1.5); return; }
+    if (!Game.isTowableAT(target)) { Game.pushMessage('Only anti-tank guns can be towed.', 1.5); return; }
+    if (Game.towedBy(tower)) { Game.pushMessage(`${tower.label} is already towing a gun.`, 1.5); return; }
     if (target._towed) return;
     target._towed = true;
     target._towedBy = tower.id;
@@ -1933,11 +1963,14 @@ Game.updateTowing = (dt) => {
             u._towedBy = null;
             return;
         }
-        // Follow the towing vehicle
-        u.x = tower.x - Math.cos(tower.angle) * 2.0;
-        u.z = tower.z - Math.sin(tower.angle) * 2.0;
+        // Follow the towing vehicle from its rear hitch.
+        const hitch = Game.towHitchPoint(tower);
+        u.x = hitch.x;
+        u.z = hitch.z;
         u.angle = tower.angle;
     });
+    Game.updateCarrierEntry(dt);
+    Game.updateCarrierPassengers();
     // A destroyed carrier spills its passengers (shaken and wounded).
     Game.units.forEach(c => {
         if (!c._passengers || !c._passengers.length || c.alive) return;
@@ -1947,6 +1980,9 @@ Game.updateTowing = (dt) => {
             inf._inVehicle = null;
             if (inf.mesh) inf.mesh.visible = true;
             inf.x = c.x + Game.rand(-2, 2); inf.z = c.z + Game.rand(-2, 2);
+            inf.y = Game.getHeight ? Game.getHeight(inf.x, inf.z) : 0;
+            inf.stance = inf._preCarrierStance || 'stand';
+            inf._preCarrierStance = null;
             inf.hp = Math.max(1, inf.hp - 40);
             inf.suppressionValue = Game.clamp((inf.suppressionValue || 0) + 50, 0, 100);
         });
@@ -1966,37 +2002,240 @@ Game.untowUnit = (target) => {
 // ═══════════════════════════════════════════════════════
 
 Game.CARRIER_CAP = 5;
-Game.isCarrier = (u) => ['supply', 'fuel'].includes(u.supportType);
+Game.TRANSPORT_CAP = 10;
+Game.isCarrier = (u) => ['supply', 'fuel', 'transport'].includes(u.supportType);
+Game.carrierCapacity = (u) => u.supportType === 'transport' ? Game.TRANSPORT_CAP : Game.CARRIER_CAP;
+Game.transportHasRoom = (u) => Game.isCarrier(u)
+    && (u._passengers ? u._passengers.length : 0) < Game.carrierCapacity(u);
+
+// A* returns tile-centre waypoints. That is normally desirable, but a tailgate
+// is a precise point near a tile edge: stopping at the containing tile's centre
+// can leave a soldier more than a unit from the truck. Preserve the A* chain and
+// append the exact boarding/staging point as its final, directly walkable leg.
+Game.findCarrierEntryPath = (inf, tx, tz) => {
+    const path = Game.findPath(inf, inf.x, inf.z, tx, tz) || [];
+    const last = path.length ? path[path.length - 1] : { x: inf.x, z: inf.z };
+    if (Game.distSq(last.x, last.z, tx, tz) > 0.01
+        && (!Game.segmentPassable || Game.segmentPassable(inf, last.x, last.z, tx, tz))) {
+        path.push({ x: tx, z: tz, _carrierEntry: true });
+    }
+    return path;
+};
 
 Game.loadUnit = (inf, carrier) => {
     if (!inf.alive || !carrier.alive || inf === carrier) return false;
     if (inf.class === 'vehicle' || Game.isTank(inf.kind) || inf.deployable) return false; // foot troops only
     carrier._passengers = carrier._passengers || [];
-    if (carrier._passengers.length >= Game.CARRIER_CAP) { Game.pushMessage(`${carrier.label} is full.`, 1.5); return false; }
+    if (carrier._passengers.length >= Game.carrierCapacity(carrier)) { Game.pushMessage(`${carrier.label} is full.`, 1.5); return false; }
     carrier._passengers.push(inf.id);
+    if (carrier._boardingQueue) {
+        const qi = carrier._boardingQueue.indexOf(inf.id);
+        if (qi >= 0) carrier._boardingQueue.splice(qi, 1);
+    }
     inf._inVehicle = carrier.id;
-    inf.path = []; inf.moving = false;
-    if (inf.mesh) inf.mesh.visible = false;
+    inf._enterCarrierId = null;
+    inf._enterCarrierRepath = null;
+    inf._preCarrierStance = inf.stance;
+    inf.stance = 'rest';
+    inf.path = []; inf.moving = false; inf.currentSpeed = 0; inf._dispSpeed = 0;
+    // Transport passengers remain visible, seated along the open bed. Legacy
+    // supply/fuel carriers keep their occupants abstracted inside the body.
+    if (inf.mesh) inf.mesh.visible = carrier.supportType === 'transport';
     if (Game.selection.has(inf.id)) Game.selection.delete(inf.id);
     return true;
 };
 
-Game.unloadCarrier = (carrier) => {
+// Building-style entry order: selected infantry walk to the tailgate and board
+// when they reach it instead of disappearing into a distant truck instantly.
+Game.orderEnterCarrier = (carrier) => {
+    if (!carrier || !carrier.alive || carrier.supportType !== 'transport') return;
+    carrier._boardingQueue = (carrier._boardingQueue || []).filter(id => {
+        const u = Game.getUnitById(id);
+        return u && u.alive && u._inVehicle == null;
+    });
+    const room = Game.carrierCapacity(carrier)
+        - (carrier._passengers ? carrier._passengers.length : 0) - carrier._boardingQueue.length;
+    const rear = Game.transportEntryPoint(carrier);
+    const inf = Game.selectedPlayerUnits().filter(u => u.alive && u.class === 'infantry'
+        && u._inVehicle == null && !u._garrisoned && !carrier._boardingQueue.includes(u.id))
+        .sort((a, b) => Game.distSq(a.x, a.z, rear.x, rear.z) - Game.distSq(b.x, b.z, rear.x, rear.z))
+        .slice(0, Math.max(0, room));
+    if (!inf.length) {
+        Game.pushMessage(room > 0 ? 'Select infantry to enter the transport.' : `${carrier.label} is full.`, 1.5);
+        return;
+    }
+    inf.forEach((u, i) => {
+        carrier._boardingQueue.push(u.id);
+        u._enterCarrierId = carrier.id;
+        u._enterCarrierRepath = 0;
+        // A soldier ordered aboard may currently be in the autonomous `rest`
+        // posture, whose movement multiplier is deliberately zero. Wake him
+        // before assigning the tailgate path or he has a route but cannot move.
+        if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
+        u.stance = 'stand';
+        u._autoStance = false;
+        u.orderMode = 'move';
+        u.orderDelay = Game.commandDelay ? Game.commandDelay(u) : 0;
+    });
+    Game.updateCarrierEntry(0);
+    if (Game.spawnOrderMarker) Game.spawnOrderMarker(rear.x, rear.z, 0x66ccff);
+    Game.pushMessage(`Entering ${carrier.label}.`, 1.6);
+};
+
+Game.updateCarrierEntry = (dt) => {
+    Game.units.forEach(carrier => {
+        if (!carrier._boardingQueue || !carrier._boardingQueue.length) return;
+        carrier._boardingQueue = carrier._boardingQueue.filter(id => {
+            const u = Game.getUnitById(id);
+            return u && u.alive && u._inVehicle == null && u._enterCarrierId === carrier.id;
+        });
+        if (!carrier.alive || !Game.transportHasRoom(carrier)) {
+            carrier._boardingQueue.forEach(id => {
+                const u = Game.getUnitById(id);
+                if (u) { u._enterCarrierId = null; u.path = []; u.moving = false; }
+            });
+            carrier._boardingQueue = [];
+            return;
+        }
+        const fX = Math.cos(carrier.angle), fZ = Math.sin(carrier.angle);
+        const lX = -fZ, lZ = fX;
+        const head = Game.getUnitById(carrier._boardingQueue[0]);
+        if (head) {
+            const rear = Game.transportEntryPoint(carrier);
+            const hd = Game.dist(head.x, head.z, rear.x, rear.z);
+            if (carrier._boardingHeadId !== head.id || hd < (carrier._boardingHeadBest ?? Infinity) - 0.15) {
+                carrier._boardingHeadId = head.id;
+                carrier._boardingHeadBest = hd;
+                carrier._boardingHeadStall = 0;
+            } else {
+                carrier._boardingHeadStall = (carrier._boardingHeadStall || 0) + dt;
+                // Do not let one blocked approach hold seven soldiers at their
+                // valid staging points forever. Rotate it to the back, retain its
+                // boarding order, and retry after the others have advanced.
+                if (carrier._boardingHeadStall > 3 && hd > 1) {
+                    carrier._boardingQueue.push(carrier._boardingQueue.shift());
+                    carrier._boardingHeadId = null;
+                    carrier._boardingHeadBest = Infinity;
+                    carrier._boardingHeadStall = 0;
+                }
+            }
+        }
+        carrier._boardingQueue.slice().forEach((id, i) => {
+            const inf = Game.getUnitById(id);
+            if (!inf) return;
+            // Only the head of the queue uses the tailgate. Everyone else waits
+            // in a staggered file behind it, preventing eight men from colliding
+            // over the same final waypoint.
+            const row = Math.floor((Math.max(1, i) - 1) / 2);
+            const side = i === 0 ? 0 : (i % 2 ? -0.62 : 0.62);
+            const back = i === 0 ? 1.82 : 2.55 + row * 0.68;
+            const tx = carrier.x - fX * back + lX * side;
+            const tz = carrier.z - fZ * back + lZ * side;
+            const d2 = Game.distSq(inf.x, inf.z, tx, tz);
+            // Hull collision keeps a soldier's centre about 0.63u from this
+            // point even when he is visibly at the tailgate. Board within 0.75u
+            // so he enters at rear contact instead of walking past and looping.
+            if (i === 0 && d2 <= 0.5625) {
+                Game.loadUnit(inf, carrier);
+                return;
+            }
+            inf._enterCarrierRepath = (inf._enterCarrierRepath || 0) - dt;
+            if (inf._enterCarrierRepath <= 0 && d2 > 0.16) {
+                inf.path = Game.findCarrierEntryPath(inf, tx, tz);
+                inf.moving = inf.path.length > 0;
+                inf._enterCarrierRepath = 0.45;
+            }
+        });
+    });
+};
+
+Game.updateCarrierPassengers = () => {
+    Game.units.forEach(carrier => {
+        if (!carrier.alive || carrier.supportType !== 'transport' || !carrier._passengers) return;
+        const fX = Math.cos(carrier.angle), fZ = Math.sin(carrier.angle);
+        const lX = -fZ, lZ = fX;
+        carrier._passengers.forEach((pid, i) => {
+            const inf = Game.getUnitById(pid);
+            if (!inf || !inf.alive) return;
+            const side = i % 2 ? 1 : -1;
+            const row = Math.floor(i / 2);
+            // Five pairs fit when the first bench row uses the free space toward
+            // the cab; the remaining rows continue rearward at the same spacing.
+            const along = 0.22 - row * 0.38;
+            inf.x = carrier.x + fX * along + lX * side * 0.22;
+            inf.z = carrier.z + fZ * along + lZ * side * 0.22;
+            inf.y = (carrier.y || 0) + 0.72;
+            // Face across the bed toward the opposite bench. The original seat
+            // yaw pointed both rows outward through the truck's side panels.
+            inf.angle = carrier.angle + (side < 0 ? Math.PI / 2 : -Math.PI / 2);
+            inf.stance = 'rest';
+            inf._dispSpeed = 0;
+            if (inf.mesh) inf.mesh.visible = true;
+        });
+    });
+};
+
+Game.unloadCarrier = (carrier, tx = null, tz = null) => {
     if (!carrier._passengers || !carrier._passengers.length) return;
     let n = 0;
+    const rear = Game.transportEntryPoint(carrier);
+    const fX = Math.cos(carrier.angle), fZ = Math.sin(carrier.angle);
+    const lX = -fZ, lZ = fX;
     carrier._passengers.forEach((pid, i, arr) => {
         const inf = Game.getUnitById(pid);
         if (!inf || !inf.alive) return;
-        const a = (i / arr.length) * Math.PI * 2;
-        inf.x = Game.clamp(carrier.x + Math.cos(a) * 2.2, 1, Game.WORLD_W - 1);
-        inf.z = Game.clamp(carrier.z + Math.sin(a) * 2.2, 1, Game.WORLD_H - 1);
+        // Everyone exits through the rear, fanned just enough not to overlap.
+        const side = (i % 2 ? 1 : -1) * (0.28 + Math.floor(i / 2) * 0.12);
+        inf.x = Game.clamp(rear.x - fX * 0.25 + lX * side, 1, Game.WORLD_W - 1);
+        inf.z = Game.clamp(rear.z - fZ * 0.25 + lZ * side, 1, Game.WORLD_H - 1);
         inf._inVehicle = null;
+        inf.stance = inf._preCarrierStance || 'stand';
+        inf._preCarrierStance = null;
+        inf.y = Game.getHeight ? Game.getHeight(inf.x, inf.z) : 0;
         inf.path = []; inf.moving = false;
+        if (tx != null && tz != null) {
+            const a = (i / Math.max(1, arr.length)) * Math.PI * 2;
+            const r = i === 0 ? 0 : 0.9 + Math.floor((i - 1) / 4) * 0.8;
+            const gx = Game.clamp(tx + Math.cos(a) * r, 1, Game.WORLD_W - 1);
+            const gz = Game.clamp(tz + Math.sin(a) * r, 1, Game.WORLD_H - 1);
+            inf.path = Game.findCarrierEntryPath(inf, gx, gz);
+            inf.moving = inf.path.length > 0;
+            inf._unloading = inf.moving;
+            inf.orderMode = 'move';
+            inf.orderDelay = Game.commandDelay ? Game.commandDelay(inf) : 0;
+        }
         if (inf.mesh) inf.mesh.visible = true;
         n++;
     });
     carrier._passengers = [];
-    Game.pushMessage(`${carrier.label} unloaded ${n} troops.`, 1.8);
+    Game.pushMessage(`${carrier.label} unloaded ${n} troops${tx != null ? ' to the marked position' : ''}.`, 1.8);
+};
+
+Game.toggleSelectedTow = () => {
+    const tower = Game.selectedPlayerUnits().find(u => u.supportType === 'transport');
+    if (!tower) return;
+    const attached = Game.towedBy(tower);
+    if (attached) Game.untowUnit(attached);
+    else {
+        const target = Game.nearTowTarget(tower);
+        if (target) Game.towUnit(tower, target);
+        else Game.pushMessage('Back the truck up to an anti-tank gun first.', 1.8);
+    }
+};
+
+Game.toggleSelectedCarrier = () => {
+    const carrier = Game.selectedPlayerUnits().find(u => u.supportType === 'transport');
+    if (!carrier) return;
+    if (carrier._passengers && carrier._passengers.length) {
+        Game.unloadCarrier(carrier);
+        return;
+    }
+    const pool = Game.units.filter(u => u.alive && u.team === carrier.team
+        && u.class === 'infantry' && u._inVehicle == null
+        && Game.distSq(u.x, u.z, carrier.x, carrier.z) < 10 * 10);
+    let n = 0;
+    pool.forEach(u => { if (Game.loadUnit(u, carrier)) n++; });
+    Game.pushMessage(n ? `${carrier.label} loaded ${n} troops.` : 'No infantry nearby to load.', 1.6);
 };
 
 // ═══════════════════════════════════════════════════════
@@ -4373,6 +4612,16 @@ Game.boot = async () => {
         cmdFighter: () => { if (Game.fighterTotalAvailable && Game.fighterTotalAvailable() > 0) { Game.toggleFighterMenu(); } else { Game.pushMessage('No fighters available!', 2.0); } },
         cmdRotate: () => { Game._commandMode = 'rotate'; Game.pushMessage('Rotate — right-click direction.', 2.0); },
         cmdProne: () => { Game.toggleProneSelection(); },
+        cmdTow: () => { Game.toggleSelectedTow(); },
+        cmdCarrier: () => { Game.toggleSelectedCarrier(); },
+        cmdUnload: () => {
+            const carrier = Game.selectedPlayerUnits().find(u => u.supportType === 'transport');
+            if (carrier && carrier._passengers && carrier._passengers.length) {
+                Game._unloadCarrierId = carrier.id;
+                Game._commandMode = 'unload';
+                Game.pushMessage('Unload infantry — right-click the destination.', 2.0);
+            }
+        },
     };
     Object.entries(cmdHandlers).forEach(([id, fn]) => {
         const el = document.getElementById(id);
