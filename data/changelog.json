@@ -1,8 +1,18 @@
 {
- "version": "v0.11.0",
- "build": "8505aaf",
- "generated": "2026-07-10",
+ "version": "v0.12.0",
+ "build": "763db73",
+ "generated": "2026-07-12",
  "commits": [
+  {
+   "hash": "763db73",
+   "date": "2026-07-12",
+   "subject": "add Battle of Mokra preview"
+  },
+  {
+   "hash": "acee609",
+   "date": "2026-07-10",
+   "subject": "release v0.11.0"
+  },
   {
    "hash": "8505aaf",
    "date": "2026-07-10",
@@ -62,16 +72,6 @@
    "hash": "8c1d451",
    "date": "2026-07-07",
    "subject": "Germany is playable"
-  },
-  {
-   "hash": "40d8edd",
-   "date": "2026-07-07",
-   "subject": "Panzer III Ausf. J model with carved rotating turret"
-  },
-  {
-   "hash": "453c589",
-   "date": "2026-07-06",
-   "subject": "refresh changelog"
   }
  ]
 }

@@ -6,6 +6,14 @@ The start-mission screen's "Latest Updates" panel is generated from the git comm
 log (`scripts/gen-changelog.mjs` → `data/changelog.json`), so it stays current
 without hand-editing.
 
+## v0.12.0 — Battle of Mokra Preview
+
+- **Battle selector:** Advance to the Dyle remains first and selected by default; Battle of Mokra is available second with a clear Preview label.
+- **Poland, 1939:** playable Polish forces with a dedicated early-war roster, weapons, descriptions, presentation colours, and intentionally silent voice slots pending Polish recordings.
+- **Mokra battlefield:** a separate railway map covering Mokra I–III, constrained crossings, defensive deployment, and three phased German armoured attacks.
+- **Historical guardrails:** the scenario omits anachronistic routine Panzer III/7TP variants and player air support while later train, cavalry, air-attack, and withdrawal phases remain documented future work.
+- **Scenario infrastructure:** scenario-aware map/force/mission dispatch, side selection, HUD text, localisation, documentation, and deterministic Dyle/Mokra regression coverage.
+
 ## v0.6.0-dev
 
 - **Data-driven roster:** `data/units.csv` (614 units, incl. the full public-domain RWM/Sudden Strike library) merged over the built-in table at boot. Each unit has an introduction `year`; `Game.unitsForYear` gates per-map availability (a 1940 map won't field the StG-44, Tiger, Panther…).
