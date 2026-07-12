@@ -1909,18 +1909,17 @@
     // data/changelog.json is generated from the git commit log at deploy time
     // (scripts/gen-changelog.mjs) and fetched here — no build step. Falls back to
     // a short built-in list if it can't be loaded.
-    const UNDER_VERSION = 'v0.12.0';
+    const UNDER_VERSION = 'v0.13.0';
     const vEl = document.getElementById('menuVersion');
     const upEl = document.getElementById('menuUpdates');
     if (vEl) vEl.textContent = UNDER_VERSION;
 
     const FALLBACK_NOTES = [
-      'Advance to the Dyle remains the first/default battle; Battle of Mokra is now available second as a Preview.',
-      'Command Poland against Germany with a dedicated 1939 roster, period weapons, unit descriptions, and Polish presentation colours.',
-      'Defend Mokra I–III and the railway crossings against three phased German armoured attacks.',
-      'Mokra uses its own authored railway battlefield and excludes the legacy Dyle map, French forces, and player air support.',
-      'Polish voice slots intentionally remain silent until the planned Polish recordings are added.',
-      'Transport trucks now use full-width collision-aware routes, short reverse corrections, smooth stopping, and preserved Shift waypoints.',
+      'Polish infantry and tank crews now acknowledge selection, movement, attack, and stop orders with supplied Polish recordings.',
+      'Drag-box selection produces one group acknowledgement, while attack orders periodically use patriotic and morale lines.',
+      'Mokra now opens with a reinforced six-gun line and five infantry sections positioned between the artillery.',
+      'The final German armoured echelon triggers a dedicated Polish morale cue.',
+      'All 77 Polish source recordings have compressed runtime copies, with 75 currently active in gameplay.',
     ];
     const renderUpdates = (version, date, notes) => {
       if (!upEl) return;

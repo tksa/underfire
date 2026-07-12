@@ -1,8 +1,18 @@
 {
- "version": "v0.12.0",
- "build": "3ab10b5",
+ "version": "v0.13.0",
+ "build": "5759020",
  "generated": "2026-07-12",
  "commits": [
+  {
+   "hash": "5759020",
+   "date": "2026-07-12",
+   "subject": "add Polish voices and reinforced gun line"
+  },
+  {
+   "hash": "a81cf07",
+   "date": "2026-07-12",
+   "subject": "refresh v0.12.0 release metadata"
+  },
   {
    "hash": "3ab10b5",
    "date": "2026-07-12",
@@ -60,16 +70,6 @@
   },
   {
    "hash": "17d9efc",
-   "date": "2026-07-07",
-   "subject": "refresh changelog"
-  },
-  {
-   "hash": "6b42ff4",
-   "date": "2026-07-07",
-   "subject": "blurred airframe-silhouette ground shadows"
-  },
-  {
-   "hash": "f4b1ec2",
    "date": "2026-07-07",
    "subject": "refresh changelog"
   }

@@ -6,6 +6,15 @@ The start-mission screen's "Latest Updates" panel is generated from the git comm
 log (`scripts/gen-changelog.mjs` → `data/changelog.json`), so it stays current
 without hand-editing.
 
+## v0.13.0 — Polish Voices and Mokra Gun Line
+
+- **Polish voices:** 77 supplied recordings now ship as compressed runtime assets, with 75 active across infantry and vehicle command pools.
+- **Command feedback:** drag-box selection emits one group acknowledgement; attack-move and attack-ground use attack semantics; Polish attack orders periodically draw from patriotic/morale takes.
+- **Mokra event audio:** the final German armoured echelon triggers a dedicated `nie-zlamia-nas` cue that is not lost to normal command throttling.
+- **Defensive deployment:** Mokra opens with an alternating line of three Bofors and three 75 mm guns, five interleaved infantry sections, an eight-man reserve, and expanded HMG support.
+- **Spawn clearance:** the Polish TKS, wz. 34, medic, guns, and supporting units begin clear of solid terrain and overlapping formations.
+- **Audio workflow:** source WAVs remain external and editable; `scripts/process-polish-voices.sh` reproducibly creates the optimised Ogg runtime copies.
+
 ## v0.12.0 — Battle of Mokra Preview
 
 - **Battle selector:** Advance to the Dyle remains first and selected by default; Battle of Mokra is available second with a clear Preview label.
