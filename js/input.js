@@ -7,6 +7,28 @@
 Game.selectedPlayerUnits = () =>
     Game.units.filter(u => u.alive && u.team === Game.playerTeam && Game.selection.has(u.id));
 
+// Any player order that replaces a lorry's route also owns its maneuver state.
+// Leaving an interrupted collision/pre-flight recovery alive lets the reverse
+// watchdog resurrect the OLD destination after the new order has been issued.
+Game.cancelTruckManeuver = (unit, resetPreflight = true) => {
+    if (!Game.isTruck(unit.kind)) return;
+    const wasReversing = !!(unit._reverseMove || unit._reversing);
+    unit._truckRecoveryGoal = null;
+    unit._reverseMove = false;
+    unit._reversing = false;
+    unit._reverseStallT = 0;
+    unit._recoveryBlockedUntil = 0;
+    unit._hullBlockT = 0;
+    unit._hullBlockFor = null;
+    if (resetPreflight) {
+        unit._truckPreflightPath = null;
+        unit._truckPreflightBackups = 0;
+        unit._preflightRiskId = null;
+    }
+    // Never reinterpret residual reverse velocity as immediate forward motion.
+    if (wasReversing) unit.currentSpeed = 0;
+};
+
 // Compute exactly ONE destination slot per selected unit for a group move to (wx,wz).
 // Returns [{ unit, x, z }] — one entry per unit, each a distinct formation slot. The
 // SAME function drives the on-ground preview circles and the actual move orders, so
@@ -81,8 +103,25 @@ Game.computeFormationTargets = (chosen, wx, wz) => {
     return out;
 };
 
+// Pending passengers remain selected while they walk to a transport. If that
+// transport is selected with them, a map click is a command for the truck: the
+// passengers must keep chasing its live tailgate instead of receiving the same
+// ground destination. A move issued to the infantry without their carrier still
+// cancels boarding normally.
+Game.moveOrderParticipants = (units, mode = 'move') => {
+    const chosen = [...(units || [])];
+    if (mode !== 'move') return chosen;
+    const movingCarriers = new Set(chosen
+        .filter(u => u.alive && u.supportType === 'transport')
+        .map(u => u.id));
+    if (!movingCarriers.size) return chosen;
+    return chosen.filter(u => !(u.class === 'infantry'
+        && u._enterCarrierId != null
+        && movingCarriers.has(u._enterCarrierId)));
+};
+
 Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gather = false) => {
-    let chosen = unitList || Game.selectedPlayerUnits();
+    let chosen = Game.moveOrderParticipants(unitList || Game.selectedPlayerUnits(), mode);
     if (!chosen.length) return;
     // Supply / fuel trucks can't fight, so an attack-move STOPS them where they are
     // (and cancels any move they were still finishing) — they only obey plain Move
@@ -90,14 +129,15 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
     if (mode === 'attack') {
         for (const u of chosen) {
             if (Game.isTruck(u.kind)) {
+                Game.cancelTruckManeuver(u);
                 u.path = []; u.moving = false; u.orderMode = 'hold';
-                u._reverseMove = false; u._groupMoveActive = false;
+                u._groupMoveActive = false;
             }
         }
         chosen = chosen.filter(u => !Game.isTruck(u.kind));
         if (!chosen.length) return;
     }
-    // Waypoint queuing (Ctrl/Cmd + move): append a leg to the existing route
+    // Waypoint queuing (Shift + move): append a leg to the existing route
     // instead of replacing it. Only sensible for plain moves on units that are
     // already routed somewhere; otherwise it behaves like a normal move.
     queue = queue && mode === 'move';
@@ -128,9 +168,18 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
     // Opt-in only: by default every unit travels at its own speed. The pace cap is
     // applied solely when the player has toggled "march together" on.
     const groupMove = Game.groupSpeedMatch && chosen.length > 1 && !queue && groupSpeed < Infinity && groupSpeed > 0;
+    const orderSerial = Game._moveOrderSerial = (Game._moveOrderSerial || 0) + 1;
+    let queuedAdded = 0;
+    let queuedRejected = 0;
 
     chosen.forEach((unit, i) => {
         const isQueued = queue && unit.path && unit.path.length > 0;
+        const previousTargetX = unit.targetX;
+        const previousTargetZ = unit.targetZ;
+        const previousMoveOrder = unit._lastMoveOrder;
+        if (!isQueued && Game.isTruck(unit.kind)) {
+            Game.cancelTruckManeuver(unit);
+        }
         // A move order cancels any standing attack/bombard/facing/enter commitment.
         // (A queued leg keeps the unit rolling, so don't yank these mid-route — but
         // it's still a relocate, so clearing them is harmless and consistent.)
@@ -149,15 +198,77 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
         const tz = t ? t.z : Game.clamp(wz, 1, Game.WORLD_H - 1);
         unit.targetX = tx;
         unit.targetZ = tz;
+        // Recorder context: preserve both the raw mouse click and this unit's
+        // assigned formation goal, plus the vehicle pose at the instant ordered.
+        // Per-frame samples can then explain a seemingly indirect route without
+        // guessing the intended destination from the remaining path.
+        unit._lastMoveOrder = {
+            id: orderSerial, t: Game.gameClock || 0, mode,
+            queue: isQueued ? 1 : 0,
+            clickX: wx, clickZ: wz,
+            startX: unit.x, startZ: unit.z, startA: unit.angle || 0,
+            goalX: tx, goalZ: tz,
+        };
         if (isQueued) {
-            // Append a leg from the current end of the route (skip the live detour
-            // waypoint if one is in front) so the unit visits waypoints in order.
-            const route = unit.path.filter(p => !p._detour);
-            const from = route.length ? route[route.length - 1] : { x: unit.x, z: unit.z };
-            const leg = Game.findPath(unit, from.x, from.z, tx, tz);
-            unit.path = route.concat(leg);
+            const queuedStop = { id: orderSerial, x: tx, z: tz };
+            if (Game.isTruck(unit.kind) && unit._reverseMove && unit._truckRecoveryGoal) {
+                // A collision/pre-flight reverse temporarily replaces the visible
+                // path with one short backup node. Shift waypoints belong after the
+                // saved player route, not after that temporary node; otherwise the
+                // recovery restore silently discards them.
+                const recovery = unit._truckRecoveryGoal;
+                recovery.stops = recovery.stops || [];
+                const from = recovery.stops[recovery.stops.length - 1]
+                    || { x: unit.x, z: unit.z, _pathAngle: unit.angle || 0 };
+                const before = recovery.stops.length > 1
+                    ? recovery.stops[recovery.stops.length - 2] : null;
+                const fromAngle = from._pathAngle ?? (before
+                    ? Math.atan2(from.z - before.z, from.x - before.x)
+                    : unit.angle || 0);
+                const validationLeg = Game.findPath(
+                    unit, from.x, from.z, tx, tz, fromAngle);
+                if (!validationLeg.length) {
+                    unit.targetX = previousTargetX;
+                    unit.targetZ = previousTargetZ;
+                    unit._lastMoveOrder = previousMoveOrder;
+                    queuedRejected++;
+                    return;
+                }
+                queuedStop._pathAngle = validationLeg[validationLeg.length - 1]._pathAngle
+                    ?? Math.atan2(tz - from.z, tx - from.x);
+                recovery.stops.push(queuedStop);
+                recovery.goal = { x: tx, z: tz };
+                queuedAdded++;
+            } else {
+                // Append a leg from the current end of the route (skip the live
+                // detour waypoint if one is in front) so stops remain ordered.
+                const route = unit.path.filter(p => !p._detour);
+                const from = route.length ? route[route.length - 1] : { x: unit.x, z: unit.z };
+                const before = route.length > 1 ? route[route.length - 2] : null;
+                const fromAngle = from._pathAngle ?? (before
+                    ? Math.atan2(from.z - before.z, from.x - before.x)
+                    : unit.angle || 0);
+                const leg = Game.findPath(unit, from.x, from.z, tx, tz, fromAngle);
+                if (!leg.length) {
+                    unit.targetX = previousTargetX;
+                    unit.targetZ = previousTargetZ;
+                    unit._lastMoveOrder = previousMoveOrder;
+                    queuedRejected++;
+                    return;
+                }
+                leg[leg.length - 1]._orderStop = queuedStop;
+                unit.path = route.concat(leg);
+                queuedAdded++;
+            }
         } else {
             unit.path = Game.findPath(unit, unit.x, unit.z, tx, tz);
+            if (unit.path.length) unit.path[unit.path.length - 1]._orderStop = {
+                id: orderSerial, x: tx, z: tz,
+            };
+            if (queue) {
+                if (unit.path.length) queuedAdded++;
+                else { queuedRejected++; return; }
+            }
         }
         // Attack-move: advance to the area but stop to engage any enemy that comes
         // into range, then push on. A plain move is a RELOCATE order: obey it and
@@ -185,7 +296,10 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
         }
         // Reverse-into-spot: a plain Move to a SHORT distance BEHIND a vehicle backs
         // it in rather than swinging the whole hull around. Tanks + trucks only.
-        unit._reverseMove = false;
+        // A Shift click must not cancel a reverse already in progress. This is
+        // especially important for a recovery backup, whose saved route will be
+        // restored when the temporary reverse node completes.
+        if (!isQueued) unit._reverseMove = false;
         if (mode === 'move' && !isQueued
             && (Game.isTank(unit.kind) || Game.isTruck(unit.kind))) {
             const gAng = Math.atan2(tz - unit.z, tx - unit.x);
@@ -205,7 +319,14 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
                 // curved short path with a single direct segment to the exact point.
                 // The curve was making the lorry steer through extra lanes and never
                 // cleanly settle on the goal. A short reverse is a clear, direct back-up.
-                unit.path = [{ x: tx, z: tz }];
+                const reverseStop = unit.path[unit.path.length - 1]?._orderStop
+                    || { id: orderSerial, x: tx, z: tz };
+                unit.path = [{
+                    x: tx, z: tz,
+                    _pathAngle: unit.angle || 0,
+                    _orderStop: reverseStop,
+                    _endPlayerReverse: true,
+                }];
             }
         }
         // Combat readiness: a plain Move travels "weapons stowed" — the unit needs
@@ -221,7 +342,17 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
         // Pulsing destination marker: red attack-move, green move, cyan queued waypoint.
         Game.spawnOrderMarker(tx, tz, mode === 'attack' ? 0xff5544 : (isQueued ? 0x55ccff : 0x88cc66));
     });
-    Game.pushMessage(queue ? 'Waypoint added.' : (mode === 'attack' ? 'Attack-move ordered.' : 'Move ordered.'), 1.8);
+    if (queue) {
+        if (queuedAdded && queuedRejected) {
+            Game.pushMessage(`${queuedAdded} waypoint${queuedAdded === 1 ? '' : 's'} added; ${queuedRejected} had no clear route.`, 2.0);
+        } else if (queuedAdded) {
+            Game.pushMessage(queuedAdded === 1 ? 'Waypoint added.' : `${queuedAdded} waypoints added.`, 1.8);
+        } else {
+            Game.pushMessage('No clear route to that waypoint.', 1.8);
+        }
+    } else {
+        Game.pushMessage(mode === 'attack' ? 'Attack-move ordered.' : 'Move ordered.', 1.8);
+    }
     if (Game.Audio) {
         const anyTank = chosen.some(u => Game.isTank(u.kind));
         Game.Audio.voice(anyTank ? 'f_tank_move' : 'f_sold_move');
@@ -489,13 +620,14 @@ Game._clearFormationPreview = () => {
 
 Game._showFormationPreview = (wx, wz) => {
     Game._clearFormationPreview();
-    const chosen = Game.selectedPlayerUnits();
+    const attackMode = Game.orderStance === 'attack';
+    const chosen = Game.moveOrderParticipants(
+        Game.selectedPlayerUnits(), attackMode ? 'attack' : 'move');
     if (!chosen.length) return;
 
     const THREE = Game.THREE;
     // Red preview when attack-move is armed (advance + engage), green for a plain
     // move — matches the destination order-marker colours.
-    const attackMode = Game.orderStance === 'attack';
     const ringColor = attackMode ? 0xff5544 : 0x88cc66;
 
     // Draw one circle at EACH unit's actual assigned slot (same computation the move
@@ -533,6 +665,7 @@ Game.orderFace = (x, z) => {
     const chosen = Game.selectedPlayerUnits();
     if (!chosen.length) return;
     chosen.forEach(u => {
+        Game.cancelTruckManeuver(u);
         u._faceAngle = Game.angleTo(u.x, u.z, x, z);
         u._faceUntil = Game.gameClock + 4;     // hold the manual facing while it turns
         u.path = [];
@@ -553,6 +686,7 @@ Game.orderFace = (x, z) => {
 
 Game.haltSelection = () => {
     Game.selectedPlayerUnits().forEach(u => {
+        Game.cancelTruckManeuver(u);
         u.path = [];
         u.targetX = u.x;
         u.targetZ = u.z;
@@ -645,7 +779,13 @@ Game.handleMouseSelection = () => {
             && !u._garrisoned && u._inVehicle == null);
         if (enterInf.length) {
             const picked0 = Game.unitAtScreen && Game.unitAtScreen(mouse.dragCurrentX, mouse.dragCurrentY);
-            if (picked0 && picked0.team === Game.playerTeam && picked0.supportType === 'transport') {
+            // Once every selected soldier is already queued for this truck, a
+            // further left-click means "select the truck", not "enter" again.
+            // This lets the player move it while the pending passengers retain
+            // their carrier-relative order.
+            const hasNewPassenger = picked0 && enterInf.some(u => u._enterCarrierId !== picked0.id);
+            if (picked0 && picked0.team === Game.playerTeam
+                && picked0.supportType === 'transport' && hasNewPassenger) {
                 Game.orderEnterCarrier(picked0);
                 return;
             }
@@ -1177,7 +1317,10 @@ Game.handleInputEvents = () => {
                 const on = sel.some(u => u.orderMode !== 'hold');
                 sel.forEach(u => {
                     u.orderMode = on ? 'hold' : 'aggressive';
-                    if (on) { u.path = []; u.moving = false; }
+                    if (on) {
+                        Game.cancelTruckManeuver(u);
+                        u.path = []; u.moving = false;
+                    }
                 });
                 Game.pushMessage(on ? 'Standing ground.' : 'Free to maneuver.', 1.4);
             }
@@ -1213,6 +1356,7 @@ Game.handleInputEvents = () => {
         // Stop / cancel orders (V key)
         if (e.code === 'KeyV') {
             Game.selectedPlayerUnits().forEach(u => {
+                Game.cancelTruckManeuver(u);
                 u.path = [];
                 u.moving = false;
                 u.orderMode = 'hold';

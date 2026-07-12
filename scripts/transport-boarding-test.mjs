@@ -8,7 +8,7 @@ await page.waitForTimeout(2200);
 await page.evaluate(() => document.querySelector('#btnEnterGame')?.click());
 await page.waitForTimeout(400);
 await page.evaluate(() => document.querySelector('#btnStartMission')?.click());
-await page.waitForFunction(() => Game.units?.some(u => u.kind === 'transport'), undefined, { timeout: 60000 });
+await page.waitForFunction(() => Game.units?.some(u => u.kind === 'transport'), undefined, { timeout: 120000 });
 await page.waitForTimeout(2500);
 
 const result = await page.evaluate((testMode) => {
@@ -48,17 +48,62 @@ const result = await page.evaluate((testMode) => {
 
     const dt = 1 / 30;
     let movedTruck = false;
+    let boardingIntentKept = null;
+    let boarderOrdersUnchanged = null;
+    let boardingIntentHeldThroughout = true;
+    let passengersAtMove = null;
+    let cancelWorked = null;
+    let carrierStableFrames = 0;
+    const carrierStart = { x: carrier.x, z: carrier.z };
+    const movingGoal = { x: 59, z: 45 };
+    if (testMode === 'cancel') {
+        Game.selection.clear();
+        requested.forEach(u => Game.selection.add(u.id));
+        Game.issueCommand(30, 34, 'move');
+        Game.updateCarrierEntry(0);
+        cancelWorked = requested.every(u => u._enterCarrierId == null
+            && u._lastMoveOrder?.goalX != null)
+            && carrier._boardingQueue.length === 0;
+    }
     const stepLimit = atSpawn ? 1800 : 2400; // strict 60 simulated seconds at spawn
     let elapsed = 0;
     for (let step = 0; step < stepLimit; step++) {
         Game.gameClock += dt;
         elapsed += dt;
-        if (testMode === 'moving' && !movedTruck && step === 180) {
-            carrier.x += 3; carrier.z += 1.5; movedTruck = true;
+        if (testMode === 'cancel') break;
+        if (testMode === 'moving' && !movedTruck && step === 1) {
+            // Reproduce the actual player interaction: the pending infantry are
+            // still selected, the transport joins that selection, and the shared
+            // selection receives a real ground move. The infantry must retain
+            // their carrier order while only the truck accepts the destination.
+            const priorOrders = requested.map(u => u._lastMoveOrder?.id ?? null);
+            Game.selection.clear();
+            requested.forEach(u => Game.selection.add(u.id));
+            Game.selection.add(carrier.id);
+            passengersAtMove = carrier._passengers.length;
+            Game.issueCommand(movingGoal.x, movingGoal.z, 'move');
+            boardingIntentKept = requested.every(u => u._enterCarrierId === carrier.id
+                && carrier._boardingQueue.includes(u.id));
+            boarderOrdersUnchanged = requested.every((u, i) =>
+                (u._lastMoveOrder?.id ?? null) === priorOrders[i]);
+            movedTruck = true;
         }
+        if (testMode === 'moving') Game.updateUnit(carrier, dt);
         requested.forEach(u => { if (u._inVehicle == null) Game.updateUnit(u, dt); });
         Game.updateTowing(dt);
-        if ((carrier._passengers || []).length === requested.length) break;
+        if (testMode === 'moving' && movedTruck) {
+            boardingIntentHeldThroughout &&= requested.every(u => u._inVehicle === carrier.id
+                || (u._enterCarrierId === carrier.id && carrier._boardingQueue.includes(u.id)));
+            if ((!carrier.path || !carrier.path.length) && (carrier.currentSpeed || 0) <= 0.08) {
+                carrierStableFrames++;
+            } else {
+                carrierStableFrames = 0;
+            }
+        }
+        const allBoarded = (carrier._passengers || []).length === requested.length;
+        const truckSettled = testMode !== 'moving'
+            || (movedTruck && carrierStableFrames >= 15);
+        if (allBoarded && truckSettled) break;
     }
     const firstBoarded = (carrier._passengers || []).length;
     if (testMode === 'reboard' && firstBoarded === requested.length) {
@@ -97,6 +142,16 @@ const result = await page.evaluate((testMode) => {
         unloadVisible: !!unload && getComputedStyle(unload).display !== 'none',
         unloadBadge: document.getElementById('unloadBadge')?.textContent || '',
         unloadReached,
+        boardingIntentKept,
+        boarderOrdersUnchanged,
+        boardingIntentHeldThroughout,
+        passengersAtMove,
+        cancelWorked,
+        carrierTravel: +Game.dist(carrierStart.x, carrierStart.z, carrier.x, carrier.z).toFixed(2),
+        carrierRemaining: testMode === 'moving'
+            ? +Game.dist(carrier.x, carrier.z, movingGoal.x, movingGoal.z).toFixed(2) : null,
+        carrierSettled: testMode === 'moving'
+            ? carrierStableFrames >= 15 : null,
         queue: [...(carrier._boardingQueue || [])],
         troops: requested.map(u => ({
             id: u.id, inVehicle: u._inVehicle, enterCarrier: u._enterCarrierId,
@@ -116,6 +171,13 @@ const result = await page.evaluate((testMode) => {
 console.log(JSON.stringify(result, null, 2));
 await browser.close();
 const unloadMode = result.mode === 'unload-target';
-if (unloadMode ? result.unloadReached !== result.requested
-    : (result.boarded !== result.requested || !result.unloadVisible
-        || result.unloadBadge !== String(result.boarded))) process.exit(2);
+const cancelMode = result.mode === 'cancel';
+const boardingFailed = result.boarded !== result.requested || !result.unloadVisible
+    || result.unloadBadge !== String(result.boarded);
+const movingFailed = result.mode === 'moving' && (!result.boardingIntentKept
+    || !result.boarderOrdersUnchanged || !result.boardingIntentHeldThroughout
+    || result.passengersAtMove !== 0 || result.carrierTravel < 8
+    || result.carrierRemaining > 1.65 || !result.carrierSettled);
+if (cancelMode ? !result.cancelWorked
+    : (unloadMode ? result.unloadReached !== result.requested
+        : (boardingFailed || movingFailed))) process.exit(2);

@@ -4,22 +4,45 @@
  * Operates on tile grid, returns world coordinates (x, z).
  */
 
-Game.heuristic = (a, b) => Math.abs(a.tx - b.tx) + Math.abs(a.ty - b.ty);
+Game.heuristic = (a, b) => {
+    const dx = Math.abs(a.tx - b.tx), dy = Math.abs(a.ty - b.ty);
+    // Roads cost 0.75, so scale octile distance by the cheapest possible tile.
+    // An overestimating heuristic was preferring early, awkward routes.
+    return 0.75 * (Math.max(dx, dy) + 0.41421356 * Math.min(dx, dy));
+};
 
-Game.tileCost = (unit, tx, ty) => {
+Game.tileCost = (unit, tx, ty, angle = unit.angle || 0, obstacleCtx = null) => {
     const tile = Game.getTile(tx, ty);
     if (!tile || tile.blocked) return Infinity;
     // Dynamic obstacles: tiles under PARKED vehicles (baked per-search by
     // findPath) carry a heavy surcharge, so a re-plan routes AROUND a hull
     // sitting on the way. A surcharge, not Infinity: a boxed-in unit still
     // gets a best-effort path (local avoidance + solid hulls own the truth).
-    const dyn = (Game._dynObs && Game._dynObs.has(tx + ',' + ty)) ? 14 : 0;
-    const isVeh = Game.isTank(unit.kind);
+    const dyn = (obstacleCtx && obstacleCtx.tiles.has(tx + ',' + ty)) ? 14 : 0;
+    const isVeh = Game.isTank(unit.kind) || Game.isTruck(unit.kind);
     if (isVeh) {
         // Tanks CRUSH through dense forest (clearing trees) rather than route around
         // it — a low cost so A* takes the direct line through the woods, and the
         // foliage knock-down flattens the saplings as the hull passes.
-        if (tile.type === 'dense_forest') return 1.8 + dyn;
+        const p = Game.worldFromTile(tx, ty);
+        // Configuration-space test: the complete oriented body must fit at this
+        // node, with clearance from terrain and every parked vehicle. A centre
+        // point on a legal tile is not enough for a 3.6u-long truck.
+        if (Game._bodySolidCount && Game._bodySolidCount(unit, p.x, p.z, angle) > 0) return Infinity;
+        if (obstacleCtx && Game._vehicleOBB && Game._obbPenetration) {
+            const bodies = Game._vehicleCollisionOBBs
+                ? Game._vehicleCollisionOBBs(unit, p.x, p.z, angle)
+                : [Game._vehicleOBB(unit, p.x, p.z, angle)];
+            for (const other of obstacleCtx.vehicles) {
+                const otherBodies = Game._vehicleCollisionOBBs
+                    ? Game._vehicleCollisionOBBs(other)
+                    : [Game._vehicleOBB(other)];
+                for (const body of bodies) for (const otherBody of otherBodies) {
+                    if (Game._obbPenetration(body, otherBody, 0.20)) return Infinity;
+                }
+            }
+        }
+        if (tile.type === 'dense_forest') return 1.8;
         if (tile.vehicleBlocked) return Infinity;     // any genuinely impassable veh terrain
         let cost = tile.move;
         if (tile.type === 'forest' || tile.type === 'hedge') cost += 0.8;
@@ -32,129 +55,215 @@ Game.tileCost = (unit, tx, ty) => {
             const nt = Game.getTile(tx + (k === 0 ? 1 : k === 1 ? -1 : 0), ty + (k === 2 ? 1 : k === 3 ? -1 : 0));
             if (nt && nt.blocked && (nt.type === 'house' || nt.type === 'wall')) { cost += 6; break; }
         }
-        return cost + dyn;
+        return cost;
     }
     return tile.move + dyn;
 };
 
 /**
- * Bake the footprints of PARKED vehicles (everyone except the pathing unit)
- * into a tile set consulted by tileCost for the duration of one A* search.
+ * Snapshot the footprints of PARKED vehicles (everyone except the pathing unit)
+ * for one synchronous A* search. The context is passed explicitly; leaking a
+ * global snapshot caused later units to route with another unit's exclusions.
  * Moving vehicles are deliberately NOT baked — they'll be gone by the time the
  * route is walked, and the local layers (yield, crossing-prediction, planner,
  * solid hulls) handle live traffic.
  */
 Game._buildDynObstacles = (unit) => {
     const set = new Set();
+    const vehicles = [];
     const T = Game.TILE;
     for (const o of Game.units) {
         if (!o.alive || o.id === unit.id) continue;
         if (unit._enterCarrierId === o.id) continue; // the assigned tailgate is a destination, not an obstacle
         if (!(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
-        if ((o.currentSpeed || 0) > 0.15 || (o.path && o.path.length)) continue;   // moving: not baked
-        const r = o.size * (Game.TANK_BOX_LEN || 1.5) * 0.9;
-        const tx0 = Math.floor((o.x - r) / T), tx1 = Math.floor((o.x + r) / T);
-        const ty0 = Math.floor((o.z - r) / T), ty1 = Math.floor((o.z + r) / T);
-        for (let ty = ty0; ty <= ty1; ty++) {
-            for (let tx = tx0; tx <= tx1; tx++) set.add(tx + ',' + ty);
+        // A freshly ordered group-mate has not accelerated yet but is about to
+        // leave; baking it as a wall makes later members route around the whole
+        // formation. A genuinely stalled/pathless hull remains an obstacle.
+        const leavingNow = o.moving && o.path && o.path.length
+            && (o.stopTimer || 0) <= 0 && (o._stuckT || 0) < 0.4;
+        if ((o.currentSpeed || 0) > 0.15 || leavingNow) continue;
+        vehicles.push(o);
+        const bodies = Game._vehicleCollisionOBBs
+            ? Game._vehicleCollisionOBBs(o)
+            : [Game._vehicleOBB(o)];
+        for (const body of bodies) {
+            const rx = Math.abs(body.fx) * body.hl + Math.abs(body.rx) * body.hw + 0.4;
+            const rz = Math.abs(body.fz) * body.hl + Math.abs(body.rz) * body.hw + 0.4;
+            const tx0 = Math.floor((body.x - rx) / T), tx1 = Math.floor((body.x + rx) / T);
+            const ty0 = Math.floor((body.z - rz) / T), ty1 = Math.floor((body.z + rz) / T);
+            for (let ty = ty0; ty <= ty1; ty++) {
+                for (let tx = tx0; tx <= tx1; tx++) set.add(tx + ',' + ty);
+            }
         }
     }
-    Game._dynObs = set;
+    return { tiles: set, vehicles };
 };
 
-Game.findPath = (unit, startX, startZ, endX, endZ) => {
-    if (Game._buildDynObstacles) Game._buildDynObstacles(unit);
+Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0) => {
+    const obstacleCtx = Game._buildDynObstacles(unit);
     const start = Game.tileAtWorld(startX, startZ);
-    const end = Game.tileAtWorld(endX, endZ);
-    if (Game.isBlocked(end.tx, end.ty)) {
-        let found = null;
-        for (let radius = 1; radius <= 4 && !found; radius++) {
+    const requestedEnd = Game.tileAtWorld(endX, endZ);
+    const end = { tx: requestedEnd.tx, ty: requestedEnd.ty };
+    const isVeh = Game.isTank(unit.kind) || Game.isTruck(unit.kind);
+    const dirs = [
+        { dx: 1, dy: 0, a: 0 },
+        { dx: 1, dy: 1, a: Math.PI / 4 },
+        { dx: 0, dy: 1, a: Math.PI / 2 },
+        { dx: -1, dy: 1, a: Math.PI * 3 / 4 },
+        { dx: -1, dy: 0, a: Math.PI },
+        { dx: -1, dy: -1, a: -Math.PI * 3 / 4 },
+        { dx: 0, dy: -1, a: -Math.PI / 2 },
+        { dx: 1, dy: -1, a: -Math.PI / 4 },
+    ];
+    const nearestDir = (angle) => {
+        let best = 0, bd = Infinity;
+        for (let i = 0; i < dirs.length; i++) {
+            const d = Math.abs(Game.angleDiff(angle, dirs[i].a));
+            if (d < bd) { bd = d; best = i; }
+        }
+        return best;
+    };
+    const endFits = (tx, ty) => isVeh
+        ? dirs.some(d => isFinite(Game.tileCost(unit, tx, ty, d.a, obstacleCtx)))
+        : !Game.isBlocked(tx, ty);
+    if (!endFits(end.tx, end.ty)) {
+        let found = null, bestD = Infinity;
+        for (let radius = 1; radius <= 6 && !found; radius++) {
             for (let dy = -radius; dy <= radius; dy++) {
                 for (let dx = -radius; dx <= radius; dx++) {
                     const tx = end.tx + dx, ty = end.ty + dy;
-                    if (!Game.isBlocked(tx, ty)) { found = { tx, ty }; break; }
+                    if (!endFits(tx, ty)) continue;
+                    const d = dx * dx + dy * dy;
+                    if (d < bestD) { bestD = d; found = { tx, ty }; }
                 }
-                if (found) break;
             }
         }
-        if (found) { end.tx = found.tx; end.ty = found.ty; }
-        else return [];
+        if (!found) return [];
+        end.tx = found.tx; end.ty = found.ty;
     }
 
-    // Binary min-heap open set + lazy duplicates (cheap decrease-key). A plain
-    // sorted array is fine on a 100x100 grid but pathological on the larger
-    // GLB-map grid, where cross-map orders expand many nodes.
+    // Binary heap with lazy decrease-key. Vehicle states include incoming
+    // heading: the same tile approached north/south is not the same physical
+    // configuration for a long rectangular hull.
     const heap = [];
     const hpush = (n) => {
         heap.push(n); let i = heap.length - 1;
-        while (i > 0) { const p = (i - 1) >> 1; if (heap[p].f <= heap[i].f) break; const t = heap[p]; heap[p] = heap[i]; heap[i] = t; i = p; }
+        while (i > 0) {
+            const p = (i - 1) >> 1;
+            if (heap[p].f <= heap[i].f) break;
+            [heap[p], heap[i]] = [heap[i], heap[p]]; i = p;
+        }
     };
     const hpop = () => {
         const top = heap[0], last = heap.pop();
         if (heap.length) {
-            heap[0] = last; let i = 0; const n = heap.length;
-            for (; ;) { let s = i; const l = 2 * i + 1, r = 2 * i + 2; if (l < n && heap[l].f < heap[s].f) s = l; if (r < n && heap[r].f < heap[s].f) s = r; if (s === i) break; const t = heap[s]; heap[s] = heap[i]; heap[i] = t; i = s; }
+            heap[0] = last; let i = 0;
+            for (;;) {
+                let s = i, l = i * 2 + 1, r = l + 1;
+                if (l < heap.length && heap[l].f < heap[s].f) s = l;
+                if (r < heap.length && heap[r].f < heap[s].f) s = r;
+                if (s === i) break;
+                [heap[s], heap[i]] = [heap[i], heap[s]]; i = s;
+            }
         }
         return top;
     };
-    const gScore = new Map();
+    const keyFor = (tx, ty, dir) => isVeh ? `${tx},${ty},${dir}` : `${tx},${ty}`;
+    const startDir = nearestDir(startAngle);
+    const node = {
+        tx: start.tx, ty: start.ty, dir: startDir, angle: startAngle,
+        wx: startX, wz: startZ, g: 0, h: Game.heuristic(start, end), f: 0, parent: null,
+    };
+    node.f = node.h;
+    const gScore = new Map([[keyFor(start.tx, start.ty, startDir), 0]]);
     const closed = new Set();
-
-    const startKey = `${start.tx},${start.ty}`;
-    const node = { tx: start.tx, ty: start.ty, g: 0, h: Game.heuristic(start, end), f: 0, parent: null };
-    node.f = node.g + node.h;
     hpush(node);
-    gScore.set(startKey, 0);
 
-    const dirs = [
-        [1, 0], [-1, 0], [0, 1], [0, -1],
-        [1, 1], [1, -1], [-1, 1], [-1, -1]
-    ];
-
-    let best = node;
-    let safety = 0;
-    const maxNodes = Game.MAP_COLS * Game.MAP_ROWS;   // full-grid ceiling (heap keeps this fast)
-    while (heap.length && safety++ < maxNodes) {
+    let best = node, reached = null, expanded = 0;
+    const maxNodes = Game.MAP_COLS * Game.MAP_ROWS * (isVeh ? 8 : 1);
+    while (heap.length && expanded < maxNodes) {
         const current = hpop();
-        const currentKey = `${current.tx},${current.ty}`;
-        if (closed.has(currentKey)) continue;   // stale heap duplicate
-        closed.add(currentKey);
+        const currentKey = keyFor(current.tx, current.ty, current.dir);
+        if (closed.has(currentKey)) continue;
+        closed.add(currentKey); expanded++;
         if (current.h < best.h) best = current;
-        if (current.tx === end.tx && current.ty === end.ty) { best = current; break; }
+        if (current.tx === end.tx && current.ty === end.ty) { reached = current; break; }
 
-        for (const [dx, dy] of dirs) {
+        for (let dir = 0; dir < dirs.length; dir++) {
+            const { dx, dy, a: moveAngle } = dirs[dir];
+            // A wheeled lorry cannot reverse its steering direction by 135-180°
+            // inside one three-unit grid edge. Its first edge may face anywhere
+            // (the short reverse/three-point-turn layer handles that), but later
+            // path states must remain forward-feasible.
+            if (Game.isTruck(unit.kind) && current.parent
+                && Math.abs(Game.angleDiff(current.angle, moveAngle)) > Math.PI / 2 + 1e-4) continue;
             const ntx = current.tx + dx, nty = current.ty + dy;
-            const nkey = `${ntx},${nty}`;
+            const nkey = keyFor(ntx, nty, dir);
             if (closed.has(nkey)) continue;
-            const cost = Game.tileCost(unit, ntx, nty);
+            const cost = Game.tileCost(unit, ntx, nty, moveAngle, obstacleCtx);
             if (!isFinite(cost)) continue;
-            // NO DIAGONAL CORNER-CUTTING: a diagonal step is legal only when
-            // BOTH orthogonal neighbours are passable too. Stepping diagonally
-            // past a house/wall corner produced path segments that shaved
-            // through the building's corner — "waypoints don't avoid buildings".
-            if (dx !== 0 && dy !== 0
-                && (!isFinite(Game.tileCost(unit, current.tx + dx, current.ty))
-                    || !isFinite(Game.tileCost(unit, current.tx, current.ty + dy)))) continue;
-            const diag = (dx !== 0 && dy !== 0) ? 1.4 : 1.0;
-            const ng = current.g + cost * diag;
-            const prev = gScore.get(nkey);
-            if (prev === undefined || ng < prev) {
-                gScore.set(nkey, ng);
-                const h = Game.heuristic({ tx: ntx, ty: nty }, end);
-                hpush({ tx: ntx, ty: nty, g: ng, h, f: ng + h, parent: current });
+            if (isVeh) {
+                const from = current.parent
+                    ? Game.worldFromTile(current.tx, current.ty)
+                    : { x: startX, z: startZ };
+                const to = Game.worldFromTile(ntx, nty);
+                if (!Game.segmentPassable(unit, from.x, from.z, to.x, to.z, {
+                    startAngle: current.angle,
+                    endAngle: moveAngle,
+                    obstacleCtx,
+                    margin: 0.20,
+                })) continue;
+            } else if (dx !== 0 && dy !== 0
+                && (Game.isBlocked(current.tx + dx, current.ty)
+                    || Game.isBlocked(current.tx, current.ty + dy))) {
+                continue;
             }
+            const diag = dx !== 0 && dy !== 0 ? Math.SQRT2 : 1;
+            const turn = isVeh
+                ? Math.abs(Game.angleDiff(current.angle, moveAngle)) / (Math.PI / 4) * 0.22
+                : 0;
+            const ng = current.g + cost * diag + turn;
+            if (ng >= (gScore.get(nkey) ?? Infinity)) continue;
+            gScore.set(nkey, ng);
+            const h = Game.heuristic({ tx: ntx, ty: nty }, end);
+            hpush({
+                tx: ntx, ty: nty, dir, angle: moveAngle,
+                g: ng, h, f: ng + h, parent: current,
+            });
         }
     }
 
+    // A partial vehicle route is unsafe: callers would treat it as successful
+    // and drive/circle at an arbitrary closest tile. Infantry retain historical
+    // best-effort behaviour for orders into inaccessible cover.
+    const finish = reached || (!isVeh ? best : null);
+    if (!finish) return [];
     const path = [];
-    let cur = best;
-    while (cur) {
+    for (let cur = finish; cur && cur.parent; cur = cur.parent) {
         const wp = Game.worldFromTile(cur.tx, cur.ty);
-        path.push({ x: wp.x, z: wp.z });
-        cur = cur.parent;
+        path.push({ x: wp.x, z: wp.z, _pathAngle: cur.angle });
     }
     path.reverse();
-    if (path.length > 1) path.shift();
+
+    if (isVeh) {
+        // Preserve the precise click only when the complete hull and its heading
+        // transition fit all the way from the last grid configuration.
+        const last = path[path.length - 1] || { x: startX, z: startZ, _pathAngle: startAngle };
+        const finalAngle = Math.atan2(endZ - last.z, endX - last.x);
+        if (Game.segmentPassable(unit, last.x, last.z, endX, endZ, {
+            startAngle: last._pathAngle ?? finalAngle,
+            endAngle: finalAngle,
+            obstacleCtx,
+            margin: 0.20,
+        })) {
+            if (Game.dist(last.x, last.z, endX, endZ) > 0.05) {
+                path.push({ x: endX, z: endZ, _exactGoal: true, _pathAngle: finalAngle });
+            } else {
+                last.x = endX; last.z = endZ; last._exactGoal = true;
+            }
+        }
+        return Game.smoothVehiclePath(unit, startX, startZ, path, obstacleCtx, startAngle);
+    }
     return path;
 };
 
@@ -163,16 +272,126 @@ Game.findPath = (unit, startX, startZ, endX, endZ) => {
  * can traverse. Used by path smoothing and any code that fabricates a shortcut
  * waypoint, so a straightened line never clips through a building or wall.
  */
-Game.segmentPassable = (unit, ax, az, bx, bz) => {
-    const isVeh = Game.isTank(unit.kind);
-    const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az)));
-    for (let i = 1; i <= steps; i++) {
+Game.segmentPassable = (unit, ax, az, bx, bz, options = null) => {
+    const isVeh = Game.isTank(unit.kind) || Game.isTruck(unit.kind);
+    const length = Math.hypot(bx - ax, bz - az);
+    const travelAngle = length > 0.001 ? Math.atan2(bz - az, bx - ax) : (unit.angle || 0);
+    if (!isVeh) {
+        const steps = Math.max(1, Math.ceil(length));
+        for (let i = 1; i <= steps; i++) {
+            const t = i / steps;
+            const tile = Game.getTileAtWorld(ax + (bx - ax) * t, az + (bz - az) * t);
+            if (!tile || tile.blocked) return false;
+        }
+        return true;
+    }
+
+    const opts = options || {};
+    const obstacleCtx = opts.obstacleCtx || Game._buildDynObstacles(unit);
+    const startAngle = opts.startAngle ?? travelAngle;
+    const endAngle = opts.endAngle ?? travelAngle;
+    const da = Game.angleDiff(startAngle, endAngle);
+    const ext = Game._vehicleHalfExtents(unit);
+    const sweptDistance = Math.max(length, Math.hypot(ext.hl, ext.hw) * Math.abs(da));
+    const steps = Math.max(1, Math.ceil(sweptDistance / 0.25));
+    let margin = opts.margin ?? 0.30;
+    if (Game.isTruck(unit.kind) && Math.abs(da) > 0.01) {
+        // A straight chord understates the space a bicycle-model lorry consumes
+        // while steering onto it. Add the capped lateral sagitta of its minimum
+        // turn circle around parked OBBs. Capping it keeps this realistic
+        // without making ordinary rotated/gate routes needlessly impossible.
+        const modelScale = (Game.MODEL_SCALE
+            && Game.MODEL_SCALE[unit.team + '_' + unit.kind]) || 1;
+        const wheelbase = Math.max(0.8,
+            (unit.size || 0.85) * (Game.TRUCK_WHEELBASE ?? 1.7) * modelScale);
+        const maxSteer = Game.TRUCK_MAX_STEER ?? 0.5;
+        const turnRadius = wheelbase / Math.max(0.1, Math.tan(maxSteer));
+        const turn = Math.min(Math.abs(da), Math.PI / 2);
+        const turnEnvelope = Math.min(0.80, turnRadius * (1 - Math.cos(turn)));
+        margin = Math.max(margin, 0.20 + turnEnvelope);
+    }
+
+    let lastSolid = Game._bodySolidCount(unit, ax, az, startAngle);
+    let terrainCleared = lastSolid === 0;
+    const lastPen = new Map(), cleared = new Set();
+    const penetrationAgainst = (bodies, other) => {
+        const otherBodies = Game._vehicleCollisionOBBs
+            ? Game._vehicleCollisionOBBs(other)
+            : [Game._vehicleOBB(other)];
+        let deepest = null;
+        for (const body of bodies) for (const otherBody of otherBodies) {
+            const p = Game._obbPenetration(body, otherBody, margin);
+            if (p && (!deepest || p.depth > deepest.depth)) deepest = p;
+        }
+        return deepest;
+    };
+    const startBodies = Game._vehicleCollisionOBBs
+        ? Game._vehicleCollisionOBBs(unit, ax, az, startAngle)
+        : [Game._vehicleOBB(unit, ax, az, startAngle)];
+    for (const other of obstacleCtx.vehicles) {
+        const p = penetrationAgainst(startBodies, other);
+        if (p) lastPen.set(other.id, p.depth);
+        else cleared.add(other.id);
+    }
+
+    for (let i = 0; i <= steps; i++) {
         const t = i / steps;
-        const tile = Game.getTileAtWorld(ax + (bx - ax) * t, az + (bz - az) * t);
-        if (!tile || tile.blocked) return false;
-        if (isVeh && tile.vehicleBlocked && tile.type !== 'dense_forest') return false;
+        const x = ax + (bx - ax) * t, z = az + (bz - az) * t;
+        const angle = startAngle + da * t;
+        const solid = Game._bodySolidCount(unit, x, z, angle);
+        if ((terrainCleared && solid > 0) || (!terrainCleared && solid > lastSolid)) return false;
+        if (solid === 0) terrainCleared = true;
+        lastSolid = solid;
+
+        const bodies = Game._vehicleCollisionOBBs
+            ? Game._vehicleCollisionOBBs(unit, x, z, angle)
+            : [Game._vehicleOBB(unit, x, z, angle)];
+        for (const other of obstacleCtx.vehicles) {
+            const p = penetrationAgainst(bodies, other);
+            if (!p) { cleared.add(other.id); lastPen.delete(other.id); continue; }
+            if (i === 0) continue;
+            const prev = lastPen.get(other.id);
+            if (cleared.has(other.id) || prev == null || p.depth > prev + 1e-4) return false;
+            lastPen.set(other.id, p.depth);
+            if (p.depth <= 1e-4) cleared.add(other.id);
+        }
     }
     return true;
+};
+
+// Farthest-visible string pulling where visibility means a swept, full-width
+// oriented corridor. Every retained edge is independently valid; if even the
+// immediate graph edge is no longer valid, return no route instead of silently
+// reinstating the unsafe segment.
+Game.smoothVehiclePath = (unit, startX, startZ, route, obstacleCtx = null, startAngle = unit.angle || 0) => {
+    if (!route || !route.length) return [];
+    const ctx = obstacleCtx || Game._buildDynObstacles(unit);
+    // The heading-state A* chain was already validated edge by edge. Preserve an
+    // untouched fallback: a greedy far shortcut can be clear itself yet leave an
+    // impossible heading for the following edge; that must not erase the order.
+    const fallback = route.map(wp => ({ ...wp }));
+    const out = [];
+    let ax = startX, az = startZ, heading = startAngle, i = 0;
+    while (i < route.length) {
+        let chosen = -1, chosenAngle = heading;
+        for (let j = route.length - 1; j >= i; j--) {
+            const angle = Math.atan2(route[j].z - az, route[j].x - ax);
+            if (Game.segmentPassable(unit, ax, az, route[j].x, route[j].z, {
+                startAngle: heading,
+                endAngle: angle,
+                obstacleCtx: ctx,
+                margin: 0.20,
+            })) {
+                chosen = j; chosenAngle = angle; break;
+            }
+        }
+        if (chosen < 0) return fallback;
+        const wp = { ...route[chosen], _pathAngle: chosenAngle };
+        out.push(wp);
+        ax = wp.x; az = wp.z; heading = chosenAngle;
+        i = chosen + 1;
+    }
+    return out;
 };
 
 Game.lineOfSight = (a, b) => {

@@ -220,9 +220,10 @@ Game.syncUnitMeshes = (dt) => {
             unit.mesh.userData.selectionRing.visible = Game.selection.has(unit.id);
         }
 
-        // Debug: tank collision-boundary BOX (the rectangular hull footprint used by
-        // the physics), aligned to the hull and sized to TANK_BOX_LEN/WID × size.
-        if (Game.isTank(unit.kind)) {
+        // Debug: exact collision OBB for every vehicle hull. The outline uses the
+        // same per-kind half-extents as collision/pathing, so a truck's visible
+        // corners can be compared with physics just as directly as a tank's.
+        if (Game.isTank(unit.kind) || Game.isTruck(unit.kind)) {
             let cr = unit.mesh.userData.collisionRing;
             if (Game._showTankRings) {
                 if (!cr) {
@@ -240,8 +241,8 @@ Game.syncUnitMeshes = (dt) => {
                     unit.mesh.add(cr);
                     unit.mesh.userData.collisionRing = cr;
                 }
-                const sz = unit.size || 0.8;
-                cr.scale.set(sz * (Game.TANK_BOX_WID || 1.0) * 2, sz * (Game.TANK_BOX_LEN || 1.5) * 2, 1);
+                const ext = Game._vehicleHalfExtents(unit);
+                cr.scale.set(ext.hw * 2, ext.hl * 2, 1);
                 cr.visible = true;
             } else if (cr) {
                 cr.visible = false;
@@ -1381,9 +1382,10 @@ Game._applyInfantryPose = (unit, dt) => {
     rig.kneeR.rotation.x = p.kneeR;
 };
 
-// Debug: draw every unit's movement path as a coloured line from the unit through
-// its remaining waypoints (armor cyan, infantry green, others amber). Lets you SEE
-// the routes — overlapping lines mean two units are heading through the same point.
+// Debug: draw every unit's movement path from the unit through its remaining
+// waypoints (armor cyan, infantry green, others amber). Vehicles additionally
+// show the exact full-width corridor as two parallel boundaries with crossbars;
+// the bright centreline and goal cross stay visible for route/arrival clarity.
 Game._updatePathLines = () => {
     const TH = Game.THREE;
     let pl = Game._pathLineObj;
@@ -1393,17 +1395,40 @@ Game._updatePathLines = () => {
         if (!u.alive || !u.path || !u.path.length) continue;
         const y = (u.y || 0) + 0.25;
         let px = u.x, pz = u.z;
+        const isVehicle = Game.isTank(u.kind) || Game.isTruck(u.kind);
+        const ext = isVehicle ? Game._vehicleHalfExtents(u) : null;
         const c = Game.isTank(u.kind) ? [0.25, 0.9, 1.0]
             : (u.class === 'infantry' ? [0.35, 1.0, 0.45] : [1.0, 0.7, 0.2]);
+        const edge = [c[0] * 0.62, c[1] * 0.62, c[2] * 0.62];
+        const addSegment = (ax, az, bx, bz, color) => {
+            pts.push(ax, y, az, bx, y, bz);
+            cols.push(color[0], color[1], color[2], color[0], color[1], color[2]);
+        };
         for (const wp of u.path) {
-            pts.push(px, y, pz, wp.x, y, wp.z);
-            cols.push(c[0], c[1], c[2], c[0], c[1], c[2]);
+            // Bright route centreline.
+            addSegment(px, pz, wp.x, wp.z, c);
+
+            if (ext) {
+                const dx = wp.x - px, dz = wp.z - pz;
+                const len = Math.hypot(dx, dz);
+                if (len > 0.001) {
+                    // Route-normal offset. Boundary separation is exactly the
+                    // physical body width (2 * half-width), not a cosmetic stroke.
+                    const ox = -dz / len * ext.hw;
+                    const oz = dx / len * ext.hw;
+                    addSegment(px + ox, pz + oz, wp.x + ox, wp.z + oz, edge);
+                    addSegment(px - ox, pz - oz, wp.x - ox, wp.z - oz, edge);
+                    addSegment(px - ox, pz - oz, px + ox, pz + oz, edge);
+                    addSegment(wp.x - ox, wp.z - oz, wp.x + ox, wp.z + oz, edge);
+                }
+            }
             px = wp.x; pz = wp.z;
         }
         // a small marker spoke at the final destination
         const g = u.path[u.path.length - 1];
-        pts.push(g.x - 0.4, y, g.z, g.x + 0.4, y, g.z, g.x, y, g.z - 0.4, g.x, y, g.z + 0.4);
-        for (let k = 0; k < 4; k++) cols.push(c[0], c[1], c[2]);
+        const goalR = ext ? Math.max(0.4, Math.min(ext.hw, 0.9)) : 0.4;
+        addSegment(g.x - goalR, g.z, g.x + goalR, g.z, c);
+        addSegment(g.x, g.z - goalR, g.x, g.z + goalR, c);
     }
     if (!pl) {
         const geo = new TH.BufferGeometry();

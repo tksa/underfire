@@ -70,17 +70,133 @@ Game.TANK_SEP_STRENGTH = 4.0;     // de-overlap push strength
 Game.TANK_SEP_GAP = 0.25;         // extra clearance between hulls
 Game._showTankRings = false;      // debug: draw each tank's collision boundary
 Game._showPaths = false;          // debug: draw every unit's movement path as a line
-Game.tankDebugDefaults = { tankSepRadius: 1.3, tankSepStrength: 4.0, tankRings: 0, truckMaxSteer: 0.5, truckWheelbase: 3.2, truckAccel: 0.6 };
+Game.tankDebugDefaults = { tankSepRadius: 1.3, tankSepStrength: 4.0, tankRings: 0, truckMaxSteer: 0.5, truckWheelbase: 1.7, truckAccel: 0.6 };
 // Truck (wheeled) steering tunables — read in the bicycle-model branch of uMod.move.
 Game.TRUCK_MAX_STEER = 0.5;     // max wheel angle (rad); smaller = wider arc
-Game.TRUCK_WHEELBASE = 3.2;     // × unit.size; larger = bigger turn radius (slower turn)
+Game.TRUCK_WHEELBASE = 1.7;     // × unit.size/model scale; ~3u axle span on the Renault
 Game.TRUCK_ACCEL = 0.6;         // accel fraction of max speed per second
+Game.TRUCK_ORDER_STOP_RADIUS = 2.25; // centre capture for player Shift waypoints
 
 // A tank's collision footprint is a RECTANGLE aligned to the hull (longer than it
 // is wide), sized just outside the model — not a round bubble. Half-extents are
 // unit.size × these multipliers; +y is forward (length), +x is across (width).
 Game.TANK_BOX_LEN = 1.5;        // half-length along the hull (× size)
 Game.TANK_BOX_WID = 1.0;        // half-width across the hull (× size)
+
+// Physical body dimensions in world units. These match the visible hull/body,
+// not gun barrels, mirrors, or selection circles. Trucks previously rendered at
+// ~3.4-3.6u long but collided as a 2.55u body, so their visible corners could be
+// well inside a tank before the old three-disc test noticed anything.
+Game.VEHICLE_FOOTPRINTS = {
+    // Team/model-specific procedural fallbacks.
+    german_supply_truck: { length: 2.21, width: 1.05 },
+    german_fuel_truck:   { length: 2.21, width: 1.05 },
+    german_panzer1:      { length: 2.03, width: 1.58 },
+    german_panzer2:      { length: 2.44, width: 1.89 },
+    german_panzer4:      { length: 2.71, width: 2.10 },
+    german_sdkfz:        { length: 2.30, width: 1.46 },
+
+    // Kind fallbacks and current French/modelled bodies.
+    transport: { length: 3.60, width: 1.65 },
+    supply:    { length: 3.60, width: 1.65 },
+    fuel:      { length: 3.50, width: 1.65 },
+    h35:       { length: 3.15, width: 1.85 },
+    r35:       { length: 3.15, width: 1.85 },
+    s35:       { length: 3.80, width: 2.05 },
+    b1:        { length: 5.00, width: 2.45 },
+    panhard:   { length: 3.45, width: 1.70 },
+    panzer1:   { length: 3.10, width: 1.80 },
+    panzer2:   { length: 3.35, width: 1.90 },
+    panzer3:   { length: 4.15, width: 2.20 },
+    panzer4:   { length: 4.40, width: 2.30 },
+    sdkfz:     { length: 3.50, width: 1.75 },
+};
+
+Game._vehicleHalfExtents = (unit) => {
+    const fp = Game.VEHICLE_FOOTPRINTS[unit.statKey]
+        || Game.VEHICLE_FOOTPRINTS[unit.kind];
+    if (fp) return { hl: fp.length * 0.5, hw: fp.width * 0.5 };
+    return {
+        hl: (unit.size || 1) * (Game.TANK_BOX_LEN || 1.5),
+        hw: (unit.size || 1) * (Game.TANK_BOX_WID || 1.0),
+    };
+};
+
+Game._vehicleOBB = (unit, x = unit.x, z = unit.z, angle = unit.angle) => {
+    const { hl, hw } = Game._vehicleHalfExtents(unit);
+    const c = Math.cos(angle || 0), s = Math.sin(angle || 0);
+    return { unit, x, z, angle: angle || 0, hl, hw, fx: c, fz: s, rx: -s, rz: c };
+};
+
+// Collision shape for a powered vehicle plus its rigidly limbered AT gun. The
+// renderer/towing update locks the gun to the tower's heading, so two exact OBBs
+// model the shape without inflating the empty space beside truck and trailer.
+Game._vehicleCollisionOBBs = (unit, x = unit.x, z = unit.z, angle = unit.angle) => {
+    const primary = Game._vehicleOBB(unit, x, z, angle);
+    const boxes = [primary];
+    if (unit._towedUnitId == null) return boxes;
+    const trailer = Game.units && Game.units.find(u => u.id === unit._towedUnitId
+        && u.alive && u._towed && u._towedBy === unit.id);
+    if (!trailer) return boxes;
+    const c = Math.cos(angle || 0), s = Math.sin(angle || 0);
+    boxes.push({
+        unit: trailer,
+        x: x - c * 2.371,
+        z: z - s * 2.371,
+        angle: angle || 0,
+        hl: 0.671,
+        hw: 0.720,
+        fx: c, fz: s, rx: -s, rz: c,
+        trailer: true,
+    });
+    return boxes;
+};
+
+// Exact 2D oriented-rectangle SAT. Returns the minimum overlap depth/axis, or
+// null when a separating axis exists. All four rectangle axes are tested, so
+// side panels and rotated corners are first-class collision geometry.
+Game._obbPenetration = (a, b, margin = 0) => {
+    const dx = b.x - a.x, dz = b.z - a.z;
+    const axes = [
+        [a.fx, a.fz], [a.rx, a.rz],
+        [b.fx, b.fz], [b.rx, b.rz],
+    ];
+    let depth = Infinity, axisX = 0, axisZ = 0;
+    for (const [ax, az] of axes) {
+        const ra = a.hl * Math.abs(ax * a.fx + az * a.fz)
+            + a.hw * Math.abs(ax * a.rx + az * a.rz);
+        const rb = b.hl * Math.abs(ax * b.fx + az * b.fz)
+            + b.hw * Math.abs(ax * b.rx + az * b.rz);
+        const signed = dx * ax + dz * az;
+        const overlap = ra + rb + margin - Math.abs(signed);
+        if (overlap <= 0) return null;
+        if (overlap < depth) {
+            depth = overlap;
+            const sign = signed >= 0 ? -1 : 1; // axis pushes A away from B
+            axisX = ax * sign; axisZ = az * sign;
+        }
+    }
+    return { depth, axisX, axisZ };
+};
+
+Game._vehiclePosePenetration = (unit, x, z, angle = unit.angle, margin = 0.02, parkedOnly = false) => {
+    const bodies = Game._vehicleCollisionOBBs(unit, x, z, angle);
+    let depth = 0, hit = null;
+    for (const other of Game.units) {
+        if (!other.alive || other.id === unit.id) continue;
+        if (!(Game.isTank(other.kind) || Game.isTruck(other.kind))) continue;
+        if (parkedOnly && (other.currentSpeed || 0) > 0.15) continue;
+        const otherBodies = Game._vehicleCollisionOBBs(other);
+        for (const body of bodies) for (const otherBody of otherBodies) {
+            const reach = Math.hypot(body.hl, body.hw)
+                + Math.hypot(otherBody.hl, otherBody.hw) + margin;
+            if (Game.distSq(body.x, body.z, otherBody.x, otherBody.z) > reach * reach) continue;
+            const p = Game._obbPenetration(body, otherBody, margin);
+            if (p && p.depth > depth) { depth = p.depth; hit = other; }
+        }
+    }
+    return { depth, hit };
+};
 
 /**
  * Push a point (a unit at ux,uz with collision radius r) out of a tank's oriented
@@ -94,8 +210,11 @@ Game._tankBoxPush = (ux, uz, tank, r, margin) => {
     const dx = ux - tank.x, dz = uz - tank.z;
     const lx = dx * c + dz * s;        // local: along hull length (forward)
     const lz = -dx * s + dz * c;       // local: across hull width (right)
-    const hl = tank.size * (Game.TANK_BOX_LEN || 1.5) + r + margin;
-    const hw = tank.size * (Game.TANK_BOX_WID || 1.0) + r + margin;
+    const ext = Game._vehicleHalfExtents
+        ? Game._vehicleHalfExtents(tank)
+        : { hl: tank.size * (Game.TANK_BOX_LEN || 1.5), hw: tank.size * (Game.TANK_BOX_WID || 1.0) };
+    const hl = ext.hl + r + margin;
+    const hw = ext.hw + r + margin;
     const px = hl - Math.abs(lx);      // penetration along length
     const pz = hw - Math.abs(lz);      // penetration along width
     if (px <= 0 || pz <= 0) return null;            // outside the box
@@ -106,28 +225,14 @@ Game._tankBoxPush = (ux, uz, tank, r, margin) => {
 };
 
 /**
- * Depth of a vehicle's hull (sampled nose / centre / tail) inside any OTHER
- * vehicle's footprint box at position (x, z). 0 = clear. uMod.move uses this to
+ * Depth of a vehicle's exact oriented hull inside any OTHER vehicle hull at
+ * position (x, z). 0 = clear. uMod.move uses this to
  * make hulls SOLID: any step that would end deeper inside another vehicle than
  * it started is refused, so vehicles stop at contact instead of overlapping or
  * being slid apart.
  */
-Game._vehPenetration = (unit, x, z) => {
-    const c = Math.cos(unit.angle), s = Math.sin(unit.angle);
-    const halfLen = unit.size * Math.max(0.4, (Game.TANK_BOX_LEN || 1.5) - 0.5);
-    const r = unit.size * (Game.TANK_BOX_WID || 1.0) * 0.95;
-    let depth = 0;
-    for (const o of Game.units) {
-        if (!o.alive || o.id === unit.id) continue;
-        if (!(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
-        if (Game.distSq(x, z, o.x, o.z) > 80) continue;
-        for (const t of [-halfLen, 0, halfLen]) {
-            const p = Game._tankBoxPush(x + c * t, z + s * t, o, r, 0.02);
-            if (p) depth = Math.max(depth, Math.min(p.px, p.pz));
-        }
-    }
-    return depth;
-};
+Game._vehPenetration = (unit, x, z, angle = unit.angle) =>
+    Game._vehiclePosePenetration(unit, x, z, angle, 0.02, false).depth;
 
 /**
  * How many samples across a unit's BODY footprint at (x, z) land on a solid tile
@@ -142,10 +247,13 @@ Game._vehPenetration = (unit, x, z) => {
  * structure (e.g. spawned clipping one) can still back out — it is only refused a
  * step that puts MORE of itself inside solid than before.
  */
-Game._bodySolidCount = (unit, x, z) => {
+Game._bodySolidCount = (unit, x, z, angle = unit.angle) => {
     if (!Game.getTileAtWorld) return 0;
     const isVeh = Game.isTank(unit.kind) || Game.isTruck(unit.kind);
     const solidAt = (sx, sz) => {
+        // getTileAtWorld clamps its tile coordinate, so it cannot distinguish an
+        // off-map corner from the legal edge tile. Reject it explicitly.
+        if (sx < 0 || sz < 0 || sx >= Game.WORLD_W || sz >= Game.WORLD_H) return true;
         const t = Game.getTileAtWorld(sx, sz);
         if (!t) return true;                                  // off-map reads as solid
         if (t.blocked) return true;
@@ -154,18 +262,21 @@ Game._bodySolidCount = (unit, x, z) => {
     };
     let hits = 0;
     if (isVeh) {
-        const c = Math.cos(unit.angle), s = Math.sin(unit.angle);
-        const hl = unit.size * (Game.TANK_BOX_LEN || 1.5);
-        const hw = unit.size * (Game.TANK_BOX_WID || 1.0);
-        // Sample a grid over the hull spaced <= ~1.2 units so no 3-unit blocked
-        // tile can slip between samples unnoticed.
-        const nl = Math.max(2, Math.ceil((2 * hl) / 1.2));
-        const nw = Math.max(2, Math.ceil((2 * hw) / 1.2));
-        for (let i = 0; i <= nl; i++) {
-            const lx = -hl + (2 * hl) * (i / nl);
-            for (let j = 0; j <= nw; j++) {
-                const lz = -hw + (2 * hw) * (j / nw);
-                if (solidAt(x + lx * c - lz * s, z + lx * s + lz * c)) hits++;
+        const bodies = Game._vehicleCollisionOBBs
+            ? Game._vehicleCollisionOBBs(unit, x, z, angle)
+            : [Game._vehicleOBB(unit, x, z, angle)];
+        for (const body of bodies) {
+            // Sample a grid over each rigid body spaced <= ~1.2 units so no
+            // 3-unit blocked tile can slip between truck or trailer samples.
+            const nl = Math.max(2, Math.ceil((2 * body.hl) / 1.2));
+            const nw = Math.max(2, Math.ceil((2 * body.hw) / 1.2));
+            for (let i = 0; i <= nl; i++) {
+                const along = -body.hl + (2 * body.hl) * (i / nl);
+                for (let j = 0; j <= nw; j++) {
+                    const across = -body.hw + (2 * body.hw) * (j / nw);
+                    if (solidAt(body.x + along * body.fx + across * body.rx,
+                        body.z + along * body.fz + across * body.rz)) hits++;
+                }
             }
         }
         return hits;
@@ -178,6 +289,163 @@ Game._bodySolidCount = (unit, x, z) => {
         if (solidAt(x + Math.cos(ang) * r, z + Math.sin(ang) * r)) hits++;
     }
     return hits;
+};
+
+// Continuous-ish swept-body gate. Interpolate finely enough that neither a
+// translating corner nor a rotating long hull can tunnel between 30/60Hz frame
+// endpoints. The last clear pose is returned; callers stop there, never inside.
+Game._sweepVehicleMotion = (unit, ax, az, aa, bx, bz, ba) => {
+    const trans = Math.hypot(bx - ax, bz - az);
+    const da = Game.angleDiff(aa, ba);
+    const startBodies = Game._vehicleCollisionOBBs(unit, ax, az, aa);
+    const cornerR = Math.max(...startBodies.map(body =>
+        Math.hypot(body.x - ax, body.z - az) + Math.hypot(body.hl, body.hw)));
+    const steps = Math.max(1, Math.ceil(Math.max(trans, cornerR * Math.abs(da)) / 0.05));
+    const baseSolid = Game._bodySolidCount ? Game._bodySolidCount(unit, ax, az, aa) : 0;
+    // Baseline overlap is tracked per other hull. A deep legacy overlap with A
+    // must never mask a brand-new, shallower collision with B.
+    const basePen = new Map();
+    if (Game._vehicleOBB && Game._obbPenetration) {
+        for (const other of Game.units) {
+            if (!other.alive || other.id === unit.id) continue;
+            if (!(Game.isTank(other.kind) || Game.isTruck(other.kind))) continue;
+            let depth = 0;
+            const otherBodies = Game._vehicleCollisionOBBs(other);
+            for (const body of startBodies) for (const otherBody of otherBodies) {
+                const p = Game._obbPenetration(body, otherBody, 0.02);
+                if (p) depth = Math.max(depth, p.depth);
+            }
+            if (depth > 0) basePen.set(other.id, depth);
+        }
+    }
+    let last = { x: ax, z: az, angle: aa };
+    for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const x = ax + (bx - ax) * t;
+        const z = az + (bz - az) * t;
+        const angle = aa + da * t;
+        const solid = Game._bodySolidCount ? Game._bodySolidCount(unit, x, z, angle) : 0;
+        if (solid > baseSolid) return { ...last, blocked: true, type: 'terrain' };
+        if (Game._vehicleOBB && Game._obbPenetration) {
+            const bodies = Game._vehicleCollisionOBBs(unit, x, z, angle);
+            for (const other of Game.units) {
+                if (!other.alive || other.id === unit.id) continue;
+                if (!(Game.isTank(other.kind) || Game.isTruck(other.kind))) continue;
+                let depth = 0;
+                const otherBodies = Game._vehicleCollisionOBBs(other);
+                for (const body of bodies) for (const otherBody of otherBodies) {
+                    const p = Game._obbPenetration(body, otherBody, 0.02);
+                    if (p) depth = Math.max(depth, p.depth);
+                }
+                if (depth > Math.max(0.001, (basePen.get(other.id) || 0) + 1e-4)) {
+                    return { ...last, blocked: true, type: 'vehicle', hit: other };
+                }
+            }
+        }
+        last = { x, z, angle };
+    }
+    return { ...last, blocked: false, type: null, hit: null };
+};
+
+// Dry-run the lorry's REAL bicycle driver against its planned route. The A*
+// corridor is geometrically full-width, but a close first turn can still be
+// unreachable from the current steering pose. This predictor lets the driver
+// make a deliberate short back-up before moving, rather than discovering the
+// mismatch by hitting the hard collision gate at road speed.
+Game._predictTruckRouteBlock = (unit, route = unit.path, horizon = 5.0) => {
+    if (!Game.isTruck(unit.kind) || !route || !route.length) return null;
+    const points = route.map(p => ({
+        x: p.x, z: p.z,
+        exact: !!p._exactGoal,
+        ordered: !!p._orderStop,
+    }));
+    let x = unit.x, z = unit.z, angle = unit.angle || 0;
+    let speed = Math.max(0, unit.currentSpeed || 0);
+    let steer = unit._truckSteer || 0;
+    let index = 0;
+    const dt = 1 / 30;
+    const maxSpeed = unit.speed || 5;
+    const maxSteer = Game.TRUCK_MAX_STEER ?? 0.5;
+    const modelScale = (Game.MODEL_SCALE
+        && Game.MODEL_SCALE[unit.team + '_' + unit.kind]) || 1;
+    const wheelbase = Math.max(0.8,
+        (unit.size || 0.85) * (Game.TRUCK_WHEELBASE ?? 1.7) * modelScale);
+    const accelRate = maxSpeed * (Game.TRUCK_ACCEL ?? 0.6);
+    const brakeRate = maxSpeed * 1.5;
+    const steerRate = 1.35;
+    let finalStopCommitted = false;
+
+    for (let elapsed = 0; elapsed < horizon && index < points.length; elapsed += dt) {
+        let next = points[index];
+        let dx = next.x - x, dz = next.z - z, d = Math.hypot(dx, dz);
+        const arrival = next.exact ? 1.15 : 1.5;
+        while (index < points.length - 1) {
+            const after = points[index + 1];
+            const outX = after.x - next.x, outZ = after.z - next.z;
+            const outLen = Math.hypot(outX, outZ);
+            const along = outLen > 0.01
+                ? ((x - next.x) * outX + (z - next.z) * outZ) / outLen
+                : Infinity;
+            const waypointBearing = Math.atan2(dz, dx);
+            const behind = Math.abs(Game.angleDiff(angle, waypointBearing)) > Math.PI / 2;
+            const orderedClose = !next.ordered
+                || d < (Game.TRUCK_ORDER_STOP_RADIUS || 2.25);
+            if (d >= arrival && !(d < 8 && orderedClose && along > 0.05 && behind)) break;
+            next = points[++index];
+            dx = next.x - x; dz = next.z - z; d = Math.hypot(dx, dz);
+        }
+        if (index === points.length - 1 && d < arrival) finalStopCommitted = true;
+        if (index === points.length - 1 && finalStopCommitted && speed < 0.08) break;
+
+        let bearing = Math.atan2(dz, dx);
+        if (index < points.length - 1) {
+            const after = points[index + 1];
+            const outX = after.x - next.x, outZ = after.z - next.z;
+            const outLen = Math.hypot(outX, outZ);
+            if (outLen > 0.01) {
+                const lookAhead = Game.clamp(speed * 1.15 + 1.5, 2.5, 6.0);
+                if (d < lookAhead) {
+                    const advance = Math.min(outLen, lookAhead - d);
+                    const aimX = next.x + outX / outLen * advance;
+                    const aimZ = next.z + outZ / outLen * advance;
+                    bearing = Math.atan2(aimZ - z, aimX - x);
+                }
+            }
+        }
+        const headErr = Game.angleDiff(angle, bearing);
+        const desiredSteer = Game.clamp(headErr, -maxSteer, maxSteer);
+        steer += Game.clamp(desiredSteer - steer, -steerRate * dt, steerRate * dt);
+        let targetSpeed = maxSpeed * Game.clamp(1 - Math.abs(headErr) / 1.8, 0.30, 1);
+        if (index === points.length - 1 && (d < 4 || finalStopCommitted)) {
+            targetSpeed = Math.min(targetSpeed, finalStopCommitted
+                ? 0
+                : Math.sqrt(2 * brakeRate * Math.max(0, d - arrival)));
+        }
+        if (speed < targetSpeed) speed = Math.min(targetSpeed, speed + accelRate * dt);
+        else speed = Math.max(targetSpeed, speed - brakeRate * dt);
+        angle += (speed / wheelbase) * Math.tan(steer) * dt;
+        x += Math.cos(angle) * speed * dt;
+        z += Math.sin(angle) * speed * dt;
+
+        const bodies = Game._vehicleCollisionOBBs(unit, x, z, angle);
+        for (const other of Game.units) {
+            if (!other.alive || other.id === unit.id) continue;
+            if (!(Game.isTank(other.kind) || Game.isTruck(other.kind))) continue;
+            if ((other.currentSpeed || 0) > 0.15) continue;
+            const otherBodies = Game._vehicleCollisionOBBs(other);
+            let blocked = false;
+            for (const body of bodies) for (const otherBody of otherBodies) {
+                const reach = Math.hypot(body.hl, body.hw)
+                    + Math.hypot(otherBody.hl, otherBody.hw) + 0.20;
+                if (Game.distSq(body.x, body.z, otherBody.x, otherBody.z) > reach * reach) continue;
+                if (Game._obbPenetration(body, otherBody, 0.20)) blocked = true;
+            }
+            if (blocked) {
+                return { hit: other, time: elapsed + dt, x, z, angle };
+            }
+        }
+    }
+    return null;
 };
 
 /**
@@ -196,7 +464,7 @@ Game._bodySolidCount = (unit, x, z) => {
  */
 Game._vehicleFollow = (unit) => {
     const hx = Math.cos(unit.angle), hz = Math.sin(unit.angle);
-    const len = (unit.size || 1) * (Game.TANK_BOX_LEN || 1.5);
+    const selfExt = Game._vehicleHalfExtents(unit);
     let factor = 1;
     for (const o of Game.units) {
         if (!o.alive || o.id === unit.id || o.team !== unit.team) continue;
@@ -206,11 +474,12 @@ Game._vehicleFollow = (unit) => {
         const ahead = rx * hx + rz * hz;
         if (ahead <= 0) continue;
         const lateral = Math.abs(rx * -hz + rz * hx);
-        const lane = (unit.size || 1) * (Game.TANK_BOX_WID || 1.0) + 0.6;
+        const otherExt = Game._vehicleHalfExtents(o);
+        const lane = selfExt.hw + otherExt.hw + 0.35;
         if (lateral > lane) continue;                          // not directly in front
         const ofx = Math.cos(o.angle), ofz = Math.sin(o.angle);
         if (ofx * hx + ofz * hz < 0.5) continue;               // not moving our way -> not a leader
-        const minGap = len + (o.size || 1) * (Game.TANK_BOX_LEN || 1.5) + 0.4;  // bumper-to-bumper
+        const minGap = selfExt.hl + otherExt.hl + 0.4;          // centre distance at safe bumpers
         const slowGap = minGap + 4.0;                          // start easing off here
         factor = Math.min(factor, Game.clamp((ahead - minGap) / (slowGap - minGap), 0, 1));
     }
@@ -450,6 +719,9 @@ Game.recordMoveFrame = () => {
     const t = +(((Game.gameClock || 0) - Game._moveRecT0)).toFixed(3);
     for (const u of Game.units) {
         if (!u.alive) continue;                       // ALL living units, both teams
+        const order = u._lastMoveOrder || null;
+        const waypoint = u.path && u.path.length ? u.path[0] : null;
+        const finalWaypoint = u.path && u.path.length ? u.path[u.path.length - 1] : null;
         Game._moveRec.push({
             t, id: u.id, team: u.team, kind: u.kind, cls: u.class,
             x: +u.x.toFixed(3), z: +u.z.toFixed(3),
@@ -459,6 +731,22 @@ Game.recordMoveFrame = () => {
             mv: u.moving ? 1 : 0, st: u.stance || '',
             ai: u._ai || u.aiState || '',
             clip: (u.mesh && u.mesh.userData && u.mesh.userData._activeClip) || '',
+            // Last player movement order. click* is the raw mouse position;
+            // goal* is this unit's formation slot; order* is its pose on click.
+            orderId: order ? order.id : null,
+            orderT: order ? +((order.t - Game._moveRecT0).toFixed(3)) : null,
+            orderMode: order ? order.mode : '', orderQueue: order ? order.queue : 0,
+            clickX: order ? +order.clickX.toFixed(3) : null,
+            clickZ: order ? +order.clickZ.toFixed(3) : null,
+            orderX: order ? +order.startX.toFixed(3) : null,
+            orderZ: order ? +order.startZ.toFixed(3) : null,
+            orderA: order ? +order.startA.toFixed(3) : null,
+            goalX: order ? +order.goalX.toFixed(3) : null,
+            goalZ: order ? +order.goalZ.toFixed(3) : null,
+            waypointX: waypoint ? +waypoint.x.toFixed(3) : null,
+            waypointZ: waypoint ? +waypoint.z.toFixed(3) : null,
+            finalX: finalWaypoint ? +finalWaypoint.x.toFixed(3) : null,
+            finalZ: finalWaypoint ? +finalWaypoint.z.toFixed(3) : null,
         });
     }
     if (Game._moveRec.length > 400000) Game._moveRec.splice(0, 8000);
@@ -692,8 +980,56 @@ Game.applySeparation = (unit, dt) => {
             continue;
         }
 
+        // Vehicle-to-vehicle proximity is rectangular too. The former circle
+        // gate stopped a truck between two tanks even when its entire square
+        // body fit through the opening—the exact failure caused by treating a
+        // rectangular unit as a radius. Look for an OBB conflict now or along a
+        // short forward prediction, then yield; side-by-side clear hulls proceed.
+        if (isVeh && otherVeh && Game._vehicleOBB && Game._obbPenetration) {
+            // Match the route planner's 0.20u stand-off. A larger circular-era
+            // yield margin could veto a corridor that pathfinding had correctly
+            // proved wide enough.
+            const clearance = 0.20;
+            let conflict = !!Game._obbPenetration(
+                Game._vehicleOBB(unit), Game._vehicleOBB(other), clearance);
+            if (!conflict && ((unit.currentSpeed || 0) > 0.05 || (other.currentSpeed || 0) > 0.05)) {
+                const horizon = 1.5;
+                for (let t = 0.25; t <= horizon && !conflict; t += 0.25) {
+                    const us = (unit.currentSpeed || 0) * (unit._reversing ? -1 : 1);
+                    const os = (other.currentSpeed || 0) * (other._reversing ? -1 : 1);
+                    const ua = unit.angle || 0, oa = other.angle || 0;
+                    const ub = Game._vehicleOBB(unit,
+                        unit.x + Math.cos(ua) * us * t,
+                        unit.z + Math.sin(ua) * us * t, ua);
+                    const ob = Game._vehicleOBB(other,
+                        other.x + Math.cos(oa) * os * t,
+                        other.z + Math.sin(oa) * os * t, oa);
+                    conflict = !!Game._obbPenetration(ub, ob, clearance);
+                }
+            }
+            if (!conflict) continue;
+
+            const dist = Math.sqrt(Math.max(distSq, 0.0001));
+            const nx = dx / dist, nz = dz / dist;
+            const otherMoving = (other.currentSpeed || 0) > 0.15;
+            // A parked hull is owned by full-width A* plus the swept hard gate.
+            // Stopping on a straight-line heading prediction prevents a wheeled
+            // truck from rolling far enough to steer onto that safe bypass and
+            // deadlocks it forever at the margin. Moving traffic still yields.
+            if (!otherMoving) continue;
+            const otherAhead = (-nx) * fwdX + (-nz) * fwdZ > 0.25;
+            const following = otherMoving
+                && (Math.cos(other.angle) * fwdX + Math.sin(other.angle) * fwdZ) > 0.6;
+            const me = Game._vehicleHalfExtents(unit), oe = Game._vehicleHalfExtents(other);
+            const myArea = me.hl * me.hw, otherArea = oe.hl * oe.hw;
+            const yieldToOther = otherArea > myArea + 0.02
+                || (Math.abs(otherArea - myArea) <= 0.02 && other.id < unit.id);
+            if (otherAhead && !following && yieldToOther && !unit._detour) blockedAhead = true;
+            continue;
+        }
+
         const otherRadius = otherVeh ? other.size * radMult : other.size * 0.7;
-        const gap = (isVeh && otherVeh) ? (Game.TANK_SEP_GAP ?? 0.25) : 0.3;
+        const gap = 0.3;
         const minDist = myRadius + otherRadius + gap;
         const minDistSq = minDist * minDist;
         if (distSq >= minDistSq || distSq <= 0.0001) continue;
@@ -703,42 +1039,7 @@ Game.applySeparation = (unit, dt) => {
         const nx = dx / dist, nz = dz / dist;
         let strength = overlap * (Game.TANK_SEP_STRENGTH || 3.0);
 
-        if (isVeh && otherVeh) {
-            // Tank vs tank: a tank can NOT drive through another. A STATIONARY tank
-            // holds its ground (immovable) while the MOVER de-overlaps and routes
-            // around it — so a moving tank never shoves a parked friendly aside.
-            // RADIAL (circular) de-overlap here: the oriented-box min-translation push
-            // flips between the hull's long/short face as two tanks cross the box
-            // corner, and that flip-flop was the jitter. The radial push is smooth.
-            // (Infantry still de-penetrate off the square hull box — that's where the
-            // rectangular footprint is visible and it's flicker-free for a point.)
-            const iMoving = (unit.currentSpeed || 0) > 0.3 || (unit.path && unit.path.length > 0);
-            const otherMoving = (other.currentSpeed || 0) > 0.3 || (other.path && other.path.length > 0);
-            if (iMoving || !otherMoving) {
-                sepX += nx * strength;
-                sepZ += nz * strength;
-            }
-            // Yield (brief stop) only if the OTHER hull is ahead AND has priority —
-            // a stationary tank, or the lower-id one among two movers. This breaks
-            // the symmetry so two tanks meeting never both freeze and lock together;
-            // exactly one eases around while the other proceeds. BUT if the other hull
-            // is moving roughly our own heading, we're following it in column — the
-            // car-following slowdown handles the spacing smoothly, so don't hard-stop
-            // (that stop/go behind a leader was the "repeat movements" stutter).
-            const otherAhead = (-nx) * fwdX + (-nz) * fwdZ > 0.25;
-            const following = otherMoving && (Math.cos(other.angle) * fwdX + Math.sin(other.angle) * fwdZ) > 0.6;
-            // RIGHT OF WAY by SIZE: yield (stop) to a stationary hull, or to a LARGER
-            // moving one (a B1 outranks an H35). Same-size ties break by id so two equals
-            // never both freeze. Bigger tanks hold course and lead through chokepoints /
-            // forests (clearing the way); smaller ones give way.
-            const yieldToOther = !otherMoving || other.size > unit.size + 0.01
-                || (Math.abs(other.size - unit.size) <= 0.01 && other.id < unit.id);
-            // Once a vehicle has committed to a detour it must retain rolling
-            // steering authority. Another nearby parked hull may still be in its
-            // forward half-plane, but hard-stopping here freezes bicycle steering.
-            // The solid-hull gate remains the final collision authority.
-            if (otherAhead && !following && yieldToOther && !unit._detour) blockedAhead = true;
-        } else if (isVeh && !otherVeh) {
+        if (isVeh && !otherVeh) {
             // Tank vs infantry: a tank is immovable by men (no push on the tank).
         } else {
             // Infantry vs infantry.
@@ -788,7 +1089,7 @@ Game._pathBlockedByVehicle = (unit, lookAhead = 12) => {
         if (!o.alive || o.id === unit.id) continue;
         if (unit._enterCarrierId === o.id) continue; // allow the boarding route to terminate at its truck
         if (!(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
-        if ((o.currentSpeed || 0) > 0.15 || (o.path && o.path.length)) continue;
+        if ((o.currentSpeed || 0) > 0.15) continue;
         if (Game.distSq(unit.x, unit.z, o.x, o.z) > (lookAhead + 8) * (lookAhead + 8)) continue;
         parked.push(o);
     }
@@ -799,12 +1100,25 @@ Game._pathBlockedByVehicle = (unit, lookAhead = 12) => {
     for (let i = 0; i < unit.path.length && travelled < lookAhead; i++) {
         const wp = unit.path[i];
         const seg = Math.hypot(wp.x - px, wp.z - pz);
-        const steps = Math.max(1, Math.ceil(seg));
+        const angle = seg > 0.001 ? Math.atan2(wp.z - pz, wp.x - px) : (unit.angle || 0);
+        const steps = Math.max(1, Math.ceil(seg / (vehSized ? 0.3 : 1)));
         for (let s = 1; s <= steps; s++) {
             const t = s / steps;
             const sx = px + (wp.x - px) * t, sz = pz + (wp.z - pz) * t;
             for (const o of parked) {
-                if (Game._tankBoxPush(sx, sz, o, r, 0.15)) return o;
+                if (vehSized) {
+                    const bodies = Game._vehicleCollisionOBBs
+                        ? Game._vehicleCollisionOBBs(unit, sx, sz, angle)
+                        : [Game._vehicleOBB(unit, sx, sz, angle)];
+                    const otherBodies = Game._vehicleCollisionOBBs
+                        ? Game._vehicleCollisionOBBs(o)
+                        : [Game._vehicleOBB(o)];
+                    for (const body of bodies) for (const otherBody of otherBodies) {
+                        if (Game._obbPenetration(body, otherBody, 0.20)) return o;
+                    }
+                } else if (Game._tankBoxPush(sx, sz, o, r, 0.15)) {
+                    return o;
+                }
             }
         }
         travelled += seg; px = wp.x; pz = wp.z;
@@ -828,7 +1142,8 @@ Game._vehicleAvoid = (unit) => {
     const selfIsTank = Game.isTank(unit.kind);
     const isTruck = Game.isTruck(unit.kind);
     const vehSized = selfIsTank || isTruck;              // vehicle-sized footprint
-    const myR = vehSized ? unit.size * radMult : unit.size * 0.7;
+    const myExt = vehSized && Game._vehicleHalfExtents ? Game._vehicleHalfExtents(unit) : null;
+    const myR = vehSized ? Math.hypot(myExt.hl, myExt.hw) : unit.size * 0.7;
     const goal = unit.path[unit.path.length - 1];
     // Arriving at the final destination — let de-overlap settle it, don't circle.
     if (unit.path.length === 1 && Game.dist(unit.x, unit.z, goal.x, goal.z) < myR * 2.2) {
@@ -841,7 +1156,9 @@ Game._vehicleAvoid = (unit) => {
     if (unit.path.length === 1) {
         for (const o of Game.units) {
             if (!o.alive || o.id === unit.id || !(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
-            const tr = o.size * radMult;
+            if (unit._enterCarrierId === o.id) continue; // the assigned tailgate is intentionally on this hull
+            const oe = Game._vehicleHalfExtents ? Game._vehicleHalfExtents(o) : { hl: o.size * radMult, hw: o.size * radMult };
+            const tr = Math.hypot(oe.hl, oe.hw);
             if (Game.distSq(goal.x, goal.z, o.x, o.z) < (tr + 0.4) * (tr + 0.4)
                 && Game.distSq(unit.x, unit.z, o.x, o.z) < (tr + myR + 0.8) * (tr + myR + 0.8)) {
                 if (unit._detour && unit.path[0] === unit._detour) unit.path.shift();
@@ -850,7 +1167,14 @@ Game._vehicleAvoid = (unit) => {
             }
         }
     }
-    const hx = Math.cos(unit.angle), hz = Math.sin(unit.angle);
+    // Examine the route we intend to follow, not merely the current bonnet
+    // bearing while the truck is still steering onto that route. Otherwise a
+    // valid A* bypass was immediately replaced by a centre-circle detour.
+    const firstWp = unit.path[0];
+    const routeAngle = firstWp
+        ? Math.atan2(firstWp.z - unit.z, firstWp.x - unit.x)
+        : unit.angle;
+    const hx = Math.cos(routeAngle), hz = Math.sin(routeAngle);
 
     // Most-blocking TANK inside a corridor straight ahead. Trucks turn wide, so
     // they look further ahead to start the detour in time.
@@ -858,16 +1182,22 @@ Game._vehicleAvoid = (unit) => {
     const lookAhead = myR + (isTruck ? 9 : (selfIsTank ? 6 : 3.5));
     for (const o of Game.units) {
         if (!o.alive || o.id === unit.id || !(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
+        if (unit._enterCarrierId === o.id) continue;
         const rx = o.x - unit.x, rz = o.z - unit.z;
         const ahead = rx * hx + rz * hz;                 // along heading
         if (ahead <= 0.3 || ahead > lookAhead) continue;
         const lateral = rx * -hz + rz * hx;              // signed perpendicular offset
-        const corridor = myR + o.size * radMult + 0.4;
+        const oe = Game._vehicleHalfExtents ? Game._vehicleHalfExtents(o) : { hw: o.size * radMult };
+        const corridor = (vehSized ? myExt.hw : myR) + oe.hw + 0.4;
         if (Math.abs(lateral) > corridor) continue;      // not in our lane
         // Tank vs tank: only the higher-id mover swerves (the other holds course)
         // so they don't mirror each other. Trucks and foot troops ALWAYS go round
         // a tank (a tank has right of way over them).
-        const oMoving = (o.currentSpeed || 0) > 0.3 || (o.path && o.path.length > 0);
+        const oMoving = (o.currentSpeed || 0) > 0.15;
+        // Parked hulls are already part of the full-width A* configuration
+        // space. Do not replace that safe route with the legacy local circle
+        // waypoint; local avoidance is reserved for genuinely moving traffic.
+        if (vehSized && !oMoving) continue;
         // Right of way by SIZE: hold course past a SMALLER moving tank (it gives way to
         // us); only swerve around a LARGER one (equal size -> lower id holds course).
         if (selfIsTank && oMoving && (o.size < unit.size - 0.01
@@ -883,7 +1213,7 @@ Game._vehicleAvoid = (unit) => {
     }
 
     const nowT = Game.gameClock || 0;
-    const blockMoving = block ? ((block.currentSpeed || 0) > 0.3 || (block.path && block.path.length > 0)) : false;
+    const blockMoving = block ? (block.currentSpeed || 0) > 0.15 : false;
 
     // FOOT TROOPS never weave a detour. They only stop briefly for a MOVING FRIENDLY
     // tank CROSSING the lane (not one they're escorting); the collide-and-slide routes
@@ -933,7 +1263,10 @@ Game._vehicleAvoid = (unit) => {
     // Long-wheelbase trucks need a wider side point than tracked vehicles: if
     // the waypoint merely clears the collision box, the lorry reaches contact
     // before its nose can arc toward it and stalls against the tank.
-    const off = myR + block.size * radMult + (isTruck ? 2.0 : 0.8);
+    const blockExt = Game._vehicleHalfExtents
+        ? Game._vehicleHalfExtents(block)
+        : { hw: block.size * radMult };
+    const off = myExt.hw + blockExt.hw + (isTruck ? 2.0 : 0.8);
     let px = -hz * side, pz = hx * side;
     let gx = block.x + px * off, gz = block.z + pz * off;
     if (blockMoving) {                                   // bias the waypoint toward the tank's rear
@@ -1120,6 +1453,8 @@ Game.updateSupportUnits = (dt) => {
 // ═══════════════════════════════════════════════════════
 
 Game.airStrikes = [];
+// No player-callable aircraft at Mokra. Later German Ju 87 attacks are a
+// scripted enemy event, not an ahistorical Polish support button.
 Game.airStrikesAvailable = Game.currentScenario === 'mokra' ? 0 : 1;
 Game.airStrikePlanesToUse = Game.airStrikesAvailable ? 1 : 0;
 
@@ -1949,6 +2284,7 @@ Game.towUnit = (tower, target) => {
     if (target._towed) return;
     target._towed = true;
     target._towedBy = tower.id;
+    tower._towedUnitId = target.id;
     target.path = [];
     target.moving = false;
     target.deployed = false; target._deployT = 0; // rides limbered
@@ -1960,6 +2296,8 @@ Game.updateTowing = (dt) => {
         if (!u.alive || !u._towed) return;
         const tower = Game.units.find(t => t.id === u._towedBy && t.alive);
         if (!tower) {
+            const oldTower = Game.units.find(t => t.id === u._towedBy);
+            if (oldTower) oldTower._towedUnitId = null;
             u._towed = false;
             u._towedBy = null;
             return;
@@ -1993,6 +2331,8 @@ Game.updateTowing = (dt) => {
 
 Game.untowUnit = (target) => {
     if (!target._towed) return;
+    const tower = Game.units.find(t => t.id === target._towedBy);
+    if (tower) tower._towedUnitId = null;
     target._towed = false;
     target._towedBy = null;
     Game.pushMessage(`${target.label} un-towed.`, 1.5);
@@ -4604,7 +4944,7 @@ Game.boot = async () => {
         stanceMove: () => { Game.setOrderStance('move'); },
         stanceAttack: () => { Game.setOrderStance('attack'); },
         cmdAttackGround: () => { Game._commandMode = 'attackground'; Game.pushMessage('Attack ground — right-click a spot to suppress.', 2.0); },
-        cmdStop: () => { Game.selectedPlayerUnits().forEach(u => { u.path = []; u.moving = false; u.orderMode = 'hold'; u.forcedTargetId = null; u.bombardX = null; u.bombardZ = null; u._bombarding = false; }); Game.pushMessage('Units stopped.', 1.0); },
+        cmdStop: () => { Game.selectedPlayerUnits().forEach(u => { if (Game.cancelTruckManeuver) Game.cancelTruckManeuver(u); u.path = []; u.moving = false; u.orderMode = 'hold'; u.forcedTargetId = null; u.bombardX = null; u.bombardZ = null; u._bombarding = false; }); Game.pushMessage('Units stopped.', 1.0); },
         cmdHold: () => { Game.toggleHoldFire(); },
         cmdGrenade: () => { Game._commandMode = 'grenade'; Game.pushMessage('Grenade — right-click target.', 2.0); },
         cmdMove: () => { Game.setOrderStance('move'); },
