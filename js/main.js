@@ -1120,8 +1120,8 @@ Game.updateSupportUnits = (dt) => {
 // ═══════════════════════════════════════════════════════
 
 Game.airStrikes = [];
-Game.airStrikesAvailable = 1;     // planes (sorties) available
-Game.airStrikePlanesToUse = 1;    // how many to commit in the next strike
+Game.airStrikesAvailable = Game.currentScenario === 'mokra' ? 0 : 1;
+Game.airStrikePlanesToUse = Game.airStrikesAvailable ? 1 : 0;
 
 // Clamp the "planes to use" selector into the legal range for the current stock.
 Game.adjustAirStrikePlanes = (delta) => {
@@ -1751,7 +1751,8 @@ Game.enterVehicle = (infantry, vehicle) => {
 Game.exitVehicle = (vehicle) => {
     if (!vehicle.alive || !Game.isTank(vehicle.kind)) return;
     // Spawn crew member next to vehicle
-    const crewKind = vehicle.team === Game.TEAM.FRENCH ? 'fusilier' : 'grenadier';
+    const crewKind = vehicle.team === Game.TEAM.POLISH ? 'ulan'
+        : (vehicle.team === Game.TEAM.FRENCH ? 'fusilier' : 'grenadier');
     const crew = Game.makeUnit(vehicle.team, crewKind,
         vehicle.x + Game.rand(-1.5, 1.5),
         vehicle.z + Game.rand(-1.5, 1.5),
@@ -4647,7 +4648,7 @@ Game.boot = async () => {
     // explicitly asked for a fresh procedural one from the debug panel.
     const forceProc = localStorage.getItem('uf_forceProcedural');
     if (forceProc) localStorage.removeItem('uf_forceProcedural');
-    if (!pendingSave && !forceProc) {
+    if (!pendingSave && !forceProc && Game.currentScenario !== 'mokra') {
         try {
             const r = await fetch('maps/default/map.json');
             if (r.ok) {
@@ -4790,8 +4791,23 @@ Game.boot = async () => {
 
 Game.startFromMenu = () => {
     const menu = document.getElementById('mainMenu');
-    const mission = document.querySelector('.mission-card.selected')?.dataset.mission || 'dyle';
-    const side = document.querySelector('.side-btn.selected')?.dataset.side || 'french';
+    const mission = document.querySelector('.mission-card.selected')?.dataset.mission || Game.currentScenario || 'dyle';
+    const side = document.querySelector('.side-btn.selected')?.dataset.side || Game.playerTeam || 'french';
+
+    // A scenario owns its terrain and force setup, which are built during boot.
+    // Normally the card handler already reloaded; this guard keeps programmatic
+    // menu changes honest too.
+    if (mission !== Game.currentScenario) {
+        try {
+            localStorage.setItem('uf_mission', mission);
+            sessionStorage.setItem('uf_return_menu', '1');
+        } catch (e) { }
+        location.reload();
+        return;
+    }
+    if (mission === 'dyle' && side !== Game.playerTeam && Game.setPlayerSide) {
+        Game.setPlayerSide(side);
+    }
 
     Game.selectedMission = mission;
     Game.selectedSide = side;

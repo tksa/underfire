@@ -8,10 +8,11 @@
 editing this file** — no JS changes, no build step. If the file can't be loaded
 (e.g. the page is opened via `file://`), the built-in roster is used unchanged.
 
-It currently holds **~610 units**: the 38 hand-tuned French/German units the game
-actually plays, plus the full **RWM / Sudden Strike roster** (~572 units across
-all nations) imported as a reference library. The scenario only spawns what it
-asks for, so the extra entries are data you can draw on, not active units.
+It currently holds **~640 units**: the hand-tuned French/German roster, the
+Poland 1939 units used at Mokra, and the full **RWM / Sudden Strike roster**
+(~572 units across all nations) imported as a reference library. A scenario only
+spawns what it asks for, so the extra entries are data you can draw on rather
+than active units.
 
 ### Columns
 
@@ -22,6 +23,7 @@ asks for, so the extra entries are data you can draw on, not active units.
 | `kind`, `class` | `class` ∈ infantry / support / vehicle / aircraft / ship / train |
 | `supportType` | medic / mechanic / supply / fuel / transport / officer / sapper (optional) |
 | `label` | display name |
+| `description` | concise in-game role and historical/tactical description (optional) |
 | `weapon` | key into `Game.WEAPONS`. Imported units use a synthesized `rwm_*` weapon (see `w_*`). |
 | `secondaryWeapon` | optional second weapon key |
 | `hp`, `speed`, `size`, `sight`, `rotationSpeed`, `cost` | core stats |

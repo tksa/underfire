@@ -46,8 +46,22 @@ Game.Audio = (() => {
         d_tank_move: ['d_tank_move', 'd_tank_move.1', 'd_tank_move.2', 'd_tank_move.3', 'd_tank_move.4'],
         d_tank_attack: ['d_tank_attack', 'd_tank_attack.1'],
     };
+    // Reserved Polish acknowledgement slots. Keep these arrays empty until the
+    // user-provided recordings exist in sounds/rwm/. An empty slot is a deliberate
+    // no-op: Poland must never fall through to French or German dialogue.
+    // Add extension-free basenames (for example 'p_sold_move') to enable a slot.
+    const VOICE_PL = {
+        f_sold_select: [],
+        f_sold_move: [],
+        f_sold_attack: [],
+        f_tank_select: [],
+        f_tank_move: [],
+        f_tank_attack: [],
+        f_tank_stop: [],
+    };
     const EXTRA = [
         ...Object.values(VOICE_TAKES).flat(),
+        ...Object.values(VOICE_PL).flat(),
         'ricochet', 'ricochet_ground',
         'fly_heavy', 'fly_small',
     ].map(n => 'sounds/rwm/' + n + '.ogg');
@@ -290,10 +304,16 @@ Game.Audio = (() => {
     const voice = (file) => {
         const t = Game.gameClock || 0;
         if (t - lastVoice < 0.4) return;
+        if (Game.playerTeam === 'polish') {
+            const takes = VOICE_PL[file];
+            if (!takes || !takes.length) return;
+            file = takes[Math.floor(Math.random() * takes.length)];
+        } else {
+            if (Game.playerTeam === 'german' && VOICE_DE[file]) file = VOICE_DE[file];
+            const takes = VOICE_TAKES[file];
+            if (takes && takes.length) file = takes[Math.floor(Math.random() * takes.length)];
+        }
         lastVoice = t;
-        if (Game.playerTeam === 'german' && VOICE_DE[file]) file = VOICE_DE[file];
-        const takes = VOICE_TAKES[file];
-        if (takes && takes.length) file = takes[Math.floor(Math.random() * takes.length)];
         playFile(file, 0.8, 0, 0, false);
     };
 
@@ -309,6 +329,7 @@ Game.Audio = (() => {
         heavyPlane: () => playFile('fly_heavy', 0.75, 0, 0, false),
         fighterDrone,
         voice,
+        voiceSlots: { polish: VOICE_PL },
         click,
         updateAmbient,
         setEnabled(v) {

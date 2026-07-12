@@ -24,6 +24,7 @@ Game.TILE_COLORS = {
     forest: 0x46582f,
     dense_forest: 0x36462a,
     road: 0xb09468,         // pale dirt track
+    railway: 0x554f45,      // ballast; rails/sleepers are scenario geometry
     mud: 0x6e5a42,
     yard: 0xbcab84,         // village dust / square
     hedge: 0x4a5e34,
@@ -117,6 +118,7 @@ Game.makeTile = (type = 'grass') => {
         garden: { move: 1.15, cover: 0.12, blocked: false, concealment: 0.14 },
         orchard: { move: 1.15, cover: 0.18, blocked: false, concealment: 0.18 },
         road: { move: 0.75, cover: 0.0, blocked: false, concealment: 0 },
+        railway: { move: 1.45, cover: 0.14, blocked: false, concealment: 0.03, vehicleBlocked: true },
         mud: { move: 1.4, cover: 0.05, blocked: false, concealment: 0.02 },
         forest: { move: 1.5, cover: 0.32, blocked: false, concealment: 0.32 },
         dense_forest: { move: 2.5, cover: 0.55, blocked: false, concealment: 0.50, vehicleBlocked: true },

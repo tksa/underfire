@@ -24,17 +24,30 @@ Game.SCALE = {
   vehicleCompression: 0.65,
 };
 
-// Teams
-Game.TEAM = { FRENCH: 'french', GERMAN: 'german' };
+// Teams and boot-time scenario selection. Dyle is the default/first battle;
+// the menu persists a different choice before reloading the matching world.
+Game.TEAM = { POLISH: 'polish', FRENCH: 'french', GERMAN: 'german' };
+Game.currentScenario = (() => {
+  try { return localStorage.getItem('uf_mission') === 'mokra' ? 'mokra' : 'dyle'; }
+  catch (e) { return 'dyle'; }
+})();
+Game.selectedMission = Game.currentScenario;
 
 // Which side the HUMAN plays (menu-selectable, persisted). Everything
 // player-facing keys off these instead of hardcoding French: selection, fog
 // reveal, orders, voices, mission logic. The other side runs the combat AI.
 Game.playerTeam = (() => {
+  if (Game.currentScenario === 'mokra') return Game.TEAM.POLISH;
   try { return localStorage.getItem('uf_side') === 'german' ? 'german' : 'french'; }
   catch (e) { return 'french'; }
 })();
-Game.enemyTeam = () => (Game.playerTeam === Game.TEAM.FRENCH ? Game.TEAM.GERMAN : Game.TEAM.FRENCH);
+Game.enemyTeam = () => {
+  const scenario = Game.SCENARIOS && Game.SCENARIOS[Game.currentScenario];
+  if (scenario && scenario.teams) {
+    return Game.playerTeam === scenario.teams.enemy ? scenario.teams.player : scenario.teams.enemy;
+  }
+  return Game.playerTeam === Game.TEAM.FRENCH ? Game.TEAM.GERMAN : Game.TEAM.FRENCH;
+};
 
 // Shared arrays
 Game.terrain = [];
@@ -102,7 +115,10 @@ Game.missionState = {
   won: false, lost: false,
   objectiveX: (Game.MAP_COLS - 9) * Game.TILE,
   objectiveY: 7 * Game.TILE,
-  timer: 0, reinforcementTriggered: false
+  timer: 0, reinforcementTriggered: false,
+  phase: 1, phaseName: 'Deployment',
+  primaryObjective: '', secondaryObjective: '', briefing: '',
+  holdDuration: 0, contestedTime: 0, enemyLosses: 0, enemyCommitted: 0
 };
 
 // Viewport dimensions (set during boot)

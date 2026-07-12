@@ -1026,15 +1026,21 @@ Game.handleInputEvents = () => {
         // F9 — display mission objectives (SS2)
         if (e.code === 'F9') {
             e.preventDefault();
-            Game.pushMessage('Objective: seize the crossroads (red marker). Losing the whole force fails the mission.', 5.0);
+            const ms = Game.missionState || {};
+            if (Game.currentScenario === 'mokra') {
+                const secondary = ms.secondaryObjective ? ` Secondary: ${ms.secondaryObjective}` : '';
+                Game.pushMessage(`Objective: ${ms.primaryObjective || 'Hold the central railway crossing.'}${secondary}`, 5.0);
+            } else {
+                Game.pushMessage('Objective: seize the crossroads (red marker). Losing the whole force fails the mission.', 5.0);
+            }
         }
 
         // ; — reinforcement report (SS2: number of reinforcements on their way)
         if (e.code === 'Semicolon') {
             const ms = Game.missionState || {};
-            Game.pushMessage(ms.reinforcementTriggered
+            Game.pushMessage(ms.reinforcementReport || (ms.reinforcementTriggered
                 ? 'Enemy reserves already committed. No further waves expected.'
-                : 'Intelligence: enemy reserve elements are expected from the east.', 3.0);
+                : 'Intelligence: enemy reserve elements are expected from the east.'), 3.0);
         }
 
         // L — jump to last attack

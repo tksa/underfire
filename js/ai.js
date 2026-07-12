@@ -538,8 +538,8 @@ Game.updateChainOfCommand = (dt) => {
     Game._cmdTimer = 1.5;
     Game._cmd = Game._cmd || {};
 
-    const NONCOMBAT = ['supply', 'fuel', 'medic', 'mechanic'];
-    for (const team of [Game.TEAM.FRENCH, Game.TEAM.GERMAN]) {
+    const NONCOMBAT = ['supply', 'fuel', 'transport', 'medic', 'mechanic'];
+    for (const team of [Game.TEAM.POLISH, Game.TEAM.FRENCH, Game.TEAM.GERMAN]) {
         const living = Game.units.filter(u => u.alive && u.team === team);
         if (!living.length) continue;
         const cmd = Game._cmd[team] = Game._cmd[team] || {};

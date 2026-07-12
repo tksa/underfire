@@ -1,0 +1,22 @@
+{
+  "id": "mokra",
+  "name": "Battle of Mokra",
+  "missionTitle": "Mokra: Hold the Railway",
+  "date": "1939-09-01",
+  "location": "Mokra, near Kłobuck, Poland",
+  "cols": 100,
+  "rows": 100,
+  "tileSize": 3,
+  "generator": "Game.generateMokraMap",
+  "playerTeam": "polish",
+  "enemyTeam": "german",
+  "features": [
+    "north-south railway embankment",
+    "three limited vehicle crossings",
+    "Mokra I, Mokra II and Mokra III settlement strips",
+    "open cultivated western approaches",
+    "irregular woodland ambush areas",
+    "no broad river or lake"
+  ],
+  "notes": "Terrain, structures, crossing rules, deployment zones and objective coordinates are authored by js/scenarios/mokra.js. This metadata file documents the runtime map contract; no baked French-map texture is applied."
+}

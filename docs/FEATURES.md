@@ -43,7 +43,7 @@ Combined from SS3 + SS4 manuals + SS fan guide. ✅ = done, ⬜ = todo.
 - ✅ 3 doctrines (infantry/armor/support) integrated into menu
 
 ## Module 11 — Main Menu & Save/Load ✅
-- ✅ Main menu: mission select (3), side pick, doctrine choice
+- ✅ Main menu: Dyle first/default, Mokra second with a Preview label, scenario-aware side policy, doctrine choice
 - ✅ Save/load game (localStorage), F9 quicksave
 - ✅ Escape opens menu
 
@@ -56,3 +56,19 @@ Combined from SS3 + SS4 manuals + SS fan guide. ✅ = done, ⬜ = todo.
 - ✅ Green (>50%): normal
 - ✅ Yellow (20-50%): slow regen, vehicles immobilized, infantry half-speed
 - ✅ Red (<20%): HP bleeds until death or healed
+
+## Module 14 — Poland 1939 / Battle of Mokra 🚧
+
+- ✅ **Mokra: Hold the Railway** is the second selectable battle and is labelled **Preview**, with Poland as the intended player side and Germany as the opponent
+- ✅ Dedicated railway battlefield with constrained crossings, Mokra I–III settlement strips, woods, and cultivated western approaches
+- ✅ Period-appropriate Polish core roster and constrained German attack roster; no 7TP or routine Panzer III in the scenario
+- ✅ Defensive hold objective with phased German attacks
+- ✅ **Advance to the Dyle** retained as the first/default selected scenario
+- ✅ Empty Polish voice slots fail silently until real Polish recordings are supplied
+- ⬜ Dedicated final Polish skins, infantry, gun, and vehicle models
+- ⬜ Mounted cavalry and horse-limber systems
+- ⬜ Armoured Train No. 53 *Śmiały*
+- ⬜ Scripted Ju 87 attack phase
+- ⬜ Counterattack and protected withdrawal objective phases
+
+Detailed scope: [Mokra implementation record](scenarios/mokra.md). Full plan: [Poland 1939 campaign dossier](POLAND_1939_CAMPAIGN.md).

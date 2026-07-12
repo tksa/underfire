@@ -1,5 +1,21 @@
 
-# Dyle Front 1940 — Design Brief
+# Under Fire — Design Brief
+
+## Current opening battle: Dyle, 1940
+
+The first and default selected battle is **Advance to the Dyle**, the French-versus-German 1940 prototype documented in detail below.
+
+## Second scenario Preview: Mokra, 1939
+
+**Mokra: Hold the Railway** is the second selection and is currently labelled **Preview**. It is set on 1 September 1939 with Poland player-controlled against Germany. Its current vertical slice centres on a five-minute defence of the railway crossing by elements of the reinforced Wołyńska Cavalry Brigade against phased attacks associated with the German 4th Panzer Division.
+
+The scenario-specific implementation record, roster, map constraints, and historical guardrails are in [scenarios/mokra.md](scenarios/mokra.md). The complete research and campaign plan is preserved in [POLAND_1939_CAMPAIGN.md](POLAND_1939_CAMPAIGN.md).
+
+The current slice includes the Polish defensive deployment, early-war Polish and German units, the railway battlefield, and attack waves. Polish acknowledgement voices intentionally remain silent until recordings are supplied. Mounted cavalry and horse limbers, Armoured Train No. 53 *Śmiały*, a scripted Ju 87 phase, the counterattack, and the protected Polish withdrawal are planned extensions, not implemented features.
+
+## Primary design reference: Dyle Front 1940
+
+**Advance to the Dyle** remains the first/default battle. The remainder of this document records its original 1940 prototype direction. Mokra-specific decisions are maintained separately in its scenario record and campaign dossier.
 
 ## Positioning
 
@@ -225,7 +241,8 @@ The prototype included here uses 2D textured rendering only, but it already enco
 
 ## Content plan
 
-### Vertical slice mission
+### First/default vertical slice mission
+
 **“Advance to the Dyle”**
 - French vanguard enters from west
 - orchard and hedgerow belt in mid-map
@@ -315,6 +332,6 @@ The included browser prototype demonstrates:
 
 ## Product summary
 
-If I were packaging the pitch commercially:
+The Dyle pitch is:
 
 > **Dyle Front 1940** is a richly detailed real-time tactics game set in the opening battles of the 1940 Western campaign. Command individual soldiers, crews, and armored vehicles across orchards, villages, and hedgerow belts in a battlefield where suppression, sight lines, and cover matter as much as firepower. It carries the readability and tension of classic WWII RTT games, but with modern visuals and far deeper unit-level simulation.

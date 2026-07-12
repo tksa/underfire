@@ -72,10 +72,9 @@ Game.fighterTotalAvailable = () => {
     return n;
 };
 
-// Playing as Germany: no Luftwaffe airframes in the hangar yet — the D.520
-// and MB.152 are French, so fighter support is grounded until a Bf 109 lands
-// in models/. (The HUD badge reads 0 and the squadron menu greys out.)
-if (Game.playerTeam === Game.TEAM.GERMAN) {
+// These are French aircraft. Germany and the Polish Mokra mission have no
+// player-callable fighter assets in the current build.
+if (Game.playerTeam !== Game.TEAM.FRENCH) {
     for (const k in Game.FIGHTER_TYPES) Game.FIGHTER_TYPES[k].count = 0;
 }
 Game.fighters = [];

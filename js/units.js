@@ -150,6 +150,177 @@ Game.UNIT_STATS = {
     },
 
     // ═══════════════════════════════════════════════════
+    //  POLISH ARMY — MOKRA, 1 SEPTEMBER 1939
+    // ═══════════════════════════════════════════════════
+
+    // Cavalry at Mokra fought predominantly dismounted. These units therefore
+    // use the normal infantry movement/animation system rather than horses.
+    polish_ulan: {
+        label: 'Ułan (Dismounted)', kind: 'ulan', class: 'infantry',
+        description: 'Dismounted cavalry rifleman of the Wołyńska Cavalry Brigade, trained to screen fields and fight from cover.',
+        weapon: 'kbk_wz29',
+        speed: 4.7, hp: 100, size: 0.5,
+        armor: 0,
+        sight: 17, rotationSpeed: 8,
+        color: '#8f9271', cost: 1, year: 1939,
+    },
+    polish_rifleman: {
+        label: 'Strzelec', kind: 'rifleman', class: 'infantry',
+        description: 'Polish infantry rifleman attached to the Mokra defence, reliable at medium range but vulnerable in the open.',
+        weapon: 'kbk_wz29',
+        speed: 4.5, hp: 100, size: 0.5,
+        armor: 0,
+        sight: 16, rotationSpeed: 8,
+        color: '#898d6d', cost: 1, year: 1939,
+    },
+    polish_rkm_wz28: {
+        label: 'Rkm wz. 28 Team', kind: 'rkm_wz28', class: 'infantry',
+        description: 'Two-man Browning wz. 28 light-machine-gun team providing mobile suppression for dismounted cavalry squads.',
+        weapon: 'browning_wz28',
+        speed: 4.1, hp: 110, size: 0.55,
+        armor: 0,
+        sight: 18, rotationSpeed: 7,
+        color: '#7f8564', cost: 2, year: 1939,
+    },
+    polish_at_rifle_wz35: {
+        label: 'Kb ppanc. wz. 35 Team', kind: 'at_rifle_wz35', class: 'infantry',
+        description: 'Concealed two-man Ur anti-tank-rifle team, effective against the thin armour of early German tanks at close range.',
+        weapon: 'wz35_at_rifle',
+        speed: 3.9, hp: 90, size: 0.52,
+        armor: 0,
+        sight: 19, rotationSpeed: 6,
+        color: '#777d5d', cost: 2, year: 1939,
+    },
+
+    // ── Polish support weapons ─────────────────────
+    polish_hmg: {
+        label: 'Ckm wz. 30 Team', kind: 'hmg', class: 'support',
+        description: 'Tripod-mounted Polish heavy machine gun with strong sustained suppression across the railway approaches.',
+        weapon: 'ckm_wz30',
+        speed: 2.5, hp: 130, size: 0.6,
+        armor: 0,
+        sight: 22, rotationSpeed: 4,
+        color: '#73795a', cost: 3, year: 1939,
+    },
+    polish_mortar46: {
+        label: 'Granatnik wz. 36', kind: 'mortar46', class: 'support',
+        description: 'Light 46 mm grenade launcher for rapid short-range indirect fire against infantry gathering behind cover.',
+        weapon: 'grenade_launcher_46mm',
+        speed: 3.7, hp: 95, size: 0.53,
+        armor: 0,
+        sight: 13, rotationSpeed: 5,
+        color: '#747a5b', cost: 2, year: 1939,
+    },
+    polish_mortar81: {
+        label: 'Moździerz wz. 31 (81mm)', kind: 'mortar81', class: 'support',
+        description: 'Medium mortar crew delivering heavier indirect fire from behind the Polish railway defence line.',
+        weapon: 'mortar_81mm_pl',
+        speed: 2.5, hp: 120, size: 0.6,
+        armor: 0,
+        sight: 11, rotationSpeed: 4,
+        color: '#6c7254', cost: 4, year: 1939,
+    },
+    polish_bofors37: {
+        label: '37mm Bofors wz. 36', kind: 'bofors37', class: 'support',
+        description: 'The principal Polish anti-tank gun at Mokra; conceal it and engage early panzers from a prepared position.',
+        weapon: 'bofors_37mm_wz36',
+        speed: 1.7, hp: 155, size: 0.72,
+        armor: 0,
+        sight: 21, rotationSpeed: 3,
+        color: '#676e50', cost: 3, year: 1939,
+    },
+    polish_fieldgun75: {
+        label: '75mm Armata wz. 1902/26', kind: 'fieldgun75', class: 'support',
+        description: 'Horse-artillery field gun firing high explosive in support of the brigade from east of the railway.',
+        weapon: 'wz1902_26_75mm',
+        speed: 1.3, hp: 165, size: 0.8,
+        armor: 0,
+        sight: 20, rotationSpeed: 2.5,
+        color: '#62694c', cost: 5, year: 1939,
+    },
+
+    // ── Polish reconnaissance armour ───────────────
+    polish_tks: {
+        label: 'TKS Tankette (MG)', kind: 'tks', class: 'vehicle',
+        description: 'Machine-gun-armed TKS tankette used for reconnaissance and infantry support, not as a battle tank.',
+        weapon: 'ckm_wz30_vehicle',
+        speed: 6.8, hp: 90, size: 0.7,
+        armor: { front: 10, side: 8, rear: 6 },
+        driveType: 'tracked',
+        sight: 19, rotationSpeed: 1.9, hullTurnAccel: 1.35,
+        color: '#77794e', cost: 1, year: 1939,
+    },
+    polish_wz34: {
+        label: 'Samochód Pancerny wz. 34', kind: 'wz34', class: 'vehicle',
+        description: 'Light machine-gun armoured car for reconnaissance and flank security, fast on roads but very lightly protected.',
+        weapon: 'ckm_wz30_vehicle',
+        speed: 7.8, hp: 95, size: 0.78,
+        armor: { front: 8, side: 6, rear: 4 },
+        driveType: 'wheeled',
+        turret: { speed: 5.0, accel: 3.0 },
+        sight: 25, rotationSpeed: 3.0, hullTurnAccel: 2.5,
+        color: '#74774c', cost: 2, year: 1939,
+    },
+
+    // ── Polish command, specialists and logistics ─
+    polish_medic: {
+        label: 'Sanitariusz', kind: 'medic', class: 'support', supportType: 'medic',
+        description: 'Polish medical orderly who treats wounded soldiers and keeps defensive positions combat-effective.',
+        weapon: 'pistol_pl',
+        speed: 4.5, hp: 60, size: 0.45,
+        armor: 0,
+        sight: 14, rotationSpeed: 8,
+        color: '#d7d5bc', cost: 1, year: 1939,
+    },
+    polish_mechanic: {
+        label: 'Mechanik', kind: 'mechanic', class: 'support', supportType: 'mechanic',
+        description: 'Army mechanic assigned to keep trucks and the brigade’s lightly armoured reconnaissance vehicles moving.',
+        weapon: 'pistol_pl',
+        speed: 4.2, hp: 65, size: 0.45,
+        armor: 0,
+        sight: 14, rotationSpeed: 8,
+        color: '#879078', cost: 1, year: 1939,
+    },
+    polish_officer: {
+        label: 'Oficer Kawalerii', kind: 'officer', class: 'support', supportType: 'officer',
+        description: 'Cavalry officer coordinating the railway defence; preserving the command team is a secondary objective.',
+        weapon: 'pistol_pl',
+        speed: 4.6, hp: 70, size: 0.45,
+        armor: 0,
+        sight: 21, rotationSpeed: 8,
+        color: '#a79660', cost: 2, year: 1939,
+    },
+    polish_sapper: {
+        label: 'Saper', kind: 'sapper', class: 'support', supportType: 'sapper',
+        description: 'Combat engineer prepared to clear obstacles and support defensive works around the railway crossings.',
+        weapon: 'kbk_wz29',
+        speed: 4.0, hp: 90, size: 0.5,
+        armor: 0,
+        sight: 15, rotationSpeed: 7,
+        color: '#8a7958', cost: 1, year: 1939,
+    },
+    polish_supply_truck: {
+        label: 'Polski Fiat 621L Supply Truck', kind: 'supply', class: 'support', supportType: 'supply',
+        description: 'Unarmoured brigade supply lorry carrying ammunition and field stores to forward Polish positions.',
+        weapon: 'none',
+        speed: 5.0, hp: 80, size: 0.85,
+        armor: { front: 2, side: 1, rear: 1 },
+        driveType: 'wheeled',
+        sight: 16, rotationSpeed: 2,
+        color: '#7c805d', cost: 2, year: 1939,
+    },
+    polish_transport_truck: {
+        label: 'Polski Fiat 621L Transport', kind: 'transport', class: 'support', supportType: 'transport',
+        description: 'Unarmoured troop transport with seating for an infantry section and the ability to tow one anti-tank gun.',
+        weapon: 'none',
+        speed: 5.0, hp: 80, size: 0.85,
+        armor: { front: 2, side: 1, rear: 1 },
+        driveType: 'wheeled',
+        sight: 16, rotationSpeed: 2,
+        color: '#73795a', cost: 2, year: 1939,
+    },
+
+    // ═══════════════════════════════════════════════════
     //  GERMAN ARMY (WEHRMACHT)
     // ═══════════════════════════════════════════════════
 
@@ -169,6 +340,15 @@ Game.UNIT_STATS = {
         armor: 0,
         sight: 14, rotationSpeed: 9,
         color: '#757a70', cost: 1,
+    },
+    german_mp38: {
+        label: 'Gruppenführer (MP 38)', kind: 'mp38', class: 'infantry',
+        description: 'German squad leader with a limited-issue MP 38 for close-range command and assault work in September 1939.',
+        weapon: 'mp38',
+        speed: 4.9, hp: 95, size: 0.5,
+        armor: 0,
+        sight: 15, rotationSpeed: 9,
+        color: '#757a70', cost: 1, year: 1938,
     },
     german_mg34: {
         label: 'MG34 Team', kind: 'mg34', class: 'infantry',
@@ -380,13 +560,15 @@ Game.isVehicle = (unit) => {
 
 Game.isTank = (kind) => {
     // Check all possible vehicle kinds
-    return ['s35', 'h35', 'r35', 'b1', 'panhard', 'panzer1', 'panzer2', 'panzer3', 'panzer4', 'sdkfz'].includes(kind);
+    return ['s35', 'h35', 'r35', 'b1', 'panhard', 'panzer1', 'panzer2', 'panzer3', 'panzer4', 'sdkfz',
+        'tks', 'wz34'].includes(kind);
 };
 
 Game.isTruck = (kind) => ['fuel', 'supply', 'transport'].includes(kind);
 
 Game.isSupport = (kind) => {
-    return ['hmg', 'mortar50', 'mortar60', 'mortar81', 'pak36', 'at25', 'at47'].includes(kind);
+    return ['hmg', 'mortar46', 'mortar50', 'mortar60', 'mortar81',
+        'bofors37', 'fieldgun75', 'pak36', 'at25', 'at47'].includes(kind);
 };
 
 // ═══════════════════════════════════════════════════════
@@ -437,6 +619,7 @@ Game.applyUnitsCSV = (text) => {
         set('class', cell(row, 'class'));
         set('supportType', cell(row, 'supportType'));
         set('label', cell(row, 'label'));
+        set('description', cell(row, 'description'));
         set('weapon', cell(row, 'weapon'));
         set('secondaryWeapon', cell(row, 'secondaryWeapon'));
         set('color', cell(row, 'color'));
@@ -572,9 +755,11 @@ Game._createUnitMesh = (unit) => {
     const stats = Game.UNIT_STATS[unit.statKey] || {};
     const isVeh = Game.isTank(unit.kind);
     const isSup = Game.isSupport(unit.kind);
-    const isTruck = unit.kind === 'supply' || unit.kind === 'fuel';
-    const baseColor = new THREE.Color(stats.color || (unit.team === Game.TEAM.FRENCH ? '#6f7f6a' : '#6d7362'));
-    const accentColor = unit.team === Game.TEAM.FRENCH ? 0x8395a5 : 0x7e8278;
+    const isTruck = Game.isTruck(unit.kind);
+    const factionBase = { french: '#6f7f6a', german: '#6d7362', polish: '#81775a' };
+    const factionAccent = { french: 0x8395a5, german: 0x7e8278, polish: 0x9a8b62 };
+    const baseColor = new THREE.Color(stats.color || factionBase[unit.team] || '#6d7362');
+    const accentColor = factionAccent[unit.team] || 0x7e8278;
     const gunmetal = 0x3a3530;
 
     // No flatShading: box/cylinder geometry already has faceted normals, and
@@ -669,6 +854,22 @@ Game._createUnitMesh = (unit) => {
         group.userData.turretBaseRot = { x: 0, y: 0, z: 0 };
         group.userData.recoilAxis = 'z';
         group.userData.recoilSign = -1; // gun recoils toward -Z (backward)
+        // Ordinary Mokra TKS: low, turretless and MG-armed. Do not visually
+        // imply the rare 20 mm conversion or a conventional rotating turret.
+        if (unit.kind === 'tks') {
+            group.remove(turretGroup);
+            const casemate = addMesh(new THREE.BoxGeometry(s * 1.12, s * 0.50, s * 0.92),
+                turretMat, 0, hullBaseY + hullH + s * 0.18, -s * 0.10);
+            const mgLen = s * 0.55;
+            const mgGeo = new THREE.CylinderGeometry(0.025 * s, 0.035 * s, mgLen, 7);
+            mgGeo.rotateX(Math.PI / 2);
+            const mg = addMesh(mgGeo, std(gunmetal, { roughness: 0.6 }),
+                s * 0.18, hullBaseY + hullH + s * 0.18, s * 0.55 + mgLen / 2);
+            mg.name = 'FixedMG';
+            group.userData.turret = null;
+            group.userData.gunNode = mg;
+            group.userData.headNode = casemate;
+        }
     } else if (isTruck) {
         const s = unit.size;
         const cabMat = std(baseColor, { roughness: 0.8 });
@@ -744,7 +945,8 @@ Game._createUnitMesh = (unit) => {
 
             // Crouched gunner behind the gun.
             const skinCol = 0xcaa987;
-            const helmetCol = unit.team === Game.TEAM.FRENCH ? 0x515f6e : 0x53574b;
+            const helmetCol = unit.team === Game.TEAM.FRENCH ? 0x515f6e
+                : (unit.team === Game.TEAM.POLISH ? 0x5d6245 : 0x53574b);
             const clothMat = std(baseColor, { roughness: 0.9 });
             Game._addWeathering(clothMat, 0.1);
             const gnr = new THREE.Group();
@@ -768,7 +970,7 @@ Game._createUnitMesh = (unit) => {
             // shield (angled)
             const shield = addMesh(new THREE.BoxGeometry(0.85, 0.5, 0.04), gunMat, 0, 0.55, 0.18);
             shield.rotation.x = -0.18;
-            const bLen = unit.kind === 'at47' ? 1.3 : 1.0;
+            const bLen = unit.kind === 'fieldgun75' ? 1.5 : (unit.kind === 'at47' ? 1.3 : 1.0);
             const barrelGeo2 = new THREE.CylinderGeometry(0.03, 0.045, bLen, 8);
             barrelGeo2.rotateX(Math.PI / 2);
             addMesh(barrelGeo2, metalMat, 0, 0.5, 0.25 + bLen / 2);
@@ -785,7 +987,8 @@ Game._createUnitMesh = (unit) => {
         const skin = 0xcaa987;
         const isOfficer = unit.kind === 'officer';
         const helmetCol = unit.kind === 'medic' ? 0xdedcc8
-            : (unit.team === Game.TEAM.FRENCH ? 0x515f6e : 0x53574b);
+            : (unit.team === Game.TEAM.FRENCH ? 0x515f6e
+                : (unit.team === Game.TEAM.POLISH ? 0x5d6245 : 0x53574b));
         const cloth = std(baseColor, { roughness: 0.9 });
         Game._addWeathering(cloth, 0.12);
         const trousers = std(baseColor.clone().multiplyScalar(0.72), { roughness: 0.95 });
@@ -819,7 +1022,8 @@ Game._createUnitMesh = (unit) => {
         addMesh(box(0.09, 0.06, 0.09), std(skin), 0, 0.42, 0, upper);        // neck
         addMesh(new THREE.SphereGeometry(0.1, 10, 8), std(skin), 0, 0.51, 0.01, upper); // head
         if (isOfficer) {
-            const capCol = unit.team === Game.TEAM.FRENCH ? 0x3a4a64 : 0x46493e;
+            const capCol = unit.team === Game.TEAM.FRENCH ? 0x3a4a64
+                : (unit.team === Game.TEAM.POLISH ? 0x575c40 : 0x46493e);
             addMesh(new THREE.CylinderGeometry(0.12, 0.125, 0.09, 12), std(capCol, { roughness: 0.55 }), 0, 0.54, 0, upper);
             addMesh(box(0.2, 0.02, 0.08), std(0x1a1a18, { roughness: 0.5 }), 0, 0.51, 0.11, upper);
             addMesh(box(0.07, 0.04, 0.02), std(0xcaa23a, { roughness: 0.4, metalness: 0.3 }), 0, 0.56, 0.12, upper);
@@ -918,10 +1122,10 @@ Game._loadUnitModel = (unit, mesh) => {
     // Foot infantry share one skinned soldier model (per-faction skin + named
     // sub-clips split from its baked animation). A team/kind-specific GLB still
     // wins if present; otherwise every rifleman falls back to the soldier.
-    // French support PERSONNEL (medic/mechanic/sapper/officer) use the same
-    // fusilier body too — told apart by their painted role skins (see
-    // SOLDIER_SKINS in soldier_model.js). France only for now.
-    const soldierSupport = unit.team === Game.TEAM.FRENCH
+    // French and Polish support PERSONNEL (medic/mechanic/sapper/officer) use
+    // the shared soldier body too. Polish roles deliberately use tint-only
+    // materials until dedicated painted textures are supplied.
+    const soldierSupport = (unit.team === Game.TEAM.FRENCH || unit.team === Game.TEAM.POLISH)
         && ['medic', 'mechanic', 'sapper', 'officer'].includes(unit.kind);
     if (Game.USE_SOLDIER_MODEL && !isVeh
         && ((!isSup && unit.class === 'infantry') || soldierSupport)) {
@@ -940,7 +1144,9 @@ Game._loadUnitModel = (unit, mesh) => {
     //    it wins over the ground-snap + Y_TRIM. This is the value the debug panel's
     //    "Scan Nodes → Wrapper Y" slider writes, so what you set there persists,
     //    survives a model reload, and shows up in the copy-config.
-    Game.MODEL_YAW = Game.MODEL_YAW || { french_s35: Math.PI, french_fuel: Math.PI, french_supply: Math.PI, french_transport: Math.PI };
+    Game.MODEL_YAW = Game.MODEL_YAW || {
+        french_s35: Math.PI, french_fuel: Math.PI, french_supply: Math.PI, french_transport: Math.PI,
+    };
     Game.MODEL_Y_TRIM = Game.MODEL_Y_TRIM || {};
     Game.MODEL_WRAPPER_Y = Game.MODEL_WRAPPER_Y || { french_r35: 0.80 };
     // STEER_PIVOT offsets the body from the unit's rotation centre. That makes a
@@ -948,7 +1154,11 @@ Game._loadUnitModel = (unit, mesh) => {
     // kinematic bicycle model (uMod.move) already gives realistic front-wheel
     // steering, and a centred body turns cleanly like the procedural trucks do.
     Game.MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT || {};
-    Game.MODEL_SCALE = Game.MODEL_SCALE || { french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35, french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1, german_panzer3: 1.35 };
+    Game.MODEL_SCALE = Game.MODEL_SCALE || {
+        french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35,
+        french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1,
+        german_panzer3: 1.35,
+    };
     const MODEL_YAW = Game.MODEL_YAW, MODEL_Y_TRIM = Game.MODEL_Y_TRIM, MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT, MODEL_SCALE = Game.MODEL_SCALE;
     // Fused-mesh tanks (turret modelled into the hull, no separate node): aim by
     // rotating the whole hull. The B1 model now has a real "turret" node, so it's
@@ -1498,6 +1708,7 @@ Game.makeUnit = (team, kind, x, z, opts = {}) => {
         statKey: key,              // Store the lookup key for stat access
         supportType: base.supportType || null,
         label: base.label,
+        description: base.description || '',
         class: base.class,
         weaponKey: base.weapon,
         secondaryWeaponKey: base.secondaryWeapon || null,
@@ -1573,7 +1784,7 @@ Game.makeUnit = (team, kind, x, z, opts = {}) => {
         // RWM-style towed-gun deploy (siege): AT guns must be set up to fire and
         // packed up to move. They start deployed; the update loop limbers them
         // automatically when ordered to move and re-deploys them once stopped.
-        deployable: ['at25', 'at47', 'pak36', 'hmg'].includes(base.kind || kind),
+        deployable: ['at25', 'at47', 'pak36', 'bofors37', 'fieldgun75', 'hmg'].includes(base.kind || kind),
         deployed: true,
         _deployT: 0,
         mesh: null,
@@ -1671,11 +1882,16 @@ Game.formationOffsets = (count, spacing = 2.0, type) => {
 //  - MODEL_STEER_PIVOT: body shift; left empty (caused turning "skid").
 //  - MODEL_WRAPPER_Y: absolute wrapper-Y override (debug "Scan Nodes → Wrapper Y");
 //    wins over ground-snap + trim, persists, survives reload, shows in copy-config.
-Game.MODEL_YAW = Game.MODEL_YAW || { french_s35: Math.PI, french_fuel: Math.PI, french_supply: Math.PI, french_transport: Math.PI };
+Game.MODEL_YAW = Game.MODEL_YAW || {
+    french_s35: Math.PI, french_fuel: Math.PI, french_supply: Math.PI, french_transport: Math.PI,
+};
 Game.MODEL_Y_TRIM = Game.MODEL_Y_TRIM || {};
 Game.MODEL_WRAPPER_Y = Game.MODEL_WRAPPER_Y || { french_r35: 0.80 };
 Game.MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT || {};
-Game.MODEL_SCALE = Game.MODEL_SCALE || { french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35, french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1 };
+Game.MODEL_SCALE = Game.MODEL_SCALE || {
+    french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35,
+    french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1,
+};
 
 // Rebuild the loaded model for every live unit of a teamKind, re-reading the
 // current Game.MODEL_* values. The GLB is cached (Game.loadModel clones it), so

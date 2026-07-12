@@ -9,7 +9,7 @@
  *   rgb      — the normal low-poly render (also the "abstract" input)
  *   depth    — linear-ish depth, near = bright
  *   unit     — unit-TYPE semantic mask (infantry / support / vehicle / ...)
- *   team     — team/faction mask (french / german)
+ *   team     — team/faction mask (polish / french / german)
  *   id       — per-unit instance id mask (unique colour per unit)
  *   terrain  — ground class mask (grass/road/wheat/forest/water/...) + structures
  *
@@ -27,7 +27,10 @@ Game.NeuralExport = (() => {
     const C = (r, g, b) => [r, g, b];
 
     // ── Semantic palettes (flat, well-separated colours) ──
-    const TEAM_COLORS = { french: C(40, 90, 220), german: C(220, 50, 50), neutral: C(150, 150, 150) };
+    const TEAM_COLORS = {
+        polish: C(230, 205, 70), french: C(40, 90, 220),
+        german: C(220, 50, 50), neutral: C(150, 150, 150),
+    };
     const CLASS_COLORS = {
         infantry: C(60, 200, 90),
         support: C(240, 210, 50),
@@ -40,7 +43,7 @@ Game.NeuralExport = (() => {
         grass: C(70, 140, 70), pasture: C(90, 160, 80), wheat: C(210, 190, 90),
         stubble: C(200, 195, 130), plowed: C(120, 80, 50), vineyard: C(90, 150, 70),
         garden: C(120, 170, 90), orchard: C(70, 150, 80), forest: C(30, 90, 40),
-        dense_forest: C(20, 70, 30), road: C(160, 140, 100), mud: C(100, 80, 60),
+        dense_forest: C(20, 70, 30), road: C(160, 140, 100), railway: C(85, 80, 72), mud: C(100, 80, 60),
         yard: C(170, 160, 130), hedge: C(40, 110, 50), wall: C(150, 150, 160),
         house: C(180, 120, 90), water: C(40, 110, 200), swamp: C(80, 90, 70),
     };

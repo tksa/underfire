@@ -22,7 +22,7 @@
 
 ---
 
-Under Fire is a browser-based WW2 RTS in active, early development. It runs today: a 3D, individual-unit tactical battle with cover, suppression, line-of-sight, stance, armour penetration, squad AI, and a procedurally generated French-village battlefield. The bigger goal is a historically faithful platoon-to-battalion wargame spanning the whole of the Second World War — and it is being built in the open, by the community, with AI ("vibe") coding.
+Under Fire is a browser-based WW2 RTS in active, early development. Its first and default selected battle is the French-versus-German **Advance to the Dyle** scenario. **Mokra: Hold the Railway** is the second, Preview scenario, where the player commands Polish forces against Germany on 1 September 1939. Both run on the same individual-unit tactical simulation, with cover, suppression, line-of-sight, stance, armour penetration, squad AI, and 3D terrain. The bigger goal is a historically faithful platoon-to-battalion wargame spanning the whole of the Second World War — and it is being built in the open, by the community, with AI ("vibe") coding.
 
 > Status: **work in progress.** Expect rough edges and missing pieces. That is the invitation, not the disclaimer.
 
@@ -39,6 +39,13 @@ python3 -m http.server 8741
 ```
 
 Any static file server works (`npx serve`, `php -S`, nginx, etc.). Opening `index.html` directly via `file://` may break ES-module and asset loading, so use a server.
+
+### Playable battles
+
+- **Advance to the Dyle** — the first and default selected French-versus-German battle.
+- **Mokra: Hold the Railway** — the second selection, currently labelled **Preview**. Command Poland's reinforced Wołyńska Cavalry Brigade against German armour and hold the railway crossing. See the [implementation record](docs/scenarios/mokra.md) and the complete [Poland 1939 campaign dossier](docs/POLAND_1939_CAMPAIGN.md).
+
+The current Mokra slice covers a Polish defensive deployment, an appropriate early-war roster, the railway battlefield, and phased German attacks. Polish voice recordings have not been added yet, so Polish acknowledgements intentionally remain silent. Mounted cavalry, Armoured Train No. 53 *Śmiały*, the scripted Ju 87 phase, and the protected withdrawal are documented future work rather than current gameplay.
 
 ### Controls
 

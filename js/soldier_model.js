@@ -135,13 +135,21 @@ Game.SOLDIER_SKINS = {
     fr_sapper:   'textures/fr_skin_sapper.png',
     fr_officer:  'textures/fr_skin_officer.png',
 };
-Game.SOLDIER_TEAM_ABBR = { french: 'fr', german: 'de' };
+Game.SOLDIER_TEAM_ABBR = { french: 'fr', german: 'de', polish: 'pl' };
 Game.SOLDIER_KIND_ROLE = {
-    fusilier: 'rifle', dragoon: 'rifle', grenadier: 'rifle',
-    smg: 'smg', sturmtrupp: 'smg', fm24: 'mg', mg34: 'mg', sniper: 'sniper',
+    fusilier: 'rifle', dragoon: 'rifle', grenadier: 'rifle', ulan: 'rifle', rifleman: 'rifle',
+    smg: 'smg', sturmtrupp: 'smg', mp38: 'smg',
+    fm24: 'mg', mg34: 'mg', rkm_wz28: 'mg', at_rifle_wz35: 'rifle', sniper: 'sniper',
     medic: 'medic', mechanic: 'mechanic', sapper: 'sapper', officer: 'officer',
 };
-Game.SOLDIER_SKIN_TINT = { german: 0xffffff, french: 0x93a3b4 };   // fallback tint when no painted skin exists
+// Poland intentionally has no painted PNG yet. The shared soldier's source
+// texture is tinted khaki/olive here, keeping every Polish role usable until
+// dedicated skins are painted without silently borrowing French colours.
+Game.SOLDIER_SKIN_TINT = {
+    german: 0xffffff,
+    french: 0x93a3b4,
+    polish: 0xa29f78,
+};   // fallback tint when no painted skin exists
 // Colour multipliers turn the French fusilier texture into lightweight role
 // variants. Values may exceed 1 to brighten the baked texture (notably the
 // medic); keeping this separate from SOLDIER_SKINS avoids four duplicate maps.

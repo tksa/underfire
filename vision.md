@@ -10,7 +10,7 @@ This document is the north star. It is intentionally about *direction*, not a fr
 
 A platoon-to-battalion scale RTS where you command real soldiers and vehicles — not faceless blobs — across the battlefields of the Second World War. You feel the difference between a squad pinned in the open and one fighting from a hedgerow, between a flank shot and a frontal one, between a confident advance and a broken retreat.
 
-**Scope: the whole war.** The first playable scenario opens on the 1940 Western Front because that is where development started, but the ambition spans every front and every year of WWII — the deserts, the East, Italy, the Pacific, the late-war push. New theatres, factions, and scenarios are exactly the kind of contribution we want.
+**Scope: the whole war.** The first and default selected battle remains the 1940 Western Front scenario **Advance to the Dyle**, where development started. **Mokra: Hold the Railway**, set on 1 September 1939 with Poland player-controlled against Germany, is available as the second, Preview scenario. The ambition spans every front and every year of WWII — the deserts, the East, Italy, the Pacific, and the late-war push. New theatres, factions, and scenarios are exactly the kind of contribution we want.
 
 ---
 
@@ -26,15 +26,17 @@ A platoon-to-battalion scale RTS where you command real soldiers and vehicles �
 
 ## Where it is now (honest status)
 
-Working today: 3D procedural terrain (a French village of patchwork hedgerow fields, a church, windmill, river and bridge), individual-unit control, French vs. German forces, cover/concealment/LOS/suppression/stance, armour penetration with facing and obliquity, squad AI with cover-seeking and fire-and-maneuver, procedural effects and audio, fog of war, and a tactical-pause command layer.
+Working today: the default French Dyle battlefield; and a Preview Mokra battlefield with its north–south railway, limited crossings, village strips, cultivated approaches, woods, and a Polish 1939 roster facing period-appropriate German attackers. Shared systems include individual-unit control, cover/concealment/LOS/suppression/stance, armour penetration with facing and obliquity, squad AI with cover-seeking and fire-and-maneuver, procedural effects and audio, fog of war, and a tactical-pause command layer.
 
-Early / incomplete: only one playable scenario; only the French side is playable (German is AI-only for now); infantry models and animation are basic; balance is unverified; many systems are first-draft.
+Early / incomplete: Mokra is a Preview and currently represents the defensive hold phase, with Poland as the intended player side and Germany AI-controlled. Dedicated Polish voice recordings and final Polish models/skins are still awaiting assets. Mounted cavalry and horse limbers, Armoured Train No. 53 *Śmiały*, a scripted Ju 87 phase, the Polish counterattack, and the protected withdrawal remain planned. Infantry models and animation are basic, balance is unverified, and many systems are first-draft.
 
 ---
 
 ## What would move the needle most
 
-- **A second playable faction** (make German selectable and balanced).
+- **Finish Mokra's later phases** (armoured train, counterattack, air attack, and protected withdrawal).
+- **Polish presentation assets**, especially authentic voices, infantry skins, guns, and vehicles.
+- **More playable sides** (make German selectable and balanced where the scenario design supports it).
 - **More scenarios and maps**, and the scaffolding to define them cleanly.
 - **Better unit models and animation**, especially infantry.
 - **Deeper, more historical combat and morale systems.**

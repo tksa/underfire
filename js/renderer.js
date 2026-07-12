@@ -1541,7 +1541,7 @@ Game.updateMinimap = () => {
     const TILE_COLORS_2D = {
         grass: '#768a4a', pasture: '#8a9a52', wheat: '#c2a85a', stubble: '#c9b884',
         plowed: '#8a6948', vineyard: '#76884a', garden: '#88965a', orchard: '#6e8046',
-        road: '#b09468', mud: '#6e5a42', forest: '#46582f', dense_forest: '#36462a',
+        road: '#b09468', railway: '#554f45', mud: '#6e5a42', forest: '#46582f', dense_forest: '#36462a',
         house: '#8b8075', wall: '#8b8075', hedge: '#3a5c2e', yard: '#bcab84',
         water: '#4a6e74', swamp: '#5a5e44'
     };
@@ -1577,7 +1577,8 @@ Game.updateMinimap = () => {
     Game.units.filter(u => u.alive).forEach(u => {
         // Don't show enemies in fog
         if (u.team !== Game.playerTeam && Game.isFogVisible && !Game.isFogVisible(u.x, u.z)) return;
-        ctx.fillStyle = u.team === Game.TEAM.FRENCH ? '#9cc9ff' : '#d7dc9c';
+        const teamColor = { polish: '#f0df9a', french: '#9cc9ff', german: '#d7dc9c' };
+        ctx.fillStyle = teamColor[u.team] || '#ffffff';
         const px = (u.x / Game.WORLD_W) * w;
         const py = (u.z / Game.WORLD_H) * h;
         ctx.fillRect(px - 2, py - 2, 4, 4);
@@ -1684,12 +1685,24 @@ Game.updateHUD = () => {
         const enemyAlive = Game.getTeamUnits(Game.enemyTeam()).length;
         const ownAlive = Game.getTeamUnits(Game.playerTeam).length;
         const asFrench = Game.playerTeam === Game.TEAM.FRENCH;
-        let status = asFrench
-            ? 'Use cover. German MG fire will pin exposed infantry.'
-            : 'Use cover. French armor is thick — flank it or bring the PaK up.';
+        const isMokra = Game.currentScenario === 'mokra';
+        const ms = Game.missionState || {};
+        let status = isMokra
+            ? (ms.tacticalHint || 'Use cover, conceal the guns, and preserve the brigade.')
+            : (asFrench
+                ? 'Use cover. German MG fire will pin exposed infantry.'
+                : 'Use cover. French armor is thick — flank it or bring the PaK up.');
         if (Game.missionState.won) status = '<span class="win">Mission accomplished</span>';
         else if (Game.missionState.lost) status = '<span class="lose">Mission failed</span>';
-        Game.hud.missionPanel.innerHTML = `
+        Game.hud.missionPanel.innerHTML = isMokra ? `
+      <div class="hud-title">Mission</div>
+      <div class="hud-subtitle">${ms.title || 'Mokra: Hold the Railway'}</div>
+      <div class="hud-text">Primary: ${ms.primaryObjective || 'Hold the central railway crossing.'}</div>
+      ${ms.secondaryObjective ? `<div class="hud-text">Secondary: ${ms.secondaryObjective}</div>` : ''}
+      <div class="hud-text">Phase ${ms.phase || 1}: ${ms.phaseName || 'Defence'} • Polish: ${ownAlive} • Enemy: ${enemyAlive}</div>
+      <div class="hud-text">Enemy losses: ${ms.enemyLosses || 0} • ${Game.formatTime(ms.timer)}</div>
+      <div class="hud-status">${status}</div>
+    ` : `
       <div class="hud-title">Mission</div>
       <div class="hud-subtitle">${asFrench ? 'Advance to the Dyle line' : 'Break through at the Dyle'}</div>
       <div class="hud-text">Primary: seize the crossroads east of the village.</div>
@@ -1725,9 +1738,13 @@ Game.updateHUD = () => {
             const ammoText = hasAmmo
                 ? `<span style="color:${ammoColor};font-weight:600">Ammo ${u.ammo}/${u.maxAmmo}</span>`
                 : 'Ammo —';
+            const description = String(u.description || '').replace(/[&<>"']/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+            })[ch]);
             Game.hud.selectedPanel.innerHTML = `
         <div class="hud-title">Selected</div>
         <div class="hud-unit-name">${u.label}</div>
+        ${description ? `<div class="hud-text muted">${description}</div>` : ''}
         <div class="hud-text">Move: ${(Game.STANCE_LABEL && Game.STANCE_LABEL[u.stance]) || u.stance} • Fire: ${u.holdFire ? '<span style="color:#ff9a4d;font-weight:600">HOLD</span>' : 'free'} • ${u.behavior || 'defensive'}</div>
         <div class="hud-text">HP ${Math.round(u.hp)} • ${ammoText}${fuelStr} • XP ${Math.round(u.experience || 0)}</div>
         ${statusFlags.length ? `<div class="hud-text" style="color:#ff6b5e;font-weight:600">${statusFlags.join(' &nbsp; ')}</div>` : ''}
