@@ -27,7 +27,7 @@ Dawn has brought war to the Mokra line. The German armoured division is approach
 - Defeat: lose the whole Polish force, or leave the central crossing under uncontested German control for 25 seconds.
 - Attack structure: a German vanguard followed by three timed echelons from the west.
 - Air support: none is player-callable. French fighters and generic bomber support are disabled for Mokra.
-- Voice behavior: Polish order acknowledgements are intentionally silent until Polish recordings are supplied. Combat effects, engines, ambience, and UI sounds remain enabled.
+- Voice behavior: Polish infantry use dedicated Polish command pools, while tank pools reuse vehicle-neutral takes from the same supplied recordings. Attack commands periodically draw from a shared vehicle-safe morale pool, and the final German echelon forces one Polish `nie-zlamia-nas` cue. Dedicated vehicle-crew recordings remain desirable, but tanks are not silent and never fall through to French or German speech. Combat effects, engines, ambience, and UI sounds remain enabled.
 
 ## Authored map
 
@@ -43,6 +43,17 @@ The 100 × 100 tile battlefield is deliberately compressed for the current engin
 Railway tiles slow infantry and block vehicles, forcing vehicles to use the road crossings. Procedural sleepers and steel rails make the feature visible independently of the terrain texture.
 
 Runtime source: [`js/scenarios/mokra.js`](../../js/scenarios/mokra.js). Map metadata: [`maps/mokra/map.json`](../../maps/mokra/map.json).
+
+## Opening defensive deployment
+
+The five-minute preview starts with a deliberately compressed defensive formation immediately west of the railway:
+
+- six north–south gun positions alternating three 37 mm Bofors anti-tank guns and three 75 mm field guns;
+- 25 dismounted infantry in five five-man sections, one in each interval between adjacent gun positions;
+- one full eight-man reserve squad behind the line;
+- two Ckm wz. 30 HMGs, plus one 46 mm grenade launcher and one 81 mm mortar.
+
+This allocation makes the line readable and playable at the current map and mission scale. It is not a claim that the opening force represents the Wołyńska Cavalry Brigade's full historical establishment; the larger brigade-scale target remains documented in the campaign dossier.
 
 ## Playable Polish roster
 
@@ -77,7 +88,7 @@ The current allowlist uses Kar98k/MG34 infantry with one limited-issue MP38 squa
 | Appropriate 1939 core roster | Implemented | Includes editable descriptions and model-safe procedural fallbacks. |
 | Railway, limited crossings, Mokra I–III, no major water | Implemented | Dedicated scenario generator; the legacy French river map is not used. |
 | Defensive hold objective and German attack waves | Implemented | Five-minute vertical slice with crossing-control defeat logic. |
-| Polish voice assets | Awaiting assets | Empty `VOICE_PL` slots prevent cross-language fallback and 404 requests. |
+| Polish voice assets | Implemented | 75 unique assets are active across infantry and tank pools. Only two context-specific clips remain reserved; tank pools reuse vehicle-neutral takes, with dedicated crew recordings still desirable. |
 | Dedicated Polish infantry/vehicle/gun models and PNG skins | Placeholder | Shared animated soldier with khaki tint plus procedural vehicles/guns. |
 | Mounted cavalry and horse limbers | Planned | Requires horse, rider, dismount, hitch, and limber systems. |
 | Armoured Train No. 53 “Śmiały” | Planned | Railway path exists; train entity, cars, weapons, timetable, and effects do not. |
@@ -86,14 +97,22 @@ The current allowlist uses Kar98k/MG34 infantry with one limited-issue MP38 squa
 | Counterattack and protected withdrawal east | Planned | Needs multi-zone objective and extraction scripting beyond the current hold phase. |
 | Alternate battles/campaign persistence | Planned | Jordanów/Wysoka, Mława, Borowa Góra, Bzura, and Krojanty remain in the dossier backlog. |
 
-## Asset hand-off for Polish voices
+## Polish voice implementation
 
-When recordings are ready, add OGG files under `sounds/rwm/` (or move them to a future Polish sound folder and adjust paths) and list their basenames in `VOICE_PL` inside `js/audio.js` for these semantic slots:
+The project owner supplied 77 Polish WAV recordings. Their original WAV masters remain outside the repository; compressed runtime copies live under [`sounds/voices/pl/`](../../sounds/voices/pl/), separately from the public-domain RWM sound bank.
 
-- soldier select, move, and attack;
-- vehicle select, move, attack, and stop.
+- 16 infantry-selection takes are active for soldier selection.
+- 30 movement takes are active for movement orders.
+- Infantry attack acknowledgements use 6 core-attack takes and 18 morale/patriotic takes.
+- Tank pools reuse vehicle-neutral supplied takes: 15 selection, 17 movement, 5 core-attack, 18 shared vehicle-safe morale/patriotic, and 8 stop.
+- The first accepted attack order in each Polish infantry/tank stream uses the morale pool, as does every third attack order thereafter. Calls rejected by the voice throttle do not advance this cadence.
+- Direct attacks, attack-move, and attack-ground all choose attack semantics. Drag-box selection emits one aggregate infantry or tank acknowledgement for the whole box.
+- The final German Mokra echelon forces exactly one `nie-zlamia-nas` cue through the mission-event voice path.
+- Because some recordings serve several pools, 75 unique assets are active overall rather than the sum of every pool size.
+- Only `formal-variants/oddzial-gotow-panie-kapitanie` and `patriotic/za-warszawe` remain reserved for suitable later use.
+- Dedicated Polish vehicle-crew recordings remain desirable, but tank acknowledgements are no longer silent and never fall through to French or German speech.
 
-Until a slot contains at least one real take, it stays silent and does not consume the voice throttle.
+Runtime copies are mono 22,050 Hz, signed 16-bit FLAC audio in Ogg containers, processed with an 80 Hz high-pass filter and fixed -8 dB gain adjustment. Rebuild them from a supplied WAV folder with [`scripts/process-polish-voices.sh`](../../scripts/process-polish-voices.sh). No CC0 or public-domain claim is made for these user-provided recordings; their provenance is documented separately in [`CREDITS.md`](../../CREDITS.md).
 
 ## Historical guardrails
 

@@ -231,7 +231,7 @@ Game.UNIT_STATS = {
     },
     polish_fieldgun75: {
         label: '75mm Armata wz. 1902/26', kind: 'fieldgun75', class: 'support',
-        description: 'Horse-artillery field gun firing high explosive in support of the brigade from east of the railway.',
+        description: 'Horse-artillery field gun firing high explosive in support of the brigade defensive line.',
         weapon: 'wz1902_26_75mm',
         speed: 1.3, hp: 165, size: 0.8,
         armor: 0,

@@ -4944,7 +4944,12 @@ Game.boot = async () => {
         stanceMove: () => { Game.setOrderStance('move'); },
         stanceAttack: () => { Game.setOrderStance('attack'); },
         cmdAttackGround: () => { Game._commandMode = 'attackground'; Game.pushMessage('Attack ground — right-click a spot to suppress.', 2.0); },
-        cmdStop: () => { Game.selectedPlayerUnits().forEach(u => { if (Game.cancelTruckManeuver) Game.cancelTruckManeuver(u); u.path = []; u.moving = false; u.orderMode = 'hold'; u.forcedTargetId = null; u.bombardX = null; u.bombardZ = null; u._bombarding = false; }); Game.pushMessage('Units stopped.', 1.0); },
+        cmdStop: () => {
+            const stoppedUnits = Game.selectedPlayerUnits();
+            stoppedUnits.forEach(u => { if (Game.cancelTruckManeuver) Game.cancelTruckManeuver(u); u.path = []; u.moving = false; u.orderMode = 'hold'; u.forcedTargetId = null; u.bombardX = null; u.bombardZ = null; u._bombarding = false; });
+            if (stoppedUnits.some(u => Game.isTank(u.kind)) && Game.Audio) Game.Audio.voice('f_tank_stop');
+            Game.pushMessage('Units stopped.', 1.0);
+        },
         cmdHold: () => { Game.toggleHoldFire(); },
         cmdGrenade: () => { Game._commandMode = 'grenade'; Game.pushMessage('Grenade — right-click target.', 2.0); },
         cmdMove: () => { Game.setOrderStance('move'); },

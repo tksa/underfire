@@ -236,6 +236,17 @@ Game.spawnPolishSquad = (x, z, group) => {
     }).filter(Boolean);
 };
 
+// Five-man dismounted sections occupy the intervals between adjacent guns.
+// Keeping these smaller than the reserve squad makes the opening deployment
+// read as one continuous defended line instead of several circular blobs.
+Game.spawnPolishLineSection = (x, z, group) => {
+    const roster = ['ulan', 'rkm_wz28', 'ulan', 'rifleman', 'ulan'];
+    const offsets = [[0, 0], [-1.2, -1.4], [1.2, -0.7], [-1.2, 0.7], [1.2, 1.4]];
+    return roster.map((kind, i) => Game.makeUnit(Game.TEAM.POLISH, kind,
+        x + offsets[i][0], z + offsets[i][1],
+        { group, aiState: 'player', veterancy: 0.09 + (i % 3) * 0.025 })).filter(Boolean);
+};
+
 Game._sendMokraAttackers = (units) => {
     const tx = Game.missionState.objectiveX, tz = Game.missionState.objectiveY;
     units.filter(Boolean).forEach((u, i) => {
@@ -312,29 +323,48 @@ Game.spawnMokraScenario = () => {
     const P = Game.TEAM.POLISH, T = Game.TILE;
     Game.playerTeam = P;
 
-    // Dismounted cavalry screen and attached infantry around the railway line.
-    Game.spawnPolishSquad(58 * T, 32 * T, 'pl_1');
-    Game.spawnPolishSquad(61 * T, 50 * T, 'pl_2');
-    Game.spawnPolishSquad(58 * T, 68 * T, 'pl_3');
-    Game.spawnPolishSquad(70 * T, 51 * T, 'pl_reserve');
-
     const player = (kind, x, y, group, extra = {}) =>
         Game.makeUnit(P, kind, x * T, y * T, { group, aiState: 'player', ...extra });
 
+    // A continuous north-south gun line immediately west of the railway. The
+    // six positions alternate Bofors AT guns and 75 mm horse-artillery pieces;
+    // five dismounted sections occupy the gaps between them. This preserves a
+    // readable infantry/artillery/infantry rhythm without inflating the opening
+    // infantry strength beyond the previous four full squads.
+    const gunLine = [
+        { kind: 'bofors37', x: 58, y: 30 },
+        { kind: 'fieldgun75', x: 59, y: 38 },
+        { kind: 'bofors37', x: 58, y: 46 },
+        { kind: 'fieldgun75', x: 59, y: 54 },
+        { kind: 'bofors37', x: 58, y: 62 },
+        { kind: 'fieldgun75', x: 59, y: 70 },
+    ];
+    const infantryLine = [34, 42, 50, 58, 66].map((y, i) => ({
+        x: i === 2 ? 61 : 60.5,
+        y,
+        group: `pl_line_${i + 1}`,
+    }));
+    Game.mokraDeployment = {
+        gunLine: gunLine.map(position => ({ ...position })),
+        infantryLine: infantryLine.map(position => ({ ...position })),
+    };
+    gunLine.forEach(position => player(position.kind, position.x, position.y,
+        'pl_gun_line', { angle: Math.PI }));
+    infantryLine.forEach(position => Game.spawnPolishLineSection(
+        position.x * T, position.y * T, position.group));
+    Game.spawnPolishSquad(70 * T, 51 * T, 'pl_reserve');
+
     player('at_rifle_wz35', 55, 38, 'pl_at');
     player('at_rifle_wz35', 55, 61, 'pl_at');
-    player('hmg', 59, 45, 'pl_support');
+    player('hmg', 60, 26, 'pl_support');
+    player('hmg', 60, 74, 'pl_support');
     player('mortar46', 67, 43, 'pl_support');
     player('mortar81', 72, 57, 'pl_support');
-    player('bofors37', 59, 41, 'pl_bofors', { angle: Math.PI });
-    player('bofors37', 59, 59, 'pl_bofors', { angle: Math.PI });
-    player('fieldgun75', 70, 47, 'pl_artillery', { angle: Math.PI });
-    player('fieldgun75', 71, 55, 'pl_artillery', { angle: Math.PI });
     player('tks', 76, 46, 'pl_armor');
-    player('tks', 77, 53, 'pl_armor');
-    player('wz34', 79, 49, 'pl_recon');
+    player('tks', 78, 53, 'pl_armor');
+    player('wz34', 79, 43, 'pl_recon');
     player('officer', 68, 50, 'pl_command');
-    player('medic', 70, 52, 'pl_command');
+    player('medic', 70, 53, 'pl_command');
     player('sapper', 65, 56, 'pl_engineers');
     player('mechanic', 77, 55, 'pl_armor');
     player('supply_truck', 82, 55, 'pl_logistics', { angle: Math.PI });
@@ -394,6 +424,9 @@ Game.updateMokraMission = (dt) => {
         Game.pushMessage(ms.nextWave === 3
             ? 'Final German armoured echelon approaching the central line!'
             : 'German reserves are entering from the west!', 6);
+        if (ms.nextWave === 3 && Game.Audio && Game.Audio.eventVoice) {
+            Game.Audio.eventVoice('f_mokra_final');
+        }
         ms.nextWave++;
     }
 

@@ -1,8 +1,9 @@
 /**
  * Under Fire — audio.js
  * Lightweight pooled SFX player for battlefield sound.
- * Samples are CC0 from OpenGameArt (see CREDITS.md). Volume attenuates with
- * distance from the camera focus and per-category rate-limits avoid spam.
+ * Battlefield samples are primarily CC0/RWM-Zero; Polish command voices are
+ * user-provided (see CREDITS.md). Volume attenuates with distance from the
+ * camera focus and per-category rate-limits avoid spam.
  */
 
 Game.Audio = (() => {
@@ -45,31 +46,118 @@ Game.Audio = (() => {
         d_tank_select: ['d_tank_select', 'd_tank_select.1'],
         d_tank_move: ['d_tank_move', 'd_tank_move.1', 'd_tank_move.2', 'd_tank_move.3', 'd_tank_move.4'],
         d_tank_attack: ['d_tank_attack', 'd_tank_attack.1'],
+        d_tank_stop: ['d_tank_stop'],
     };
-    // Reserved Polish acknowledgement slots. Keep these arrays empty until the
-    // user-provided recordings exist in sounds/rwm/. An empty slot is a deliberate
-    // no-op: Poland must never fall through to French or German dialogue.
-    // Add extension-free basenames (for example 'p_sold_move') to enable a slot.
+    const plTakes = (folder, names) => names.map(name => `pl/${folder}/${name}`);
+    const PL_SOLD_SELECT = plTakes('infantry-selection', [
+        'co-rozkazecie', 'czekamy-na-rozkaz', 'do-rozkazu', 'dowodco',
+        'druzyna-gotowa', 'gotow', 'jakie-rozkazy', 'jestesmy-gotowi',
+        'jestesmy-na-stanowisku', 'melduje-gotowosc', 'oddzial-gotow',
+        'pluton-gotow', 'rozkaz', 'slucham-rozkazu', 'slucham', 'tak-jest',
+    ]);
+    const PL_SOLD_MOVE = [
+        ...plTakes('movement', [
+            'bez-zwloki', 'druzyna-za-mna', 'jestesmy-w-drodze', 'juz-ruszamy',
+            'na-wskazana-pozycje', 'naprzod-marsz', 'naprzod', 'natychmiast',
+            'oddzial-marsz', 'przechodzimy-na-nowe-stanowisko', 'rozkaz',
+            'ruszamy', 'tak-jest', 'w-droge', 'wedle-rozkazu', 'wykonac',
+            'wykonuje-rozkaz', 'za-mna', 'zajmujemy-stanowisko', 'zrozumialem',
+        ]),
+        ...plTakes('movement-soldier', [
+            'bedziemy-na-miejscu', 'dobrze-idziemy', 'juz-sie-robi',
+            'naprzod-chlopcy', 'nie-zostawac-z-tylu', 'no-ruszamy',
+            'rowno-maszerowac', 'ruszamy-chlopcy', 'trzymac-szyk',
+            'za-mna-zolnierze',
+        ]),
+    ];
+    const PL_SOLD_ATTACK = plTakes('core-attack', [
+        'bic-nieprzyjaciela', 'cel-wskazany', 'do-ataku', 'druzyna-naprzod',
+        'naprzod', 'otworzyc-ogien',
+    ]);
+    const PL_TANK_SELECT = [
+        ...plTakes('formal-variants', [
+            'do-rozkazu-panie-kapitanie', 'melduje-gotowosc-panie-poruczniku',
+            'rozkaz-panie-poruczniku', 'slucham-panie-kapitanie',
+        ]),
+        ...plTakes('infantry-selection', [
+            'co-rozkazecie', 'czekamy-na-rozkaz', 'do-rozkazu', 'dowodco',
+            'gotow', 'jakie-rozkazy', 'jestesmy-gotowi', 'melduje-gotowosc',
+            'rozkaz', 'slucham-rozkazu', 'slucham',
+        ]),
+    ];
+    const PL_TANK_MOVE = [
+        ...plTakes('formal-variants', ['tak-jest-panie-poruczniku']),
+        ...plTakes('movement', [
+            'bez-zwloki', 'jestesmy-w-drodze', 'juz-ruszamy',
+            'na-wskazana-pozycje', 'naprzod', 'natychmiast',
+            'przechodzimy-na-nowe-stanowisko', 'rozkaz', 'ruszamy', 'tak-jest',
+            'w-droge', 'wedle-rozkazu', 'wykonac', 'wykonuje-rozkaz',
+            'zajmujemy-stanowisko', 'zrozumialem',
+        ]),
+    ];
+    const PL_TANK_ATTACK = [
+        ...plTakes('core-attack', [
+            'bic-nieprzyjaciela', 'cel-wskazany', 'do-ataku', 'naprzod',
+            'otworzyc-ogien',
+        ]),
+    ];
+    const PL_MORALE = [
+        ...plTakes('core-morale', [
+            'honor-i-ojczyzna', 'jeszcze-polska-nie-zginela',
+            'nie-zlamia-nas', 'za-polske',
+        ]),
+        ...plTakes('patriotic', [
+            'bronimy-polskiej-ziemi', 'honor-i-ojczyzna',
+            'jeszcze-polska-nie-zginela', 'nie-oddamy-tej-ziemi',
+            'nie-zlamia-nas', 'niech-zyje-polska',
+            'pokazemy-im-polskiego-zolnierza', 'polacy-naprzod',
+            'polska-walczy', 'wytrwac-za-polske', 'za-nasze-domy',
+            'za-ojczyzne', 'za-polske', 'za-wolna-polske',
+        ]),
+    ];
+    const PL_TANK_STOP = [
+        ...plTakes('formal-variants', ['tak-jest-panie-poruczniku']),
+        ...plTakes('infantry-selection', [
+            'gotow', 'jestesmy-na-stanowisku', 'melduje-gotowosc', 'tak-jest',
+        ]),
+        ...plTakes('movement', ['tak-jest', 'zajmujemy-stanowisko', 'zrozumialem']),
+    ];
+
+    // Polish recordings live outside the public-domain RWM bank. Vehicle pools
+    // reuse only vehicle-neutral acknowledgements and Mokra-safe morale lines;
+    // infantry marching/squad phrases are excluded. Attack acknowledgements
+    // periodically draw from the morale pool so patriotic recordings are heard
+    // without turning every ordinary command into a slogan. Context-specific
+    // recordings such as "Za Warszawę" remain reserved for a suitable battle.
     const VOICE_PL = {
-        f_sold_select: [],
-        f_sold_move: [],
-        f_sold_attack: [],
-        f_tank_select: [],
-        f_tank_move: [],
-        f_tank_attack: [],
-        f_tank_stop: [],
+        f_sold_select: PL_SOLD_SELECT,
+        f_sold_move: PL_SOLD_MOVE,
+        f_sold_attack: PL_SOLD_ATTACK,
+        f_sold_morale: PL_MORALE,
+        f_tank_select: PL_TANK_SELECT,
+        f_tank_move: PL_TANK_MOVE,
+        f_tank_attack: PL_TANK_ATTACK,
+        f_tank_morale: PL_MORALE,
+        f_tank_stop: PL_TANK_STOP,
+        f_mokra_final: plTakes('core-morale', ['nie-zlamia-nas']),
     };
-    const EXTRA = [
+
+    const voiceSource = name => name.includes('/')
+        ? `sounds/voices/${name}.ogg`
+        : `sounds/rwm/${name}.ogg`;
+    const EXTRA = [...new Set([
         ...Object.values(VOICE_TAKES).flat(),
         ...Object.values(VOICE_PL).flat(),
         'ricochet', 'ricochet_ground',
         'fly_heavy', 'fly_small',
-    ].map(n => 'sounds/rwm/' + n + '.ogg');
+    ])].map(voiceSource);
 
     const loops = {};               // key -> HTMLAudioElement (loop=true)
     const loopVol = { ambWind: 0, ambBirds: 0, engine: 0, fighter: 0 };
     let loopsStarted = false;
     let lastVoice = -10;            // gameClock of last voice bark (throttle)
+    const lastVoiceTake = {};       // semantic pool -> previous take (avoid repeats)
+    const polishAttackOrders = { f_sold_attack: 0, f_tank_attack: 0 };
 
     const POOL = 4;                 // simultaneous voices per sample file
     const MIN_GAP = { rifle: 0.05, mg: 0.08, cannon: 0.12, explosion: 0.07 }; // seconds between plays per category
@@ -277,7 +365,7 @@ Game.Audio = (() => {
     // Play a specific pooled file by name (used for voice barks + ricochet)
     const playFile = (file, vol, x, z, attenuate) => {
         if (!enabled || !ready) return;
-        const src = 'sounds/rwm/' + file + '.ogg';
+        const src = voiceSource(file);
         const pool = pools[src];
         if (!pool) return;
         const dv = attenuate ? distVol(x, z) : 1;
@@ -297,25 +385,56 @@ Game.Audio = (() => {
     const VOICE_DE = {
         f_sold_select: 'd_select', f_sold_move: 'd_move', f_sold_attack: 'd_attack',
         f_tank_select: 'd_tank_select', f_tank_move: 'd_tank_move',
-        f_tank_attack: 'd_tank_attack', f_tank_stop: 'd_tank_move',
+        f_tank_attack: 'd_tank_attack', f_tank_stop: 'd_tank_stop',
     };
 
-    // Unit voice acknowledgement (command feedback; throttled so it never spams)
-    const voice = (file) => {
-        const t = Game.gameClock || 0;
-        if (t - lastVoice < 0.4) return;
-        if (Game.playerTeam === 'polish') {
-            const takes = VOICE_PL[file];
-            if (!takes || !takes.length) return;
-            file = takes[Math.floor(Math.random() * takes.length)];
-        } else {
-            if (Game.playerTeam === 'german' && VOICE_DE[file]) file = VOICE_DE[file];
-            const takes = VOICE_TAKES[file];
-            if (takes && takes.length) file = takes[Math.floor(Math.random() * takes.length)];
+    const pickVoiceTake = (poolKey, takes) => {
+        if (!takes || !takes.length) return null;
+        let index = Math.floor(Math.random() * takes.length);
+        if (takes.length > 1 && takes[index] === lastVoiceTake[poolKey]) {
+            index = (index + 1 + Math.floor(Math.random() * (takes.length - 1))) % takes.length;
         }
+        lastVoiceTake[poolKey] = takes[index];
+        return takes[index];
+    };
+
+    const resolveVoiceTake = (semantic) => {
+        let file = semantic;
+        if (Game.playerTeam === 'polish') {
+            // The first accepted attack order, then every third thereafter, uses
+            // a patriotic/morale take. Calls rejected by the throttle never
+            // advance this cadence, so the player cannot miss the first one by
+            // issuing a command too quickly after selection.
+            const moraleSlot = semantic === 'f_sold_attack' ? 'f_sold_morale'
+                : (semantic === 'f_tank_attack' ? 'f_tank_morale' : null);
+            if (moraleSlot) {
+                const count = polishAttackOrders[semantic] || 0;
+                polishAttackOrders[semantic] = count + 1;
+                if (count % 3 === 0) file = moraleSlot;
+            }
+            const takes = VOICE_PL[file];
+            if (!takes || !takes.length) return null;
+            return pickVoiceTake(`pl:${file}`, takes);
+        }
+        if (Game.playerTeam === 'german' && VOICE_DE[file]) file = VOICE_DE[file];
+        const takes = VOICE_TAKES[file];
+        return takes && takes.length ? pickVoiceTake(file, takes) : file;
+    };
+
+    const playVoiceSemantic = (semantic, force = false) => {
+        const t = Game.gameClock || 0;
+        if (!force && t - lastVoice < 0.4) return null;
+        const file = resolveVoiceTake(semantic);
+        if (!file) return null;
         lastVoice = t;
         playFile(file, 0.8, 0, 0, false);
+        return file;
     };
+
+    // Unit command feedback is throttled; authored mission cues use the event
+    // path so a major one-shot line cannot be swallowed by a simultaneous order.
+    const voice = semantic => playVoiceSemantic(semantic, false);
+    const eventVoice = semantic => playVoiceSemantic(semantic, true);
 
     return {
         init() { if (!ready) preload(); startLoops(); },
@@ -329,6 +448,7 @@ Game.Audio = (() => {
         heavyPlane: () => playFile('fly_heavy', 0.75, 0, 0, false),
         fighterDrone,
         voice,
+        eventVoice,
         voiceSlots: { polish: VOICE_PL },
         click,
         updateAmbient,

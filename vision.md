@@ -26,16 +26,16 @@ A platoon-to-battalion scale RTS where you command real soldiers and vehicles �
 
 ## Where it is now (honest status)
 
-Working today: the default French Dyle battlefield; and a Preview Mokra battlefield with its north–south railway, limited crossings, village strips, cultivated approaches, woods, and a Polish 1939 roster facing period-appropriate German attackers. Shared systems include individual-unit control, cover/concealment/LOS/suppression/stance, armour penetration with facing and obliquity, squad AI with cover-seeking and fire-and-maneuver, procedural effects and audio, fog of war, and a tactical-pause command layer.
+Working today: the default French Dyle battlefield; and a Preview Mokra battlefield with its north–south railway, limited crossings, village strips, cultivated approaches, woods, and a Polish 1939 roster facing period-appropriate German attackers. Mokra opens with a compressed six-position line alternating three Bofors anti-tank guns and three 75 mm field guns, with 25 infantry in five interleaved sections, an eight-man reserve squad, two HMGs, and one each of the 46 mm and 81 mm mortars. Polish infantry and tanks draw on 75 unique active command-voice assets; attack orders periodically use a shared vehicle-safe morale pool, the final German echelon has a dedicated Polish cue, and drag selection produces one acknowledgement per box. Shared systems include individual-unit control, cover/concealment/LOS/suppression/stance, armour penetration with facing and obliquity, squad AI with cover-seeking and fire-and-maneuver, procedural effects and audio, fog of war, and a tactical-pause command layer.
 
-Early / incomplete: Mokra is a Preview and currently represents the defensive hold phase, with Poland as the intended player side and Germany AI-controlled. Dedicated Polish voice recordings and final Polish models/skins are still awaiting assets. Mounted cavalry and horse limbers, Armoured Train No. 53 *Śmiały*, a scripted Ju 87 phase, the Polish counterattack, and the protected withdrawal remain planned. Infantry models and animation are basic, balance is unverified, and many systems are first-draft.
+Early / incomplete: Mokra is a Preview and currently represents the defensive hold phase, with Poland as the intended player side and Germany AI-controlled. Its formation is compressed for the five-minute vertical slice rather than representing a full brigade establishment. Dedicated Polish vehicle-crew voices and final Polish models/skins are still desirable; tanks currently reuse vehicle-neutral recordings. Only `formal-variants/oddzial-gotow-panie-kapitanie` and the Warsaw-specific `patriotic/za-warszawe` await suitable later use. Mounted cavalry and horse limbers, Armoured Train No. 53 *Śmiały*, a scripted Ju 87 phase, the Polish counterattack, and the protected withdrawal remain planned. Infantry models and animation are basic, balance is unverified, and many systems are first-draft.
 
 ---
 
 ## What would move the needle most
 
 - **Finish Mokra's later phases** (armoured train, counterattack, air attack, and protected withdrawal).
-- **Polish presentation assets**, especially authentic voices, infantry skins, guns, and vehicles.
+- **Polish presentation assets**, especially vehicle-crew voices, infantry skins, guns, and vehicles.
 - **More playable sides** (make German selectable and balanced where the scenario design supports it).
 - **More scenarios and maps**, and the scaffolding to define them cleanly.
 - **Better unit models and animation**, especially infantry.

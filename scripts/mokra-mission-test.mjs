@@ -26,6 +26,10 @@ const state = await page.evaluate(async () => {
   const units = Game.units.filter(u => u.alive);
   const polish = units.filter(u => u.team === Game.TEAM.POLISH);
   const german = units.filter(u => u.team === Game.TEAM.GERMAN);
+  const polishKindCounts = polish.reduce((counts, unit) => {
+    counts[unit.kind] = (counts[unit.kind] || 0) + 1;
+    return counts;
+  }, {});
   const tileCounts = {};
   Game.terrain.flat().forEach(t => { tileCounts[t.type] = (tileCounts[t.type] || 0) + 1; });
 
@@ -34,21 +38,90 @@ const state = await page.evaluate(async () => {
     ? Game.findPath(testPanzer, testPanzer.x, testPanzer.z, 76 * Game.TILE, 50 * Game.TILE)
     : [];
 
-  // Polish voice calls must be safe before recordings exist. The function is
-  // intentionally silent; this assertion catches accidental cross-language or
-  // missing-pool exceptions without inspecting or playing the game.
+  // Verify the Polish pools without playing or listening to the recordings.
+  // Any unpopulated Polish semantic category must remain silent rather than
+  // falling through to another faction.
+  const polishVoiceSlots = Game.Audio.voiceSlots.polish;
+  const polishVoiceCounts = Object.fromEntries(Object.entries(polishVoiceSlots)
+    .map(([key, takes]) => [key, takes.length]));
+  const activePolishVoices = [...new Set(Object.values(polishVoiceSlots).flat())];
+  const polishVoiceAssetsOk = (await Promise.all(activePolishVoices.map(async name => {
+    const response = await fetch(`sounds/voices/${name}.ogg`);
+    return response.ok;
+  }))).every(Boolean);
   let voiceSafe = true;
   try { Game.Audio.voice('f_sold_move'); } catch (e) { voiceSafe = false; }
+  let firstSoldAttackTake = null;
+  let firstTankAttackTake = null;
+  try {
+    Game.gameClock = (Game.gameClock || 0) + 1;
+    firstSoldAttackTake = Game.Audio.voice('f_sold_attack');
+    Game.gameClock += 1;
+    firstTankAttackTake = Game.Audio.voice('f_tank_attack');
+  } catch (e) { voiceSafe = false; }
+
+  // Exercise the drag-box branch without listening to or visually inspecting
+  // the game. It must emit one aggregate acknowledgement for all box hits.
+  const boxVoices = [];
+  const originalVoice = Game.Audio.voice;
+  const boxUnits = polish.filter(unit => unit.group === 'pl_line_1');
+  const boxPoints = boxUnits.map(unit => Game.worldToScreen(unit.x, unit.z,
+    (unit.y || 0) + (unit.size || 0.5)));
+  Game.selection.clear();
+  Game.Audio.voice = semantic => { boxVoices.push(semantic); return semantic; };
+  Game.mouse.dragStartX = Math.min(...boxPoints.map(point => point.x)) - 5;
+  Game.mouse.dragStartY = Math.min(...boxPoints.map(point => point.y)) - 5;
+  Game.mouse.dragCurrentX = Math.max(...boxPoints.map(point => point.x)) + 5;
+  Game.mouse.dragCurrentY = Math.max(...boxPoints.map(point => point.y)) + 5;
+  Game.handleMouseSelection();
+  const boxSelectionSize = Game.selection.size;
+  Game.Audio.voice = originalVoice;
+  Game.selection.clear();
 
   const dossier = await fetch('docs/POLAND_1939_CAMPAIGN.md').then(r => r.text());
   const missionDoc = await fetch('docs/scenarios/mokra.md').then(r => r.text());
 
   const polishDefendersAtCrossing = polish.filter(u =>
     Game.dist(u.x, u.z, Game.missionState.objectiveX, Game.missionState.objectiveY) < 12).length;
+  const deployment = Game.mokraDeployment || { gunLine: [], infantryLine: [] };
+  const gunLine = [...deployment.gunLine].sort((a, b) => a.y - b.y);
+  const infantryLine = [...deployment.infantryLine].sort((a, b) => a.y - b.y);
+  const deploymentInterleaved = infantryLine.length === gunLine.length - 1
+    && infantryLine.every((position, index) => position.y > gunLine[index].y
+      && position.y < gunLine[index + 1].y);
+  const gunLineUnitList = polish.filter(u => u.group === 'pl_gun_line');
+  const gunLineUnits = gunLineUnitList.length;
+  const infantryLineGroups = new Set(infantryLine.map(position => position.group));
+  const infantryLineUnits = polish.filter(u => infantryLineGroups.has(u.group)).length;
+  const gunLineClear = gunLineUnitList.every(unit => {
+    const tile = Game.getTileAtWorld(unit.x, unit.z);
+    return tile && !tile.blocked && !tile.vehicleBlocked;
+  });
+  const wz34 = polish.find(unit => unit.kind === 'wz34');
+  const wz34Tile = wz34 && Game.getTileAtWorld(wz34.x, wz34.z);
+  const wz34Clear = !!wz34Tile && !wz34Tile.blocked && !wz34Tile.vehicleBlocked;
+  const polishBodiesClear = polish.every(unit =>
+    !Game._bodySolidCount || Game._bodySolidCount(unit, unit.x, unit.z, unit.angle) === 0);
+  const polishVehiclesClear = polish
+    .filter(unit => Game.isTank(unit.kind) || Game.isTruck(unit.kind))
+    .every(unit => !Game._vehPenetration
+      || Game._vehPenetration(unit, unit.x, unit.z, unit.angle) === 0);
+  const medic = polish.find(unit => unit.kind === 'medic');
+  const reserve = polish.filter(unit => unit.group === 'pl_reserve');
+  const medicReserveDistance = medic && reserve.length
+    ? Math.min(...reserve.map(unit => Game.dist(medic.x, medic.z, unit.x, unit.z)))
+    : 0;
 
   // Advance the mission clock in one deterministic step while still paused;
   // the hold objective must resolve independently of a destroy-all condition.
+  const eventVoices = [];
+  const originalEventVoice = Game.Audio.eventVoice;
+  Game.Audio.eventVoice = semantic => {
+    eventVoices.push(semantic);
+    return originalEventVoice(semantic);
+  };
   Game.updateMokraMission(301);
+  Game.Audio.eventVoice = originalEventVoice;
   const holdVictory = Game.missionState.won && Game.missionState.phaseName === 'Timetable disrupted';
   const postWaveGermanKinds = [...new Set(Game.getTeamUnits(Game.TEAM.GERMAN).map(u => u.kind))].sort();
 
@@ -61,10 +134,22 @@ const state = await page.evaluate(async () => {
     german: german.length,
     french: units.filter(u => u.team === Game.TEAM.FRENCH).length,
     polishKinds: [...new Set(polish.map(u => u.kind))].sort(),
+    polishKindCounts,
     germanKinds: [...new Set(german.map(u => u.kind))].sort(),
     postWaveGermanKinds,
     allWavesCommitted: Game.missionState.nextWave === 4 && Game.missionState.reinforcementTriggered,
     polishDefendersAtCrossing,
+    deploymentInterleaved,
+    gunLinePattern: gunLine.map(position => position.kind),
+    gunLineUnits,
+    infantryLineUnits,
+    gunLineClear,
+    wz34Clear,
+    polishBodiesClear,
+    polishVehiclesClear,
+    medicReserveDistance,
+    initialBofors: Game.missionState.initialBoforsIds.length,
+    initialPolishStrength: Game.missionState.initialPolishStrength,
     allPolishDescribed: polish.every(u => typeof u.description === 'string' && u.description.length > 20),
     railwayTiles: tileCounts.railway || 0,
     waterTiles: tileCounts.water || 0,
@@ -76,6 +161,14 @@ const state = await page.evaluate(async () => {
     airStrikes: Game.airStrikesAvailable,
     objective: Game.missionState.primaryObjective,
     voiceSafe,
+    firstSoldAttackTake,
+    firstTankAttackTake,
+    boxVoices,
+    boxSelectionSize,
+    eventVoices,
+    polishVoiceCounts,
+    polishVoiceAssets: activePolishVoices.length,
+    polishVoiceAssetsOk,
     dossierOk: dossier.includes('Poland 1939 RTS Battle Design Dossier') && dossier.includes('Battle of Mokra'),
     missionDocOk: missionDoc.includes('## Preview implementation status')
       && missionDoc.includes('Polish voice assets')
@@ -112,10 +205,51 @@ expect(state.railwayTiles > 150 && state.crossings === 3 && state.railMeshes >= 
 expect(state.waterTiles === 0, 'Mokra must not contain a broad river/lake tile');
 expect(state.villages.join('|') === 'Mokra I|Mokra II|Mokra III', 'Mokra I–III strips are missing');
 expect(state.polishDefendersAtCrossing > 0, 'the central crossing starts outside Polish control');
+expect(state.polishKindCounts.bofors37 === 3
+  && state.polishKindCounts.fieldgun75 === 3
+  && state.polishKindCounts.hmg === 2
+  && state.polishKindCounts.mortar46 === 1
+  && state.polishKindCounts.mortar81 === 1,
+  'Polish support allocation does not match the compressed Mokra gun line');
+expect(state.gunLinePattern.join('|')
+  === 'bofors37|fieldgun75|bofors37|fieldgun75|bofors37|fieldgun75',
+  'Mokra gun line does not alternate Bofors and 75 mm artillery');
+expect(state.deploymentInterleaved && state.gunLineUnits === 6 && state.infantryLineUnits === 25,
+  'infantry sections are not interleaved between every artillery position');
+expect(state.initialBofors === 3, 'secondary-objective Bofors tracking is incomplete');
+expect(state.initialPolishStrength === 55, 'reinforced Polish opening strength is wrong');
+expect(state.gunLineClear && state.wz34Clear,
+  'a Polish gun-line or reconnaissance unit starts on blocked terrain');
+expect(state.polishBodiesClear && state.polishVehiclesClear,
+  'a Polish unit starts inside solid terrain or another vehicle footprint');
+expect(state.medicReserveDistance > 2.5,
+  'the Polish medic starts overlapped with the reserve squad');
 expect(state.crossingPath > 0, 'a German tracked vehicle cannot path through the central crossing');
 expect(state.fighters === 0 && state.airStrikes === 0, 'anachronistic player air support is enabled');
 expect(/railway crossing/i.test(state.objective), 'mission objective is not railway defence');
-expect(state.voiceSafe, 'empty Polish voice slots throw an exception');
+expect(state.voiceSafe, 'Polish voice playback throws an exception');
+expect(state.boxSelectionSize > 1 && state.boxVoices.join('|') === 'f_sold_select',
+  'drag-box selection does not emit one aggregate infantry acknowledgement');
+expect(/pl\/(core-morale|patriotic)\//.test(state.firstSoldAttackTake || '')
+  && /pl\/(core-morale|patriotic)\//.test(state.firstTankAttackTake || ''),
+  'the first Polish infantry/tank attack orders do not use patriotic morale takes');
+expect(state.polishVoiceCounts.f_sold_select === 16
+  && state.polishVoiceCounts.f_sold_move === 30
+  && state.polishVoiceCounts.f_sold_attack === 6
+  && state.polishVoiceCounts.f_sold_morale === 18,
+  'Polish infantry voice pool counts are wrong');
+expect(state.polishVoiceCounts.f_tank_select === 15
+  && state.polishVoiceCounts.f_tank_move === 17
+  && state.polishVoiceCounts.f_tank_attack === 5
+  && state.polishVoiceCounts.f_tank_morale === 18
+  && state.polishVoiceCounts.f_tank_stop === 8,
+  'Polish tank voice pool counts are wrong');
+expect(state.polishVoiceCounts.f_mokra_final === 1,
+  'the final-echelon Polish morale cue is missing');
+expect(state.eventVoices.join('|') === 'f_mokra_final',
+  'the final German echelon does not trigger exactly one Polish morale cue');
+expect(state.polishVoiceAssets === 75 && state.polishVoiceAssetsOk,
+  'one or more active Polish voice assets is missing');
 expect(state.dossierOk && state.missionDocOk, 'campaign/mission documentation is missing');
 expect(state.holdVictory, 'five-minute hold does not resolve as an operational victory');
 expect(state.allWavesCommitted, 'the three timed German echelons were not all committed');

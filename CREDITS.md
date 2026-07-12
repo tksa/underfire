@@ -2,7 +2,8 @@
 
 Most bundled third-party assets are **CC0 / Public Domain** (no attribution legally
 required); listed here as good practice and to record provenance. The **UI icons**
-are **CC-BY 3.0** and attribution is required — see "UI Icons" below.
+are attribution-licensed, and the user-provided Polish voice recordings have
+separate provenance with no CC0/public-domain claim made here.
 
 ## UI Icons (game-icons.net — CC-BY 3.0)
 Command-bar glyphs in `icons/` are from [game-icons.net](https://game-icons.net),
@@ -99,6 +100,27 @@ and no build step.
   (firework `fw_*` files are bundled but currently unused).
 
 The UI selection click is synthesized at runtime via WebAudio (no sample).
+
+## Polish Voice Recordings (user-provided; separate from RWM)
+
+The project owner supplied 77 Polish WAV voice recordings. The original WAV
+masters remain outside the repository. Runtime copies are stored in
+`sounds/voices/pl/`; they are separate from `sounds/rwm/` and are not entries in
+the RWM manifest. **No CC0 or public-domain licence is asserted for these
+recordings in this document.**
+
+Of the 77 recordings, the infantry pools use 16 selection, 30 movement,
+6 core-attack, and 18 morale/patriotic takes. Polish tank pools reuse
+vehicle-neutral supplied recordings: 15 selection, 17 movement, 5 core-attack,
+18 shared vehicle-safe morale/patriotic, and 8 stop takes. Because the pools overlap,
+75 unique assets are active overall. Dedicated vehicle-crew recordings remain
+desirable, but tanks are not silent. Only
+`formal-variants/oddzial-gotow-panie-kapitanie` and
+`patriotic/za-warszawe` remain reserved for suitable later use.
+
+Runtime processing produces mono 22,050 Hz, signed 16-bit FLAC audio in Ogg
+containers, with an 80 Hz high-pass filter and fixed -8 dB gain adjustment. The
+repeatable conversion command is implemented in `scripts/process-polish-voices.sh`.
 
 ## Sound Effects (RWM 6.8, RWM-Zero public-domain dedication)
 The **complete** RWM sound bank (`SOUNDS.HDR`/`SOUNDS.RUS`) was decoded and

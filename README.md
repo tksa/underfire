@@ -45,7 +45,11 @@ Any static file server works (`npx serve`, `php -S`, nginx, etc.). Opening `inde
 - **Advance to the Dyle** — the first and default selected French-versus-German battle.
 - **Mokra: Hold the Railway** — the second selection, currently labelled **Preview**. Command Poland's reinforced Wołyńska Cavalry Brigade against German armour and hold the railway crossing. See the [implementation record](docs/scenarios/mokra.md) and the complete [Poland 1939 campaign dossier](docs/POLAND_1939_CAMPAIGN.md).
 
-The current Mokra slice covers a Polish defensive deployment, an appropriate early-war roster, the railway battlefield, and phased German attacks. Polish voice recordings have not been added yet, so Polish acknowledgements intentionally remain silent. Mounted cavalry, Armoured Train No. 53 *Śmiały*, the scripted Ju 87 phase, and the protected withdrawal are documented future work rather than current gameplay.
+The current Mokra slice covers a Polish defensive deployment, an appropriate early-war roster, the railway battlefield, and phased German attacks. Its deliberately compressed opening line alternates three 37 mm Bofors anti-tank guns with three 75 mm field guns; five five-man infantry sections occupy the gaps, with a full eight-man reserve squad, two HMGs, and one each of the 46 mm and 81 mm mortars. This is a playable vertical-slice allocation, not the full brigade establishment described in the campaign dossier.
+
+Polish commands use 75 unique active assets from 77 supplied recordings. Infantry pools contain 16 selection, 30 movement, 6 core-attack, and 18 morale/patriotic takes; tank pools reuse vehicle-neutral recordings in pools of 15 selection, 17 movement, 5 core-attack, 18 shared vehicle-safe morale/patriotic, and 8 stop takes. The first accepted Polish infantry or tank attack order, then every third attack order after it, uses the relevant morale pool. Attack-move and attack-ground orders use attack semantics, while drag-box selection emits one aggregate acknowledgement. The final German Mokra echelon forces one `nie-zlamia-nas` cue.
+
+Only `formal-variants/oddzial-gotow-panie-kapitanie` and `patriotic/za-warszawe` remain reserved. Dedicated vehicle-crew recordings are still desirable, but Polish tanks are not silent. Mounted cavalry, Armoured Train No. 53 *Śmiały*, the scripted Ju 87 phase, and the protected withdrawal are documented future work rather than current gameplay.
 
 ### Controls
 
@@ -188,7 +192,7 @@ in the browser console, once.
 - **Per-unit logic split into modules** (`js/unit_modules.js`: move/fire/scan/health/morale/deploy/…) behind a thin `updateUnit` orchestrator
 - **Data-driven units** — `data/units.csv` is the editable roster (614 units, with per-unit `year` for era gating), merged over the built-in table at boot
 - Procedural terrain, meshes, animation, and effects; no asset pipeline required to run
-- All bundled art/audio is **CC0 / public-domain** (see [CREDITS.md](CREDITS.md))
+- Asset provenance and licences are recorded in [CREDITS.md](CREDITS.md). Most third-party assets are CC0/public-domain, while the user-provided Polish voices are documented separately and are not claimed there as CC0 or public domain.
 
 ## Repository layout
 
@@ -198,7 +202,7 @@ js/               Game code (see CONTRIBUTING.md for the per-file map)
 data/             Editable game data: units.csv (roster), changelog.json
 models/           3D models (.glb)
 textures/         Textures (textures/oga/ = CC0 OpenGameArt)
-sounds/           Audio (sounds/rwm/ = public-domain clips + manifest)
+sounds/           Audio (public-domain RWM bank plus Polish voices in sounds/voices/pl/)
 fonts/            UI fonts
 maps/             Map data
 tools/            Asset/format utilities

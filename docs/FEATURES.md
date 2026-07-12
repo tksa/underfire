@@ -62,9 +62,16 @@ Combined from SS3 + SS4 manuals + SS fan guide. ✅ = done, ⬜ = todo.
 - ✅ **Mokra: Hold the Railway** is the second selectable battle and is labelled **Preview**, with Poland as the intended player side and Germany as the opponent
 - ✅ Dedicated railway battlefield with constrained crossings, Mokra I–III settlement strips, woods, and cultivated western approaches
 - ✅ Period-appropriate Polish core roster and constrained German attack roster; no 7TP or routine Panzer III in the scenario
+- ✅ Compressed opening deployment: alternating six-position line with 3 Bofors and 3 75 mm guns, 25 infantry in five interleaved sections, an 8-man reserve squad, 2 HMGs, and one each 46/81 mm mortar
 - ✅ Defensive hold objective with phased German attacks
 - ✅ **Advance to the Dyle** retained as the first/default selected scenario
-- ✅ Empty Polish voice slots fail silently until real Polish recordings are supplied
+- ✅ Polish infantry command pools active: 16 selection, 30 movement, 6 core-attack, and 18 morale/patriotic takes
+- ✅ Polish tank command pools reuse vehicle-neutral supplied takes: 15 selection, 17 movement, 5 core-attack, 18 shared vehicle-safe morale/patriotic, and 8 stop; 75 unique voice assets are active overall
+- ✅ First accepted Polish infantry/tank attack order and every third thereafter uses the morale pool; attack-move and attack-ground choose attack semantics
+- ✅ Final German Mokra echelon forces one `nie-zlamia-nas` cue; drag-box selection emits one aggregate acknowledgement
+- ✅ Only `formal-variants/oddzial-gotow-panie-kapitanie` and `patriotic/za-warszawe` remain reserved
+- ✅ Repeatable Polish voice conversion via `scripts/process-polish-voices.sh`: mono 22.05 kHz, signed 16-bit FLAC-in-Ogg, 80 Hz high-pass, and fixed -8 dB gain
+- ⬜ Dedicated Polish vehicle-crew recordings remain desirable; tanks currently use the vehicle-neutral pools rather than staying silent
 - ⬜ Dedicated final Polish skins, infantry, gun, and vehicle models
 - ⬜ Mounted cavalry and horse-limber systems
 - ⬜ Armoured Train No. 53 *Śmiały*

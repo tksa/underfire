@@ -355,7 +355,10 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
     }
     if (Game.Audio) {
         const anyTank = chosen.some(u => Game.isTank(u.kind));
-        Game.Audio.voice(anyTank ? 'f_tank_move' : 'f_sold_move');
+        const voice = mode === 'attack'
+            ? (anyTank ? 'f_tank_attack' : 'f_sold_attack')
+            : (anyTank ? 'f_tank_move' : 'f_sold_move');
+        Game.Audio.voice(voice);
     }
 
     // Clear preview markers
@@ -461,7 +464,10 @@ Game.orderAttackGround = (x, z) => {
     if (any) {
         Game.spawnOrderMarker(x, z, 0xff8844); // orange = fire on ground
         Game.pushMessage('Attack ground — suppressing the area.', 1.6);
-        if (Game.Audio) Game.Audio.voice('f_sold_attack');
+        if (Game.Audio) {
+            const anyTank = chosen.some(u => Game.isTank(u.kind));
+            Game.Audio.voice(anyTank ? 'f_tank_attack' : 'f_sold_attack');
+        }
     }
     Game._clearFormationPreview();
 };
@@ -879,6 +885,7 @@ Game.handleMouseSelection = () => {
         const ey = sy + boxH;
 
         if (!Game.keys['ShiftLeft'] && !Game.keys['ShiftRight']) Game.selection.clear();
+        const boxHits = [];
         Game.units.forEach(unit => {
             if (!unit.alive || unit.team !== Game.playerTeam || unit._inVehicle != null) return;
             // Catch a unit when the box touches its BODY, not only its ground anchor.
@@ -892,8 +899,18 @@ Game.handleMouseSelection = () => {
             const edge = Game.worldToScreen(unit.x + (unit.size || 0.5), unit.z, bodyY);
             const rad = Math.max(9, Math.hypot(edge.x - body.x, edge.y - body.y) + 5);
             const inBox = (p) => p.x >= sx - rad && p.x <= ex + rad && p.y >= sy - rad && p.y <= ey + rad;
-            if (inBox(body) || inBox(feet)) Game.selection.add(unit.id);
+            if (inBox(body) || inBox(feet)) {
+                Game.selection.add(unit.id);
+                boxHits.push(unit);
+            }
         });
+        // One acknowledgement per drag, chosen from the units hit by this box.
+        // Calling inside the loop would make iteration order decide which of a
+        // mixed infantry/armour selection gets past the global voice throttle.
+        if (boxHits.length && Game.Audio) {
+            const anyTank = boxHits.some(unit => Game.isTank(unit.kind));
+            Game.Audio.voice(anyTank ? 'f_tank_select' : 'f_sold_select');
+        }
     }
 
     // Update selection ring visibility
@@ -1355,7 +1372,8 @@ Game.handleInputEvents = () => {
 
         // Stop / cancel orders (V key)
         if (e.code === 'KeyV') {
-            Game.selectedPlayerUnits().forEach(u => {
+            const stoppedUnits = Game.selectedPlayerUnits();
+            stoppedUnits.forEach(u => {
                 Game.cancelTruckManeuver(u);
                 u.path = [];
                 u.moving = false;
@@ -1366,6 +1384,9 @@ Game.handleInputEvents = () => {
                 u._assaultGoal = null;
                 if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
             });
+            if (stoppedUnits.some(u => Game.isTank(u.kind)) && Game.Audio) {
+                Game.Audio.voice('f_tank_stop');
+            }
             Game.pushMessage('Units stopped.', 1.0);
         }
 
