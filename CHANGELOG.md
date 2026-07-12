@@ -13,6 +13,7 @@ without hand-editing.
 - **Mokra battlefield:** a separate railway map covering Mokra I–III, constrained crossings, defensive deployment, and three phased German armoured attacks.
 - **Historical guardrails:** the scenario omits anachronistic routine Panzer III/7TP variants and player air support while later train, cavalry, air-attack, and withdrawal phases remain documented future work.
 - **Scenario infrastructure:** scenario-aware map/force/mission dispatch, side selection, HUD text, localisation, documentation, and deterministic Dyle/Mokra regression coverage.
+- **Transport movement:** restored full-width vehicle pathfinding, oriented hull and trailer collision, swept turns, short reverse corrections, smooth stopping, Shift-waypoint recovery, movement-recorder order coordinates, and automated clearance/smoothness/boarding regressions.
 
 ## v0.6.0-dev
 

@@ -1,8 +1,18 @@
 {
  "version": "v0.12.0",
- "build": "763db73",
+ "build": "3ab10b5",
  "generated": "2026-07-12",
  "commits": [
+  {
+   "hash": "3ab10b5",
+   "date": "2026-07-12",
+   "subject": "restore collision-aware truck movement"
+  },
+  {
+   "hash": "aa0becb",
+   "date": "2026-07-12",
+   "subject": "release v0.12.0"
+  },
   {
    "hash": "763db73",
    "date": "2026-07-12",
@@ -62,16 +72,6 @@
    "hash": "f4b1ec2",
    "date": "2026-07-07",
    "subject": "refresh changelog"
-  },
-  {
-   "hash": "9eff509",
-   "date": "2026-07-07",
-   "subject": "strafing realism"
-  },
-  {
-   "hash": "8c1d451",
-   "date": "2026-07-07",
-   "subject": "Germany is playable"
   }
  ]
 }
