@@ -6,6 +6,15 @@ The start-mission screen's "Latest Updates" panel is generated from the git comm
 log (`scripts/gen-changelog.mjs` → `data/changelog.json`), so it stays current
 without hand-editing.
 
+## v0.13.1 — Mokra Performance and Freeze Fixes
+
+- **Wave stalls removed:** German reinforcement commits now use validated authored corridors and staggered infantry routing instead of synchronous vehicle path searches.
+- **Stable armour recovery:** Mokra AI vehicles reuse directional scenario corridors for blockages, combat positioning, and retreats rather than triggering late full-map A* freezes.
+- **Bounded battlefield rendering:** grass, tracks, crater deformation, foliage knockdown, fog, HUD, minimap, and animation updates now have explicit budgets or throttles.
+- **Cheaper combat simulation:** target acquisition and line-of-sight work is range-rejected, cached, and staggered across units.
+- **Lower startup pressure:** Polish command voices load on demand, while movement recording uses a fixed sampled circular buffer.
+- **Diagnostics:** `scripts/mokra-performance-profile.mjs` and `docs/PERFORMANCE.md` document budgets, measurements, and regression thresholds.
+
 ## v0.13.0 — Polish Voices and Mokra Gun Line
 
 - **Polish voices:** 77 supplied recordings now ship as compressed runtime assets, with 75 active across infantry and vehicle command pools.

@@ -1,8 +1,18 @@
 {
- "version": "v0.13.0",
- "build": "5759020",
- "generated": "2026-07-12",
+ "version": "v0.13.1",
+ "build": "b315173",
+ "generated": "2026-07-13",
  "commits": [
+  {
+   "hash": "b315173",
+   "date": "2026-07-13",
+   "subject": "eliminate freeze hotspots"
+  },
+  {
+   "hash": "afd0087",
+   "date": "2026-07-12",
+   "subject": "release v0.13.0"
+  },
   {
    "hash": "5759020",
    "date": "2026-07-12",
@@ -60,16 +70,6 @@
   },
   {
    "hash": "2655748",
-   "date": "2026-07-07",
-   "subject": "refresh changelog"
-  },
-  {
-   "hash": "3b3805e",
-   "date": "2026-07-07",
-   "subject": "fly onto the target, don't rotate onto it"
-  },
-  {
-   "hash": "17d9efc",
    "date": "2026-07-07",
    "subject": "refresh changelog"
   }

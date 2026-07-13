@@ -1909,17 +1909,17 @@
     // data/changelog.json is generated from the git commit log at deploy time
     // (scripts/gen-changelog.mjs) and fetched here — no build step. Falls back to
     // a short built-in list if it can't be loaded.
-    const UNDER_VERSION = 'v0.13.0';
+    const UNDER_VERSION = 'v0.13.1';
     const vEl = document.getElementById('menuVersion');
     const upEl = document.getElementById('menuUpdates');
     if (vEl) vEl.textContent = UNDER_VERSION;
 
     const FALLBACK_NOTES = [
-      'Polish infantry and tank crews now acknowledge selection, movement, attack, and stop orders with supplied Polish recordings.',
-      'Drag-box selection produces one group acknowledgement, while attack orders periodically use patriotic and morale lines.',
-      'Mokra now opens with a reinforced six-gun line and five infantry sections positioned between the artillery.',
-      'The final German armoured echelon triggers a dedicated Polish morale cue.',
-      'All 77 Polish source recordings have compressed runtime copies, with 75 currently active in gameplay.',
+      'Mokra reinforcement stalls reduced from several seconds to single-digit milliseconds.',
+      'German armour now follows validated authored corridors and recovers from blockages without synchronous vehicle A* freezes.',
+      'Target acquisition, fog, HUD, minimap, foliage and animation work are staggered or cached.',
+      'Grass, track marks, crater deformation and movement recording now use hard performance budgets.',
+      'Polish command audio loads voices on demand instead of creating hundreds of media elements at startup.',
     ];
     const renderUpdates = (version, date, notes) => {
       if (!upEl) return;
