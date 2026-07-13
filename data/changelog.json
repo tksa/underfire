@@ -1,8 +1,18 @@
 {
- "version": "v0.13.1",
- "build": "b315173",
+ "version": "v0.14.0",
+ "build": "54a3508",
  "generated": "2026-07-13",
  "commits": [
+  {
+   "hash": "54a3508",
+   "date": "2026-07-13",
+   "subject": "add mounted Polish cavalry"
+  },
+  {
+   "hash": "a829d79",
+   "date": "2026-07-13",
+   "subject": "release v0.13.1"
+  },
   {
    "hash": "b315173",
    "date": "2026-07-13",
@@ -60,16 +70,6 @@
   },
   {
    "hash": "a2abda6",
-   "date": "2026-07-07",
-   "subject": "refresh changelog"
-  },
-  {
-   "hash": "2c1f6a7",
-   "date": "2026-07-07",
-   "subject": "window close-assault + hand-tuned foliage palette"
-  },
-  {
-   "hash": "2655748",
    "date": "2026-07-07",
    "subject": "refresh changelog"
   }

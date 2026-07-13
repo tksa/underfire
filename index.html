@@ -1911,17 +1911,17 @@
     // data/changelog.json is generated from the git commit log at deploy time
     // (scripts/gen-changelog.mjs) and fetched here — no build step. Falls back to
     // a short built-in list if it can't be loaded.
-    const UNDER_VERSION = 'v0.13.1';
+    const UNDER_VERSION = 'v0.14.0';
     const vEl = document.getElementById('menuVersion');
     const upEl = document.getElementById('menuUpdates');
     if (vEl) vEl.textContent = UNDER_VERSION;
 
     const FALLBACK_NOTES = [
-      'Mokra reinforcement stalls reduced from several seconds to single-digit milliseconds.',
-      'German armour now follows validated authored corridors and recovers from blockages without synchronous vehicle A* freezes.',
-      'Target acquisition, fog, HUD, minimap, foliage and animation work are staggered or cached.',
-      'Grass, track marks, crater deformation and movement recording now use hard performance budgets.',
-      'Polish command audio loads voices on demand instead of creating hundreds of media elements at startup.',
+      'Four mounted Ułans of the 12th Podolian Regiment join the Polish reserve at Mokra.',
+      'Mounted reserves can dismount and remount while retaining health, ammunition, experience and unit identity.',
+      'Horse movement now accelerates, turns and brakes progressively with speed-synchronised walk and run animation.',
+      'Mounted cavalry uses full-width paths and stays out of buildings, troop transports and foot-only actions.',
+      'Shared GLB requests are parsed once and cloned, avoiding duplicate cavalry-model loading work.',
     ];
     const renderUpdates = (version, date, notes) => {
       if (!upEl) return;
