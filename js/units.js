@@ -1800,10 +1800,27 @@ Game.makeUnit = (team, kind, x, z, opts = {}) => {
     Game._loadUnitModel(unit, unit.mesh);
 
     Game.units.push(unit);
+    // A scenario reset can empty and repopulate the same array to the same final
+    // length. Explicit invalidation prevents an old same-size ID index surviving.
+    Game._unitByIdSize = -1;
+    Game._officerCacheUntil = 0;
     return unit;
 };
 
-Game.getUnitById = (id) => Game.units.find(u => u.id === id);
+// Targeting, towing, transport and renderer code resolve IDs many times per
+// frame. Keep an index that automatically rebuilds when tests/scenario tools
+// replace the units array or a reinforcement wave changes its length.
+Game._unitByIdSource = null;
+Game._unitByIdSize = -1;
+Game._unitById = new Map();
+Game.getUnitById = (id) => {
+    if (Game._unitByIdSource !== Game.units || Game._unitByIdSize !== Game.units.length) {
+        Game._unitById = new Map(Game.units.map(unit => [unit.id, unit]));
+        Game._unitByIdSource = Game.units;
+        Game._unitByIdSize = Game.units.length;
+    }
+    return Game._unitById.get(id);
+};
 Game.getTeamUnits = (team) => Game.units.filter(u => u.alive && u.team === team);
 
 // Formation types

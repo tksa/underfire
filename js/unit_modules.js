@@ -54,6 +54,20 @@ Game._restoreTruckRecovery = (unit, recovery) => {
     return rebuilt;
 };
 
+// Preserve the full general vehicle A* for player commands and every other
+// scenario. German Mokra attackers already own validated authored corridors, so
+// their dynamic/stuck recovery can rebuild the forward remainder in milliseconds
+// instead of launching an 80k-state heading search on the simulation frame.
+Game._vehicleRecoveryRoute = (unit, goal, reason) => {
+    const isMokraAttacker = unit._mokraAuthoredAttacker
+        && Game.currentScenario === 'mokra'
+        && unit.team === Game.TEAM.GERMAN
+        && Game._recoverMokraVehicleRoute;
+    return isMokraAttacker
+        ? Game._recoverMokraVehicleRoute(unit, goal.x, goal.z, reason)
+        : Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
+};
+
 // Per-frame upkeep: cover value + decay the short-lived timers.
 Game.uMod.frame = (unit, ctx) => {
     unit.coverBonus = unit._garrisoned ? (Game.GARRISON_COVER || 0.9) : Game.computeCover(unit);
@@ -168,8 +182,32 @@ Game.uMod.deploy = (unit, ctx) => {
     unit._canFire = unit.deployed && unit._deployT <= 0;
 };
 
+// Unforced perception is deliberately staggered. At 60 fps, asking every unit
+// to search every enemy and ray-walk LOS every frame grows quadratically with a
+// battle. A 0.14-0.20s cadence is still tactically immediate (5-7 scans/sec),
+// while the id-derived phase prevents a freshly spawned wave scanning in lockstep.
+Game._targetScanPhase = (unit) => {
+    const id = Number(unit.id) || 0;
+    return ((id * 0.6180339887498949) % 1 + 1) % 1;
+};
+
+Game._targetScanInterval = (unit) => 0.14 + Game._targetScanPhase(unit) * 0.06;
+
+// Squad AI consumes this same sighting instead of independently running another
+// nearest-enemy search. Object references are safe here: unit records persist for
+// corpses/wrecks, and the alive/team checks invalidate them without an O(N) id scan.
+Game.getCachedScanEnemy = (unit, maxAge = 0.45) => {
+    const enemy = unit._scanEnemy;
+    if (!enemy || !enemy.alive || enemy.team === unit.team) return null;
+    const scannedAt = unit._targetScanTime;
+    if (scannedAt == null || (Game.gameClock - scannedAt) > maxAge) return null;
+    return enemy;
+};
+
 // Scan: pick a target — player-forced first, else auto-acquire the nearest the
 // team can see. A dead/gone forced target releases the commitment and halts.
+// Unforced searches/LOS validation run on the staggered cadence above; the chosen
+// target is retained between scans, while firing still validates LOS every frame.
 // Sets ctx.enemy.
 Game.uMod.scan = (unit, ctx) => {
     let enemy = null;
@@ -190,22 +228,52 @@ Game.uMod.scan = (unit, ctx) => {
     // A holding or retreating unit (or one ordered to hold fire) doesn't go
     // looking for a fight.
     if (!enemy && !facing && !unit.holdFire && unit.orderMode !== 'hold' && unit.orderMode !== 'retreat') {
-        const cand = Game.nearestEnemy(unit);
-        // Target hysteresis: keep the current target through small distance
-        // shuffles so the unit doesn't twitch back and forth between two roughly
-        // equidistant enemies. Only switch when the current target is gone/unseen,
-        // or a new one is clearly closer (>20%) AND we've held the current one for
-        // a minimum dwell (kills the rapid retarget jitter).
-        const cur = unit._engageId != null ? Game.getUnitById(unit._engageId) : null;
-        const curValid = cur && cur.alive && cur.team !== unit.team && Game.unitCanSee(unit, cur)
-            && Game.dist(unit.x, unit.z, cur.x, cur.z) <= unit.sight * 1.1;
-        if (curValid && cand && cand.id !== cur.id) {
-            const dCur = Game.distSq(unit.x, unit.z, cur.x, cur.z);
-            const dCand = Game.distSq(unit.x, unit.z, cand.x, cand.z);
-            const dwellOk = (Game.gameClock - (unit._targetSince || 0)) > 0.8;
-            enemy = (dCand < dCur * 0.64 && dwellOk) ? cand : cur;  // 0.64 = 0.8² → ~20% closer
+        const now = Game.gameClock;
+        let cached = unit._scanEnemy;
+        const cachedInvalid = cached && (!cached.alive || cached.team === unit.team);
+
+        if (unit._nextTargetScanAt == null) {
+            // Initial delay is the phase itself, not a full interval: the whole
+            // force is covered within ~0.2s without a first-frame LOS spike.
+            unit._nextTargetScanAt = now + Game._targetScanPhase(unit) * 0.20;
+        }
+        const scanDue = cachedInvalid || now >= unit._nextTargetScanAt;
+        if (scanDue) {
+            unit._nextTargetScanAt = now + Game._targetScanInterval(unit);
+            const cand = Game.nearestEnemy(unit);
+            // Target hysteresis: keep the current target through small distance
+            // shuffles so the unit doesn't twitch back and forth between two roughly
+            // equidistant enemies. Only switch when the current target is gone/unseen,
+            // or a new one is clearly closer (>20%) AND we've held the current one for
+            // a minimum dwell (kills the rapid retarget jitter).
+            const cur = unit._engageId != null
+                ? ((unit._engageTarget && unit._engageTarget.id === unit._engageId)
+                    ? unit._engageTarget : Game.getUnitById(unit._engageId))
+                : null;
+            const curDistSq = cur && cur.alive && cur.team !== unit.team
+                ? Game.distSq(unit.x, unit.z, cur.x, cur.z) : Infinity;
+            // nearestEnemy already proved LOS when it returned the current target;
+            // avoid immediately ray-walking that same pair a second time.
+            const curVisible = cur && cand && cand.id === cur.id
+                ? true
+                : !!(cur && cur.alive && cur.team !== unit.team && Game.unitCanSee(unit, cur));
+            const curValid = curVisible && curDistSq <= (unit.sight * 1.1) ** 2;
+            if (curValid && cand && cand.id !== cur.id) {
+                const dCand = Game.distSq(unit.x, unit.z, cand.x, cand.z);
+                const dwellOk = (now - (unit._targetSince || 0)) > 0.8;
+                enemy = (dCand < curDistSq * 0.64 && dwellOk) ? cand : cur;  // 0.64 = 0.8² → ~20% closer
+            } else {
+                enemy = curValid ? cur : cand;
+            }
+            unit._scanEnemy = enemy || null;
+            unit._scanEnemyId = enemy ? enemy.id : null;
+            unit._targetScanTime = now;
+        } else if (!cachedInvalid) {
+            // Only the cheap liveness/team validation happens between scan ticks.
+            // Fire/engage remain authoritative for current-frame LOS and range.
+            enemy = cached || null;
         } else {
-            enemy = curValid ? cur : cand;
+            cached = null;
         }
     }
     // Sticky engagement: once a unit acquires a target it commits to it through a
@@ -216,6 +284,7 @@ Game.uMod.scan = (unit, ctx) => {
     if (enemy) {
         if (unit._engageId !== enemy.id) unit._targetSince = Game.gameClock;  // stamp on real switch only
         unit._engageId = enemy.id;
+        unit._engageTarget = enemy;
         unit._engageTime = Game.gameClock;
     } else if (unit._engageId != null && unit.orderMode !== 'retreat' && !unit.holdFire && !facing
         && (Game.gameClock - (unit._engageTime || 0)) < 1.6) {
@@ -225,6 +294,7 @@ Game.uMod.scan = (unit, ctx) => {
             enemy = le;
         } else {
             unit._engageId = null;
+            unit._engageTarget = null;
         }
     }
     unit.fireTargetId = enemy ? enemy.id : null;
@@ -559,7 +629,7 @@ Game.uMod.move = (unit, ctx) => {
                 // logic's case — re-routing would just churn.
                 if (Game.distSq(goal.x, goal.z, blocker.x, blocker.z) > 16) {
                     unit._rerouteFor = { id: blocker.id, t: Game.gameClock };
-                    const fresh = Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
+                    const fresh = Game._vehicleRecoveryRoute(unit, goal, 'dynamic-blocker');
                     if (fresh.length) { unit.path = fresh; unit._detour = null; }
                 }
             }
@@ -1410,7 +1480,7 @@ Game.uMod.move = (unit, ctx) => {
                         // and rebuild the route so it gets another wider approach.
                         const goal = unit.path[unit.path.length - 1];
                         unit._detour = null; unit._drvCmd = null;
-                        unit.path = Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
+                        unit.path = Game._vehicleRecoveryRoute(unit, goal, 'repeated-stall');
                         unit.moving = unit.path.length > 0;
                         unit._crawlT = Math.max(unit._crawlT || 0, 0.5);
                         unit._stuckReplans = 0;
@@ -1428,7 +1498,7 @@ Game.uMod.move = (unit, ctx) => {
                         unit.path = Game._restoreTruckRecovery(unit, recovery);
                     } else {
                         const goal = unit.path[unit.path.length - 1];
-                        unit.path = Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
+                        unit.path = Game._vehicleRecoveryRoute(unit, goal, 'stuck');
                     }
                     unit.moving = unit.path.length > 0;
                 }

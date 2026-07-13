@@ -616,6 +616,12 @@ Game.FLUFF = {
 };
 Game._fluffMasks = {};   // per species Uint8: 255 auto, 1 painted on, 0 painted off
 Game._fluffMats = {};
+Game._fluffGroups = Game._fluffGroups || [];
+// Runtime rendering limits do not alter the editable species density or masks.
+// Mokra reserves one combined budget for legacy undergrowth + fluffy field cover;
+// other maps retain the editor's historical per-species 600k safety cap.
+Game.FLUFF_MOKRA_BLADE_BUDGET = 140000;
+Game.FLUFF_CHUNK_TILES = 16;
 
 Game._fluffMaskFor = (sp) => {
     const n = Game.MAP_COLS * Game.MAP_ROWS;
@@ -691,9 +697,49 @@ Game._fluffMaterial = (sp) => {
     return mat;
 };
 
+Game._clearFluffyGrass = () => {
+    const roots = new Set(Game._fluffGroups || []);
+    if (Game.terrainGroup) {
+        Game.terrainGroup.children.forEach(child => {
+            if ((child.name || '').startsWith('fluffy-grass-')) roots.add(child);
+        });
+    }
+    const materials = new Set();
+    roots.forEach(root => {
+        root.traverse?.(object => {
+            const mats = object.material
+                ? (Array.isArray(object.material) ? object.material : [object.material])
+                : [];
+            mats.forEach(material => materials.add(material));
+            object.onBeforeRender = null;
+            // Releases InstancedMesh-owned GPU attributes without disposing the
+            // shared blade prototype geometry cached in Game._fluffGeos.
+            if (object.isInstancedMesh && object.dispose) object.dispose();
+        });
+        if (root.parent) root.parent.remove(root);
+    });
+    materials.forEach(material => material.dispose());
+    Game._fluffGroups = [];
+    Game._fluffMats = {};
+};
+
 Game.buildFluffyGrass = () => {
     const THREE = Game.THREE;
     if (!THREE || !Game.terrainGroup) return;
+    Game._clearFluffyGrass();
+    const isMokra = Game.currentScenario === 'mokra';
+    // Count the legacy layer whether currently visible or not: toggling grass on
+    // after an editor rebuild must still respect the same combined hard budget.
+    const legacy = isMokra
+        ? (Game._grassMeshes || []).reduce((sum, mesh) => sum + (mesh.count || 0), 0)
+        : 0;
+    if (!Game.FLUFF.enabled) {
+        Game._fluffStats = {
+            budget: isMokra ? Game.FLUFF_MOKRA_BLADE_BUDGET : null,
+            legacy, fluffy: 0, total: legacy, chunks: 0, species: {},
+        };
+        return;
+    }
     // Fluffiness trick: blades TINT TO THE GROUND under them (then lighten
     // toward the tip via the gradient), so they merge into a shaggy volume
     // instead of reading as dark sprigs on a lighter texture.
@@ -706,35 +752,30 @@ Game.buildFluffyGrass = () => {
             ground = mapTex.image.getContext('2d').getImageData(0, 0, gw, gh).data;
         } catch (e) { ground = null; }
     }
-    for (const sp in Game.FLUFF.species) {
-        const old = Game.terrainGroup.getObjectByName('fluffy-grass-' + sp);
-        if (old) {
-            // geometry is the shared blade prototype — dispose material only
-            old.material.dispose();
-            Game.terrainGroup.remove(old);
+    const T = Game.TILE;
+    const dims = Game._terrainPaintDims;
+    const ov = Game._terrainPaintOverride;
+    // Effective type at an exact world point: the freeform paint override wins
+    // over the tile, so blades continue to follow editor brushwork texel-accurately.
+    const typeAt = (wx, wz, fallback) => {
+        if (ov && dims) {
+            const xi = Math.min(dims.W - 1, Math.max(0, ((wx / T) * dims.px) | 0));
+            const yi = Math.min(dims.H - 1, Math.max(0, ((wz / T) * dims.px) | 0));
+            const v = ov[yi * dims.W + xi];
+            if (v !== 255) return Game.EDITOR_TYPES[v] || fallback;
         }
-        if (!Game.FLUFF.enabled) continue;
-        const cfg = Game.FLUFF.species[sp];
+        return fallback;
+    };
+
+    // Pre-count before allocating spots. Editable cfg.density stays untouched;
+    // only the runtime density is scaled to the active scenario's render budget.
+    const plans = [];
+    for (const [sp, cfg] of Object.entries(Game.FLUFF.species)) {
         const mask = Game._fluffMaskFor(sp);
         const auto = new Set(cfg.tiles);
-        const T = Game.TILE;
-        // effective type at an exact world point: the freeform paint override
-        // wins over the tile, so blades follow brushwork texel-accurately
-        const dims = Game._terrainPaintDims;
-        const ov = Game._terrainPaintOverride;
-        const typeAt = (wx, wz, fallback) => {
-            if (ov && dims) {
-                const xi = Math.min(dims.W - 1, Math.max(0, ((wx / T) * dims.px) | 0));
-                const yi = Math.min(dims.H - 1, Math.max(0, ((wz / T) * dims.px) | 0));
-                const v = ov[yi * dims.W + xi];
-                if (v !== 255) return Game.EDITOR_TYPES[v] || fallback;
-            }
-            return fallback;
-        };
-        // pre-count eligible tiles so dense settings thin per-tile up front
+        // Pre-count eligible tiles so dense settings thin per-tile up front
         // instead of building millions of spots and culling after (an O(n^2)
         // splice here froze the browser on all-grass blank maps)
-        const CAP = 600000;
         let eligible = 0;
         for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
             for (let tx = 0; tx < Game.MAP_COLS; tx++) {
@@ -744,10 +785,29 @@ Game.buildFluffyGrass = () => {
             }
         }
         if (!eligible) continue;
-        const density = Math.min(cfg.density, CAP / eligible);
-        const spots = [];
+        const baseDensity = Math.min(cfg.density, 600000 / eligible);
+        plans.push({ sp, cfg, mask, auto, eligible, baseDensity, requested: eligible * baseDensity });
+    }
+
+    const totalBudget = isMokra ? Game.FLUFF_MOKRA_BLADE_BUDGET : Infinity;
+    const fluffyBudget = isMokra ? Math.max(0, totalBudget - legacy) : Infinity;
+    const requested = plans.reduce((sum, plan) => sum + plan.requested, 0);
+    const runtimeScale = isMokra && requested > 0 ? Math.min(1, fluffyBudget / requested) : 1;
+    let remaining = isMokra ? Math.floor(fluffyBudget) : Infinity;
+    const chunkTiles = Math.max(4, Math.round(Game.FLUFF_CHUNK_TILES || 16));
+    const stats = {
+        budget: Number.isFinite(totalBudget) ? totalBudget : null,
+        legacy, fluffy: 0, total: legacy, chunks: 0, species: {},
+    };
+
+    for (const plan of plans) {
+        const { sp, cfg, mask, auto, eligible, baseDensity } = plan;
+        const density = baseDensity * runtimeScale;
+        const chunks = new Map();
+        let speciesCount = 0;
         for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
             for (let tx = 0; tx < Game.MAP_COLS; tx++) {
+                if (remaining <= 0) break;
                 const st = mask[ty * Game.MAP_COLS + tx];
                 if (st === 0) continue;
                 const tileType = Game.terrain[ty][tx].type;
@@ -762,14 +822,29 @@ Game.buildFluffyGrass = () => {
                     // patchiness: fbm-thinned clearings for natural meadows
                     if (cfg.patch > 0 && Game._fbm2
                         && Game._fbm2(x * 0.09 + 3.1, z * 0.09 - 8.7) < cfg.patch) continue;
-                    spots.push({ x, z });
+                    const cx = Math.floor(tx / chunkTiles), cy = Math.floor(ty / chunkTiles);
+                    const key = cx + ',' + cy;
+                    let chunk = chunks.get(key);
+                    if (!chunk) {
+                        chunk = { cx, cy, spots: [] };
+                        chunks.set(key, chunk);
+                    }
+                    chunk.spots.push({ x, z });
+                    speciesCount++;
+                    remaining--;
+                    if (remaining <= 0) break;
                 }
             }
+            if (remaining <= 0) break;
         }
-        if (!spots.length) continue;
-        const inst = new THREE.InstancedMesh(Game._fluffBladeGeo(cfg.geo || 'blade'), Game._fluffMaterial(sp), spots.length);
-        inst.name = 'fluffy-grass-' + sp;
-        inst.raycast = () => { };
+        if (!speciesCount) continue;
+
+        const root = new THREE.Group();
+        root.name = 'fluffy-grass-' + sp;
+        root.visible = Game.SHOW_GRASS !== false;
+        const geometry = Game._fluffBladeGeo(cfg.geo || 'blade');
+        const material = Game._fluffMaterial(sp);
+        root.userData.fluffMaterial = material;
         const dummy = new THREE.Object3D();
         const icol = new THREE.Color();
         const hv = cfg.heightVar != null ? cfg.heightVar : 0.45;
@@ -778,38 +853,51 @@ Game.buildFluffyGrass = () => {
         const cv = cfg.colorVar || 0;
         const match = cfg.matchGround !== false && !!ground;
         const WW = Game.WORLD_W, WH = Game.WORLD_H;
-        for (let i = 0; i < spots.length; i++) {
-            const p = spots[i];
-            const h = cfg.height * (1 - hv / 2 + Math.random() * hv);
-            dummy.position.set(p.x, (Game.getHeight ? Game.getHeight(p.x, p.z) : 0) - 0.02, p.z);
-            dummy.rotation.set((Math.random() - 0.5) * 2 * lean, Math.random() * Math.PI * 2,
-                (Math.random() - 0.5) * 2 * lean);
-            dummy.scale.set(w, h, w);
-            dummy.updateMatrix();
-            inst.setMatrixAt(i, dummy.matrix);
-            let vr = 1;
-            if (cv > 0) vr = 1 - cv / 2 + Math.random() * cv;
-            if (match) {
-                const gx = Math.min(gw - 1, Math.max(0, ((p.x / WW) * gw) | 0));
-                const gy = Math.min(gh - 1, Math.max(0, ((p.z / WH) * gh) | 0));
-                const gi = (gy * gw + gx) * 4;
-                // slight lift so the shaggy layer reads above the flat paint
-                icol.setRGB(
-                    Math.min(1, (ground[gi] / 255) * 1.12 * vr),
-                    Math.min(1, (ground[gi + 1] / 255) * 1.12 * vr),
-                    Math.min(1, (ground[gi + 2] / 255) * 1.12 * vr));
-                inst.setColorAt(i, icol);
-            } else if (cv > 0) {
-                icol.setScalar(vr);
-                inst.setColorAt(i, icol);
-            }
-        }
-        inst.instanceMatrix.needsUpdate = true;
-        if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
         const U = Game._fluffMats[sp];
-        inst.onBeforeRender = () => { U.uTime.value = performance.now() / 1000; };
-        Game.terrainGroup.add(inst);
+        chunks.forEach(chunk => {
+            const inst = new THREE.InstancedMesh(geometry, material, chunk.spots.length);
+            inst.name = `fluffy-grass-${sp}-${chunk.cx}-${chunk.cy}`;
+            inst.raycast = () => { };
+            for (let i = 0; i < chunk.spots.length; i++) {
+                const p = chunk.spots[i];
+                const h = cfg.height * (1 - hv / 2 + Math.random() * hv);
+                dummy.position.set(p.x, (Game.getHeight ? Game.getHeight(p.x, p.z) : 0) - 0.02, p.z);
+                dummy.rotation.set((Math.random() - 0.5) * 2 * lean, Math.random() * Math.PI * 2,
+                    (Math.random() - 0.5) * 2 * lean);
+                dummy.scale.set(w, h, w);
+                dummy.updateMatrix();
+                inst.setMatrixAt(i, dummy.matrix);
+                let vr = 1;
+                if (cv > 0) vr = 1 - cv / 2 + Math.random() * cv;
+                if (match) {
+                    const gx = Math.min(gw - 1, Math.max(0, ((p.x / WW) * gw) | 0));
+                    const gy = Math.min(gh - 1, Math.max(0, ((p.z / WH) * gh) | 0));
+                    const gi = (gy * gw + gx) * 4;
+                    // Slight lift so the shaggy layer reads above the flat paint.
+                    icol.setRGB(
+                        Math.min(1, (ground[gi] / 255) * 1.12 * vr),
+                        Math.min(1, (ground[gi + 1] / 255) * 1.12 * vr),
+                        Math.min(1, (ground[gi + 2] / 255) * 1.12 * vr));
+                    inst.setColorAt(i, icol);
+                } else if (cv > 0) {
+                    icol.setScalar(vr);
+                    inst.setColorAt(i, icol);
+                }
+            }
+            inst.instanceMatrix.needsUpdate = true;
+            if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+            inst.computeBoundingSphere();
+            inst.onBeforeRender = () => { U.uTime.value = performance.now() / 1000; };
+            root.add(inst);
+        });
+        Game.terrainGroup.add(root);
+        Game._fluffGroups.push(root);
+        stats.fluffy += speciesCount;
+        stats.total += speciesCount;
+        stats.chunks += chunks.size;
+        stats.species[sp] = { instances: speciesCount, chunks: chunks.size, eligible, density };
     }
+    Game._fluffStats = stats;
 };
 
 // ── Panel wiring ──

@@ -42,9 +42,11 @@ Game.FIELD_TYPES = ['grass', 'pasture', 'wheat', 'stubble', 'plowed', 'vineyard'
 Game.TERRAIN_TEXELS_PER_TILE = 14;
 Game.TERRAIN_DETAIL_DENSITY = 0.58;
 
-// Debug: show/hide the 3D grass blades (undergrowth) live. OFF by default (the
-// field tufts read poorly from the RTS camera); toggle on in the Terrain panel.
-Game.SHOW_GRASS = false;
+// Show/hide both grass renderers live: the sparse legacy undergrowth and the
+// spatially-chunked fluffy field cover. Keeping the combined layer on by default
+// preserves the authored field look; Mokra's build-time blade budget keeps it
+// inexpensive enough to leave enabled during normal play.
+Game.SHOW_GRASS = true;
 // Road gravel tiling: repeat every N tiles, and blend opacity. Live-tunable.
 Game.ROAD_GRAVEL_TILES = 2.5;
 Game.ROAD_GRAVEL_ALPHA = 0.92;
@@ -61,10 +63,18 @@ Game.TERRAIN_EDGE_ROUGH_SHARE = 0.35;
 Game.setGrassVisible = (v) => {
     Game.SHOW_GRASS = !!v;
     (Game._grassMeshes || []).forEach(m => { m.visible = !!v; });
+    (Game._fluffGroups || []).forEach(group => { group.visible = !!v; });
+    // Compatibility with a freshly restored editor map whose groups predate the
+    // registry, and with the former single-mesh fluffy implementation.
+    if (Game.terrainGroup) {
+        Game.terrainGroup.children.forEach(child => {
+            if ((child.name || '').startsWith('fluffy-grass-')) child.visible = !!v;
+        });
+    }
 };
 // Terrain debug controls (merged into the shared panel via engine.js).
 Game._terrainControlDefs = () => [
-    { group: 'Terrain', key: 'showGrass', label: 'Grass blades (0/1)', min: 0, max: 1, step: 1, default: 0, apply: v => Game.setGrassVisible(v >= 1) },
+    { group: 'Terrain', key: 'showGrass', label: 'Grass blades (0/1)', min: 0, max: 1, step: 1, default: 1, apply: v => Game.setGrassVisible(v >= 1) },
     { group: 'Terrain', key: 'roadGravelTiles', label: 'Road gravel scale (tiles/repeat)', min: 0.5, max: 8, step: 0.25, default: 2.5, apply: v => { Game.ROAD_GRAVEL_TILES = v; if (Game.rebuildTerrainTexture) Game.rebuildTerrainTexture(); } },
     { group: 'Terrain', key: 'roadGravelAlpha', label: 'Road gravel opacity', min: 0, max: 1, step: 0.05, default: 0.92, apply: v => { Game.ROAD_GRAVEL_ALPHA = v; if (Game.rebuildTerrainTexture) Game.rebuildTerrainTexture(); } },
     { group: 'Terrain', key: 'fringeDens', label: 'Road grass fringe', min: 0, max: 4, step: 0.1, default: 1.6, apply: v => { Game.TERRAIN_FRINGE = v; if (Game.rebuildTerrainTexture) Game.rebuildTerrainTexture(); } },
@@ -3209,6 +3219,14 @@ Game.buildTerrainMeshes = () => {
     while (Game.terrainGroup.children.length) {
         Game.terrainGroup.remove(Game.terrainGroup.children[0]);
     }
+    // The meshes themselves were removed above; do not retain stale references
+    // across editor/debug rebuilds or let the visibility toggle walk old worlds.
+    Game._grassMeshes = [];
+    Game.foliageKD = [];
+    Game._fkdIndex = null;
+    Game._fkdIndexSource = null;
+    Game._fkdIndexLength = -1;
+    Game._fkdFalling = [];
     Game.terrainMesh = null;
 
     if (Game._applyWaterBedDepth) Game._applyWaterBedDepth();

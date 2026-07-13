@@ -247,15 +247,144 @@ Game.spawnPolishLineSection = (x, z, group) => {
         { group, aiState: 'player', veterancy: 0.09 + (i % 3) * 0.025 })).filter(Boolean);
 };
 
+// Authored road corridors for German armour. Coordinates are continuous tile
+// coordinates through the open western approach and south of Mokra II. They are
+// shared by every vehicle in an echelon; only the spawn connector
+// and final fan-out differ. This avoids running the full heading-state
+// vehicle A* (up to 80,000 swept-OBB states) synchronously when a wave appears.
+const MOKRA_VEHICLE_LANES = Object.freeze({
+    // Keep the shared corridor south of Mokra II's model footprints. Building
+    // models seal their exact overhang asynchronously after scenario spawn, so
+    // the apparent road at y=53 can later become a house tile. These field lanes
+    // are clear both before and after that final footprint sealing.
+    southernField: Object.freeze([[20.5, 57.5], [57.5, 57.5]]),
+    southernNear: Object.freeze([[20.5, 56.0], [57.5, 56.0]]),
+    southernWide: Object.freeze([[14.5, 58.5], [38.5, 58.5], [57.5, 58.5]]),
+    directApproach: Object.freeze([]),
+});
+
+Game._buildMokraVehicleRoute = (unit, goalX, goalZ, options = {}) => {
+    // The southern field lane is valid for the north, centre and south entries.
+    // Two nearby authored approaches cover unusual spawn headings; there is
+    // deliberately no fallback to vehicle A* on the wave-spawn frame.
+    const authored = ['southernField', 'southernNear', 'southernWide'];
+    const laneOffset = ((options.laneOffset || 0) % authored.length + authored.length) % authored.length;
+    const laneOrder = authored.map((_, i) => authored[(i + laneOffset) % authored.length]);
+    laneOrder.push('directApproach');
+    const staticCtx = { tiles: new Set(), vehicles: [] };
+    const eastbound = goalX >= unit.x;
+
+    for (const laneName of laneOrder) {
+        let controls = MOKRA_VEHICLE_LANES[laneName].map(([tx, ty]) => ({
+            x: tx * Game.TILE,
+            z: ty * Game.TILE,
+        }));
+        // Resume in the requested direction using only corridor controls strictly
+        // between the current pose and goal. Eastbound routes stay ascending;
+        // retreats/rally moves reverse the same proven corridor westbound. This
+        // prevents either direction from first U-turning to an already-passed node.
+        if (!eastbound) controls.reverse();
+        controls = controls.filter(point => eastbound
+            ? point.x > unit.x + 0.35 * Game.TILE && point.x < goalX - 0.20 * Game.TILE
+            : point.x < unit.x - 0.35 * Game.TILE && point.x > goalX + 0.20 * Game.TILE);
+        controls.push({ x: goalX, z: goalZ, _exactGoal: true });
+
+        const route = [];
+        let fromX = unit.x, fromZ = unit.z, heading = unit.angle || 0;
+        let valid = true;
+        for (const point of controls) {
+            if (Game.distSq(fromX, fromZ, point.x, point.z) < 0.25) continue;
+            const angle = Math.atan2(point.z - fromZ, point.x - fromX);
+            if (!Game.segmentPassable(unit, fromX, fromZ, point.x, point.z, {
+                startAngle: heading,
+                endAngle: angle,
+                obstacleCtx: staticCtx,
+                margin: 0.20,
+            })) {
+                valid = false;
+                break;
+            }
+            route.push({ ...point, _pathAngle: angle, _mokraLane: laneName });
+            fromX = point.x;
+            fromZ = point.z;
+            heading = angle;
+        }
+        if (valid && route.length) {
+            if (laneName !== laneOrder[0]) Game._mokraRouteStats.vehicleLaneFallbacks++;
+            return route;
+        }
+    }
+    Game._mokraRouteStats.vehicleRouteFailures++;
+    return [];
+};
+
+// Fast recovery for scenario-authored German armour. It rotates to the next
+// parallel lane and rebuilds only the still-ahead portion; it never invokes the
+// general heading-state vehicle A*. unit_modules.js calls this only for tagged
+// Mokra AI attackers, so player orders and every other scenario retain full A*.
+Game._recoverMokraVehicleRoute = (unit, goalX, goalZ, reason = 'stuck') => {
+    const stats = Game._mokraRouteStats;
+    stats.vehicleRecoveries++;
+    unit._mokraRecoveryCount = (unit._mokraRecoveryCount || 0) + 1;
+    const route = Game._buildMokraVehicleRoute(unit, goalX, goalZ, {
+        laneOffset: (unit._mokraLaneSlot || 0) + unit._mokraRecoveryCount,
+    });
+    if (!route.length && Game.distSq(unit.x, unit.z, goalX, goalZ) > 2.25) {
+        stats.vehicleRecoveryFailures++;
+    }
+    unit._mokraLastRecovery = { reason, at: Game.gameClock };
+    return route;
+};
+
+// Infantry/support A* is much cheaper than vehicle A*, but launching twenty of
+// them in one call still creates a visible frame spike. Dispatch at most one job
+// from updateMokraMission per frame. The wave itself and its historical timer are
+// unchanged; troops merely receive their preassigned destination over successive
+// frames (normally the whole echelon is moving within a fraction of a second).
+Game._queueMokraInfantryRoute = (unit, goalX, goalZ) => {
+    unit.path = [];
+    unit.moving = false;
+    unit._mokraRoutePending = true;
+    Game._mokraRouteQueue.push({ unit, goalX, goalZ });
+    Game._mokraRouteStats.infantryQueued++;
+    Game._mokraRouteStats.maxQueue = Math.max(
+        Game._mokraRouteStats.maxQueue, Game._mokraRouteQueue.length);
+};
+
+Game._processMokraRouteQueue = () => {
+    const job = Game._mokraRouteQueue && Game._mokraRouteQueue.shift();
+    if (!job) return;
+    const { unit, goalX, goalZ } = job;
+    unit._mokraRoutePending = false;
+    if (!unit.alive) return;
+    unit.path = Game.findPath
+        ? Game.findPath(unit, unit.x, unit.z, goalX, goalZ)
+        : [{ x: goalX, z: goalZ }];
+    unit.moving = !!unit.path.length;
+    Game._mokraRouteStats.infantryRouted++;
+    if (!unit.path.length) Game._mokraRouteStats.infantryRouteFailures++;
+};
+
 Game._sendMokraAttackers = (units) => {
     const tx = Game.missionState.objectiveX, tz = Game.missionState.objectiveY;
+    let vehicleIndex = 0;
     units.filter(Boolean).forEach((u, i) => {
         const gx = tx - 8 - (i % 3) * 3;
         const gz = tz + ((i % 5) - 2) * 5;
         u.aiState = 'attack';
         u.orderMode = 'aggressive';
-        u.path = Game.findPath ? Game.findPath(u, u.x, u.z, gx, gz) : [{ x: gx, z: gz }];
-        u.moving = !!u.path.length;
+        u._mokraAttackGoal = { x: gx, z: gz };
+        if (Game.isTank(u.kind) || Game.isTruck(u.kind)) {
+            u._mokraAuthoredAttacker = true;
+            u._mokraLaneSlot = vehicleIndex++ % 3;
+            u.path = Game._buildMokraVehicleRoute(u, gx, gz, {
+                laneOffset: u._mokraLaneSlot,
+            });
+            u.moving = !!u.path.length;
+            Game._mokraRouteStats.vehicleAuthored++;
+        } else {
+            Game._queueMokraInfantryRoute(u, gx, gz);
+        }
     });
     return units;
 };
@@ -322,6 +451,14 @@ Game.spawnMokraGermanWave = (wave) => {
 Game.spawnMokraScenario = () => {
     const P = Game.TEAM.POLISH, T = Game.TILE;
     Game.playerTeam = P;
+    Game._mokraRouteQueue = [];
+    // Intentionally simple/public enough for the headless mission profiler.
+    Game._mokraRouteStats = {
+        vehicleAuthored: 0, vehicleLaneFallbacks: 0, vehicleRouteFailures: 0,
+        vehicleRecoveries: 0, vehicleRecoveryFailures: 0,
+        infantryQueued: 0, infantryRouted: 0, infantryRouteFailures: 0,
+        maxQueue: 0,
+    };
 
     const player = (kind, x, y, group, extra = {}) =>
         Game.makeUnit(P, kind, x * T, y * T, { group, aiState: 'player', ...extra });
@@ -400,6 +537,7 @@ Game.spawnMokraScenario = () => {
 Game.updateMokraMission = (dt) => {
     const ms = Game.missionState;
     if (ms.won || ms.lost) return;
+    Game._processMokraRouteQueue();
     ms.timer += dt;
 
     const polishAlive = Game.getTeamUnits(Game.TEAM.POLISH).length;

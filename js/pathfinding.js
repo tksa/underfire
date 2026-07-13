@@ -432,13 +432,11 @@ Game.unitCanSee = (a, b) => {
     // plain sight just because the shared map fog hasn't revealed them (and
     // would target farther revealed enemies over closer ones). The fog grid is
     // for the player's display only (see renderer's isFogVisible checks).
-    const d = Game.dist(a.x, a.z, b.x, b.z);
+    const dx = b.x - a.x, dz = b.z - a.z;
+    const dSq = dx * dx + dz * dz;
     let visRange = a.sight;
     const targetTile = Game.getTileAtWorld(b.x, b.z);
     if (targetTile) visRange *= (1 - targetTile.concealment * 0.35);
-    const los = Game.lineOfSight(a, b);
-    if (!los) return false;
-    visRange *= los;
     // Stance affects how far the target can be spotted
     if (b.stance === 'prone') visRange *= 0.8;
     else if (b.stance === 'crouch') visRange *= 0.92;
@@ -452,11 +450,30 @@ Game.unitCanSee = (a, b) => {
     if (Game.isInSmoke && (Game.isInSmoke(b.x, b.z) || Game.isInSmoke((a.x + b.x) / 2, (a.z + b.z) / 2))) {
         visRange *= 0.3;
     }
-    // Recon plane reveals all
-    if (Game.isReconRevealed && Game.isReconRevealed(b.x, b.z)) {
-        visRange = Math.max(visRange, Game.dist(a.x, a.z, b.x, b.z) + 5);
+
+    // LOS is by far the expensive part of perception: it walks every intervening
+    // map tile. All modifiers above can only reduce/define the maximum possible
+    // range, so reject an impossible target with squared distance before doing
+    // that walk. Recon still extends range exactly as before, but never bypasses
+    // a hard LOS block.
+    let reconRevealed = false;
+    let reconChecked = false;
+    if (dSq > visRange * visRange) {
+        reconChecked = true;
+        reconRevealed = !!(Game.isReconRevealed && Game.isReconRevealed(b.x, b.z));
+        if (!reconRevealed) return false;
     }
-    return d <= visRange;
+
+    const los = Game.lineOfSight(a, b);
+    if (!los) return false;
+    visRange *= los;
+
+    // Recon plane reveals all targets with an otherwise valid line of sight.
+    if (!reconChecked) {
+        reconRevealed = !!(Game.isReconRevealed && Game.isReconRevealed(b.x, b.z));
+    }
+    if (reconRevealed) visRange = Math.max(visRange, Math.sqrt(dSq) + 5);
+    return dSq <= visRange * visRange;
 };
 
 Game.computeCover = (unit) => {

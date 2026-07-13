@@ -145,9 +145,11 @@ Game.Audio = (() => {
     const voiceSource = name => name.includes('/')
         ? `sounds/voices/${name}.ogg`
         : `sounds/rwm/${name}.ogg`;
-    const EXTRA = [...new Set([
-        ...Object.values(VOICE_TAKES).flat(),
-        ...Object.values(VOICE_PL).flat(),
+    // Command voices are created lazily when a take is actually chosen. Eagerly
+    // allocating four HTMLAudioElements for every one of the 75 Polish takes
+    // (plus every French/German take) caused hundreds of media objects and a
+    // burst of FLAC probing/decoding when the mission started.
+    const UTILITY = [...new Set([
         'ricochet', 'ricochet_ground',
         'fly_heavy', 'fly_small',
     ])].map(voiceSource);
@@ -159,7 +161,8 @@ Game.Audio = (() => {
     const lastVoiceTake = {};       // semantic pool -> previous take (avoid repeats)
     const polishAttackOrders = { f_sold_attack: 0, f_tank_attack: 0 };
 
-    const POOL = 4;                 // simultaneous voices per sample file
+    const POOL = 4;                 // overlapping battlefield SFX per sample
+    const VOICE_POOL = 2;           // global 0.4s throttle makes larger pools wasteful
     const MIN_GAP = { rifle: 0.05, mg: 0.08, cannon: 0.12, explosion: 0.07 }; // seconds between plays per category
     const BASE_VOL = { rifle: 0.4, mg: 0.45, cannon: 0.75, explosion: 0.95 };
 
@@ -168,19 +171,21 @@ Game.Audio = (() => {
     const lastPlay = {};            // category -> gameClock of last play
     let ready = false, enabled = true, master = 0.6;
 
-    const mkPool = (src) => {
+    const mkPool = (src, size = POOL) => {
+        if (pools[src]) return pools[src];
         pools[src] = [];
         cursor[src] = 0;
-        for (let i = 0; i < POOL; i++) {
+        for (let i = 0; i < size; i++) {
             const a = new Audio(src);
             a.preload = 'auto';
             pools[src].push(a);
         }
+        return pools[src];
     };
 
     const preload = () => {
-        for (const cat in FILES) FILES[cat].forEach(mkPool);
-        EXTRA.forEach(mkPool);
+        for (const cat in FILES) FILES[cat].forEach(src => mkPool(src));
+        UTILITY.forEach(src => mkPool(src));
         for (const key in LOOP_FILES) {
             const a = new Audio(LOOP_FILES[key]);
             a.loop = true;
@@ -190,6 +195,8 @@ Game.Audio = (() => {
         }
         ready = true;
     };
+
+    const ensureVoicePool = file => mkPool(voiceSource(file), VOICE_POOL);
 
     // Start the looping beds (needs a user gesture; the Start-Mission click
     // qualifies). The FIGHTER loop is deliberately NOT started here — it only
@@ -426,6 +433,7 @@ Game.Audio = (() => {
         if (!force && t - lastVoice < 0.4) return null;
         const file = resolveVoiceTake(semantic);
         if (!file) return null;
+        ensureVoicePool(file);
         lastVoice = t;
         playFile(file, 0.8, 0, 0, false);
         return file;
@@ -450,6 +458,13 @@ Game.Audio = (() => {
         voice,
         eventVoice,
         voiceSlots: { polish: VOICE_PL },
+        get resourceStats() {
+            return {
+                pooledSources: Object.keys(pools).length,
+                audioElements: Object.values(pools).reduce((sum, pool) => sum + pool.length, 0)
+                    + Object.keys(loops).length,
+            };
+        },
         click,
         updateAmbient,
         setEnabled(v) {

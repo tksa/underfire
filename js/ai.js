@@ -170,6 +170,20 @@ Game.updateAI = (unit, dt, enemy) => {
         : (unit._lastThreat && (Game.gameClock - (unit._threatTime || 0) < 8) ? unit._lastThreat : null);
 
     const setStance = (s) => { if (!isVeh) { unit.stance = s; unit._autoStance = true; } };
+    // Mokra's German armour owns stable scenario corridors. Reuse them for AI
+    // firing-position, rally and patrol plans as well as stuck recovery so a
+    // contact decision cannot launch the general 80k-state vehicle A* on the
+    // simulation thread. Infantry, player units and every other scenario retain
+    // the normal pathfinder.
+    const planPath = (x, z) => {
+        const authored = unit._mokraAuthoredAttacker
+            && Game.currentScenario === 'mokra'
+            && unit.team === Game.TEAM.GERMAN
+            && Game._recoverMokraVehicleRoute;
+        return authored
+            ? Game._recoverMokraVehicleRoute(unit, x, z, 'ai-plan')
+            : Game.findPath(unit, unit.x, unit.z, x, z);
+    };
 
     // Morale: an officer's presence stiffens resolve (RWM officerradius); an
     // isolated soldier breaks sooner.
@@ -223,13 +237,13 @@ Game.updateAI = (unit, dt, enemy) => {
                 const away = Game.angleTo(threatPos.x, threatPos.z, unit.x, unit.z) + Game.rand(-0.8, 0.8);
                 const gx = Game.clamp(unit.x + Math.cos(away) * 6 * Game.TILE, 1, Game.WORLD_W - 1);
                 const gz = Game.clamp(unit.z + Math.sin(away) * 6 * Game.TILE, 1, Game.WORLD_H - 1);
-                unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
+                unit.path = planPath(gx, gz);
             }
             setStance('run');
             return;
         }
         if (Game.dist(unit.x, unit.z, rally.x, rally.z) > 3 && (!unit.path || !unit.path.length)) {
-            unit.path = Game.findPath(unit, unit.x, unit.z, rally.x, rally.z);
+            unit.path = planPath(rally.x, rally.z);
         }
         setStance('run'); // sprint to the rally (infantry); no-op for vehicles
         return;
@@ -241,7 +255,7 @@ Game.updateAI = (unit, dt, enemy) => {
         setStance('prone');
         if (!inCover && threatPos) {
             const cov = Game.findCoverPosition(unit, threatPos.x, threatPos.z);
-            unit.path = cov ? Game.findPath(unit, unit.x, unit.z, cov.x, cov.z) : [];
+            unit.path = cov ? planPath(cov.x, cov.z) : [];
         } else {
             unit.path = [];
         }
@@ -300,7 +314,7 @@ Game.updateAI = (unit, dt, enemy) => {
         }
         if (refuge && Game.dist(unit.x, unit.z, refuge.x, refuge.z) > 1.2) {
             unit._ai = kind;
-            unit.path = Game.findPath(unit, unit.x, unit.z, refuge.x, refuge.z);
+            unit.path = planPath(refuge.x, refuge.z);
             // Break for it at a sprint; the dash-commit block above manages the
             // stance for the rest of the run and he crouches on arrival.
             setStance(Game.dist(unit.x, unit.z, refuge.x, refuge.z) > 2.5 ? 'run' : 'crouch');
@@ -312,7 +326,7 @@ Game.updateAI = (unit, dt, enemy) => {
                 const away = Game.angleTo(threatPos.x, threatPos.z, unit.x, unit.z);
                 const gx = Game.clamp(unit.x + Math.cos(away) * 4 * Game.TILE, 1, Game.WORLD_W - 1);
                 const gz = Game.clamp(unit.z + Math.sin(away) * 4 * Game.TILE, 1, Game.WORLD_H - 1);
-                unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
+                unit.path = planPath(gx, gz);
             } else {
                 unit.path = [];
             }
@@ -334,7 +348,7 @@ Game.updateAI = (unit, dt, enemy) => {
             unit._retreatThreat = { x: enemy.x, z: enemy.z };
             const rally = unit._rally || unit.holdPoint || { x: unit.x, z: unit.z };
             if ((!unit.path || !unit.path.length) && Game.dist(unit.x, unit.z, rally.x, rally.z) > 3) {
-                unit.path = Game.findPath(unit, unit.x, unit.z, rally.x, rally.z);
+                unit.path = planPath(rally.x, rally.z);
             }
             return;
         }
@@ -356,7 +370,7 @@ Game.updateAI = (unit, dt, enemy) => {
                     ? Game.findFiringPosition(unit, enemy, { standoff: role === 'maneuver' ? 0.55 : 0.75 })
                     : null;
                 const goal = fp || enemy;
-                unit.path = Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
+                unit.path = planPath(goal.x, goal.z);
             }
             unit._ai = 'advance';
             return;
@@ -382,7 +396,7 @@ Game.updateAI = (unit, dt, enemy) => {
                 const step = Math.min(d - unit.range * 0.5, 7 * Game.TILE);
                 const gx = Game.clamp(unit.x + Math.cos(ang) * step, 1, Game.WORLD_W - 1);
                 const gz = Game.clamp(unit.z + Math.sin(ang) * step, 1, Game.WORLD_H - 1);
-                unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
+                unit.path = planPath(gx, gz);
             }
             setStance(supp > 20 ? 'crouch' : 'stand');
         } else {
@@ -416,11 +430,11 @@ Game.updateAI = (unit, dt, enemy) => {
         // tick fought the stuck-settle logic (a wedged patroller could never
         // stay settled long enough to be rescued).
         if (!unit.path || !unit.path.length) {
-            unit.path = Game.findPath(unit, unit.x, unit.z, unit.patrol[0].x, unit.patrol[0].z);
+            unit.path = planPath(unit.patrol[0].x, unit.patrol[0].z);
         }
     } else if (unit.holdPoint && Game.dist(unit.x, unit.z, unit.holdPoint.x, unit.holdPoint.z) > 3
         && (!unit.path || !unit.path.length)) {
-        unit.path = Game.findPath(unit, unit.x, unit.z, unit.holdPoint.x, unit.holdPoint.z);
+        unit.path = planPath(unit.holdPoint.x, unit.holdPoint.z);
     }
 };
 
@@ -459,15 +473,22 @@ Game.updateSquadAI = (dt) => {
         const losses = 1 - strength / sq.peak;          // fraction of the squad lost
         const avgSupp = mem.reduce((s, u) => s + (u.suppressionValue || 0), 0) / strength;
 
-        // How many members currently see an enemy?
+        // Reuse the staggered per-unit scan performed by unit_modules.js. Squad
+        // coordination used to run two or three extra O(enemies × LOS-distance)
+        // searches per member on this tick, producing a large periodic hitch.
+        const sightings = new Map();
         let nKnown = 0;
-        mem.forEach(u => { if (Game.nearestEnemy(u)) nKnown++; });
+        mem.forEach(u => {
+            const enemy = Game.getCachedScanEnemy ? Game.getCachedScanEnemy(u) : null;
+            sightings.set(u.id, enemy);
+            if (enemy) nKnown++;
+        });
 
         // Share the freshest threat across the whole squad so nobody stands
         // idle while a squad-mate is under fire. A live sighting always wins.
         let freshThreat = null, freshTime = -Infinity;
         mem.forEach(u => {
-            const e = Game.nearestEnemy(u);
+            const e = sightings.get(u.id);
             if (e) { freshTime = Game.gameClock; freshThreat = { x: e.x, z: e.z }; }
             else if (u._lastThreat && (u._threatTime || 0) > freshTime) {
                 freshTime = u._threatTime; freshThreat = u._lastThreat;
@@ -478,7 +499,7 @@ Game.updateSquadAI = (dt) => {
                 if ((u._threatTime || -Infinity) < freshTime - 0.05) {
                     u._lastThreat = freshThreat;
                     u._threatTime = freshTime;
-                    if (!Game.nearestEnemy(u)) u.underFire = Math.max(u.underFire || 0, 0.5);
+                    if (!sightings.get(u.id)) u.underFire = Math.max(u.underFire || 0, 0.5);
                 }
             });
         }

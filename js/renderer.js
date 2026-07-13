@@ -64,15 +64,24 @@ Game.syncUnitMeshes = (dt) => {
                         // corpse never stays on its feet.
                         unit.mesh.rotation.z = Math.PI / 2;
                         unit.mesh.position.y = (unit.y || 0) + 0.1;
+                        unit._deathAnimRemaining = 0;
+                    } else {
+                        const action = ud.actions && ud.actions[ud._activeClip];
+                        unit._deathAnimRemaining = action && !action.paused
+                            ? (action.getClip()?.duration || 2.5) + 0.2 : 0;
                     }
                 } else {
                     unit.isDeadBody = true;
                     unit.mesh.rotation.z = Math.PI / 2;        // fall over
                     unit.mesh.position.y = (unit.y || 0) + 0.1;
+                    unit._deathAnimRemaining = 0;
                 }
             }
             unit.mesh.visible = true; // corpse / wreck stays on the field
-            if (ud.mixer) ud.mixer.update(dt);
+            if (ud.mixer && (unit._deathAnimRemaining || 0) > 0) {
+                ud.mixer.update(dt);
+                unit._deathAnimRemaining = Math.max(0, unit._deathAnimRemaining - dt);
+            }
             return; // dead remnants skip the rest of the per-frame logic
         }
 
@@ -87,15 +96,16 @@ Game.syncUnitMeshes = (dt) => {
             }
         }
 
-        // Drive skeletal animation (clip chosen from unit state) + advance mixer
-        Game._updateModelAnimation(unit, dt);
-
         // Hide living enemies in fog of war
         if (unit.team !== Game.playerTeam && Game.isFogVisible && !Game.isFogVisible(unit.x, unit.z)) {
             unit.mesh.visible = false;
             return;
         }
         unit.mesh.visible = true;
+
+        // Drive skeletal animation only for visible units. Off-map reinforcements
+        // and fog-hidden enemies otherwise consumed mixer/bone work every frame.
+        Game._updateModelAnimation(unit, dt);
 
         // Position
         unit.mesh.position.set(unit.x, unit.y || 0, unit.z);
@@ -406,45 +416,91 @@ Game.updateTracks3D = (dt) => {
     const THREE = Game.THREE;
     if (!Game.trackMarks) return;
 
+    Game.MAX_TRACK_MARKS = Game.MAX_TRACK_MARKS || 240;
+    Game._trackPerf = Game._trackPerf || { dropped: 0, peak: 0 };
+    const disposeTrack = tr => {
+        if (!tr.mesh) return;
+        Game.effectsGroup.remove(tr.mesh);
+        if (tr.mesh.geometry) tr.mesh.geometry.dispose();
+        if (tr.mesh.material) tr.mesh.material.dispose();
+    };
+    // Armour waves used to retain well over a thousand two-mesh track groups.
+    // Under cap pressure, retire deferred/unallocated enemy marks first so a
+    // hidden armour column cannot evict already visible friendly tracks.
+    let overflow = Math.max(0, Game.trackMarks.length - Game.MAX_TRACK_MARKS);
+    if (overflow) {
+        for (let i = 0; i < Game.trackMarks.length && overflow > 0;) {
+            const tr = Game.trackMarks[i];
+            const hiddenDeferred = !tr.mesh && tr.team && tr.team !== Game.playerTeam
+                && Game.isFogVisible && !Game.isFogVisible(tr.x, tr.z);
+            if (!hiddenDeferred) { i++; continue; }
+            Game.trackMarks.splice(i, 1);
+            Game._trackPerf.dropped++;
+            overflow--;
+        }
+        if (overflow) {
+            Game.trackMarks.splice(0, overflow).forEach(disposeTrack);
+            Game._trackPerf.dropped += overflow;
+        }
+    }
+    Game._trackPerf.peak = Math.max(Game._trackPerf.peak, Game.trackMarks.length);
+
     for (let i = Game.trackMarks.length - 1; i >= 0; i--) {
         const tr = Game.trackMarks[i];
+        if (!tr._lifeCapped) {
+            tr.life = Math.min(tr.life, 8);
+            tr.total = Math.min(tr.total, 8);
+            tr._lifeCapped = true;
+        }
         tr.life -= dt;
 
         if (tr.life <= 0) {
-            if (tr.mesh) {
-                Game.effectsGroup.remove(tr.mesh);
-                tr.mesh.children.forEach(c => {
-                    c.geometry.dispose();
-                    c.material.dispose();
-                });
-            }
+            disposeTrack(tr);
             Game.trackMarks.splice(i, 1);
             continue;
         }
 
         if (!tr.mesh) {
-            const trackGeo = new THREE.PlaneGeometry(tr.size * 0.35, Math.max(1.5, tr.step || 1.5));
-            trackGeo.rotateX(-Math.PI / 2);
+            // Never reveal an unseen enemy's route, and do not allocate a hidden
+            // geometry/material. Keep the lightweight record until it expires so
+            // a fog update later this frame can make it visible next frame.
+            const enemyTrack = tr.team && tr.team !== Game.playerTeam;
+            if (enemyTrack && Game.isFogVisible && !Game.isFogVisible(tr.x, tr.z)) {
+                continue;
+            }
+            const width = tr.size * 0.35;
+            const length = Math.max(1.5, tr.step || 1.5);
+            const gap = tr.size * 0.4;
+            // Both parallel treads live in one geometry/mesh, halving track-mark
+            // draw calls while preserving the original footprint.
+            const positions = [];
+            const indices = [];
+            for (const center of [-gap, gap]) {
+                const base = positions.length / 3;
+                positions.push(
+                    center - width / 2, 0, -length / 2,
+                    center + width / 2, 0, -length / 2,
+                    center + width / 2, 0, length / 2,
+                    center - width / 2, 0, length / 2,
+                );
+                indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+            }
+            const trackGeo = new THREE.BufferGeometry();
+            trackGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            trackGeo.setIndex(indices);
             const trackMat = new THREE.MeshBasicMaterial({
-                color: 0x221a10, transparent: true, opacity: 0.4, depthWrite: false
+                color: 0x221a10, transparent: true,
+                opacity: (tr.life / tr.total) * 0.4,
+                depthWrite: false, side: THREE.DoubleSide,
             });
-            tr.mesh = new THREE.Group();
-            
-            const left = new THREE.Mesh(trackGeo, trackMat);
-            left.position.x = -tr.size * 0.4;
-            const right = new THREE.Mesh(trackGeo, trackMat);
-            right.position.x = tr.size * 0.4;
-            
-            tr.mesh.add(left, right);
-            
+            tr.mesh = new THREE.Mesh(trackGeo, trackMat);
             const trackY = (Game.getHeight ? Game.getHeight(tr.x, tr.z) : 0) + 0.05;
             tr.mesh.position.set(tr.x, trackY, tr.z);
             tr.mesh.rotation.y = -tr.angle + Math.PI / 2;
-            
             Game.effectsGroup.add(tr.mesh);
         } else {
             const opacity = (tr.life / tr.total) * 0.4;
-            tr.mesh.children.forEach(c => c.material.opacity = opacity);
+            tr.mesh.material.opacity = opacity;
         }
 
         // Enemy tracks must not leak movement through the fog — only show them
@@ -702,6 +758,25 @@ Game.updateFoliageKnockdown = (dt) => {
     if (!list || !list.length) return;
     const THREE = Game.THREE;
 
+    // Terrain construction can register more than a thousand crushable objects.
+    // Index them by world cell whenever asynchronous model loading changes the
+    // list, so the 10 Hz tank scan visits only foliage near each hull instead of
+    // doing foliage x tank checks across the entire map.
+    const CELL = 8;
+    if (Game._fkdIndexSource !== list || Game._fkdIndexLength !== list.length) {
+        const cells = new Map();
+        for (const record of list) {
+            const key = `${Math.floor(record.x / CELL)},${Math.floor(record.z / CELL)}`;
+            const bucket = cells.get(key);
+            if (bucket) bucket.push(record);
+            else cells.set(key, [record]);
+        }
+        Game._fkdIndex = cells;
+        Game._fkdIndexSource = list;
+        Game._fkdIndexLength = list.length;
+        Game._fkdFalling = list.filter(record => record.triggered && record.fallT < 1);
+    }
+
     // Trigger scan is throttled; the tip-over animation runs every frame.
     Game._fkdTimer = (Game._fkdTimer || 0) - dt;
     const scan = Game._fkdTimer <= 0;
@@ -719,34 +794,53 @@ Game.updateFoliageKnockdown = (dt) => {
     const qT = Game._fkdQT || (Game._fkdQT = new THREE.Quaternion());
     const axis = Game._fkdAxis || (Game._fkdAxis = new THREE.Vector3());
     const mat = Game._fkdMat || (Game._fkdMat = new THREE.Matrix4());
-    const dirty = new Set();
+    const dirty = Game._fkdDirty || (Game._fkdDirty = new Set());
+    dirty.clear();
 
-    for (const r of list) {
-        if (!r.triggered && scan && tanks.length) {
-            for (const tk of tanks) {
-                // Per-record radius override: dividers (walls/fences) use a tighter
-                // hit circle than bushy foliage so driving alongside doesn't count.
-                const rr = tk.size * (r.rrMul != null ? r.rrMul : 1.1) + (r.rrAdd != null ? r.rrAdd : 0.5);
-                if (Game.distSq(tk.x, tk.z, r.x, r.z) < rr * rr) {
-                    r.triggered = true; r.dir = tk.angle; r.fallT = 0;
-                    if (r.stone || r.wood) {
-                        // walls crumble to stone, fences splinter to wood:
-                        // hide the piece, scatter debris
-                        r.fallT = 1;
-                        pos.set(r.x, -100, r.z);
-                        qY.identity();
-                        scl.set(0.0001, 0.0001, 0.0001);
-                        mat.compose(pos, qY, scl);
-                        r.leaves.setMatrixAt(r.idx, mat);
-                        if (r.branches !== r.leaves) r.branches.setMatrixAt(r.idx, mat);
-                        dirty.add(r.leaves);
-                        dirty.add(r.branches);
-                        if (Game._spawnWallRubble) Game._spawnWallRubble(r);
+    if (scan && tanks.length) {
+        for (const tk of tanks) {
+            const reach = tk.size * 1.1 + 0.5;
+            const cellRadius = Math.max(1, Math.ceil(reach / CELL));
+            const cx = Math.floor(tk.x / CELL), cz = Math.floor(tk.z / CELL);
+            for (let dz = -cellRadius; dz <= cellRadius; dz++) {
+                for (let dx = -cellRadius; dx <= cellRadius; dx++) {
+                    const bucket = Game._fkdIndex.get(`${cx + dx},${cz + dz}`);
+                    if (!bucket) continue;
+                    for (const r of bucket) {
+                        if (r.triggered) continue;
+                        // Per-record radius override: dividers (walls/fences) use
+                        // a tighter hit circle than bushy foliage so driving
+                        // alongside does not count as a collision.
+                        const rr = tk.size * (r.rrMul != null ? r.rrMul : 1.1)
+                            + (r.rrAdd != null ? r.rrAdd : 0.5);
+                        if (Game.distSq(tk.x, tk.z, r.x, r.z) < rr * rr) {
+                            r.triggered = true; r.dir = tk.angle; r.fallT = 0;
+                            if (r.stone || r.wood) {
+                                // Walls crumble to stone, fences splinter to wood:
+                                // hide the piece and scatter debris.
+                                r.fallT = 1;
+                                pos.set(r.x, -100, r.z);
+                                qY.identity();
+                                scl.set(0.0001, 0.0001, 0.0001);
+                                mat.compose(pos, qY, scl);
+                                r.leaves.setMatrixAt(r.idx, mat);
+                                if (r.branches !== r.leaves) r.branches.setMatrixAt(r.idx, mat);
+                                dirty.add(r.leaves);
+                                dirty.add(r.branches);
+                                if (Game._spawnWallRubble) Game._spawnWallRubble(r);
+                            } else {
+                                Game._fkdFalling.push(r);
+                            }
+                        }
                     }
-                    break;
                 }
             }
         }
+    }
+
+    const falling = Game._fkdFalling || [];
+    for (let i = falling.length - 1; i >= 0; i--) {
+        const r = falling[i];
         if (r.triggered && r.fallT < 1) {
             r.fallT = Math.min(1, r.fallT + dt / 0.55);
             const e = 1 - (1 - r.fallT) * (1 - r.fallT);  // ease-out
@@ -763,6 +857,7 @@ Game.updateFoliageKnockdown = (dt) => {
             r.branches.setMatrixAt(r.idx, mat);
             dirty.add(r.leaves); dirty.add(r.branches);
         }
+        if (r.fallT >= 1) falling.splice(i, 1);
     }
     dirty.forEach(m => { m.instanceMatrix.needsUpdate = true; });
 
@@ -1458,74 +1553,139 @@ Game._INF_SIT_POSES = {
     sidelay: { rootPitch: 0.0,  rootRoll: 1.45, rootY: -0.22, thigh: 0.85, knee: -1.25, upper: 0.10, arm: -0.30 },
 };
 
-/**
- * Deform terrain mesh to create a real crater indent.
- * Modifies vertex positions of Game.terrainMesh geometry directly.
- * 
- * @param {number} wx - World X position of impact
- * @param {number} wz - World Z position of impact
- * @param {number} radius - Crater radius in world units
- * @param {number} depth - How deep to push vertices down
- */
+// Crater impacts used to scan all 66k terrain vertices and recompute normals for
+// every tank/mortar shell. Heavy combat could do that several times in one frame,
+// producing multi-second stalls. Queue impacts, touch only their local grid
+// windows, and recompute normals once for the whole batch.
+Game.CRATER_BATCH_INTERVAL = 0.35;
+Game.MAX_CRATER_QUEUE = 48;
+Game._craterQueue = Game._craterQueue || [];
+Game._craterPerf = Game._craterPerf || { queued: 0, dropped: 0, batches: 0, maxBatch: 0 };
+
 Game.spawnCrater = (wx, wz, radius, depth) => {
-    if (!Game.terrainMesh) return;
-    
+    if (!Game.terrainMesh || radius <= 0 || depth <= 0) return;
+    const impact = { wx, wz, radius, depth };
+    // Several rounds landing on effectively the same vertex patch are one visual
+    // crater, not separate full jobs. Preserve the largest rim and deepen gently.
+    const nearby = Game._craterQueue.find(item =>
+        Game.distSq(item.wx, item.wz, wx, wz) < Math.max(item.radius, radius) ** 2 * 0.35);
+    if (nearby) {
+        nearby.radius = Math.max(nearby.radius, radius);
+        nearby.depth = Math.min(Math.max(nearby.depth, depth) + Math.min(nearby.depth, depth) * 0.25, 2.4);
+        return;
+    }
+    if (Game._craterQueue.length >= Game.MAX_CRATER_QUEUE) {
+        Game._craterPerf.dropped++;
+        return;
+    }
+    Game._craterQueue.push(impact);
+    Game._craterPerf.queued++;
+};
+
+Game.updateCraterDeformations = (dt) => {
+    if (!Game._craterQueue.length || !Game.terrainMesh) return;
+    Game._craterBatchTimer = (Game._craterBatchTimer || 0) - (dt || 0.016);
+    if (Game._craterBatchTimer > 0) return;
+    Game._craterBatchTimer = Game.CRATER_BATCH_INTERVAL;
+
     const geo = Game.terrainMesh.geometry;
-    const pos = geo.attributes.position;
-    const col = geo.attributes.color;
-    
-    // Terrain mesh is centered at (WORLD_W/2, 0, WORLD_H/2)
-    const localX = wx - Game.WORLD_W / 2;
-    const localZ = wz - Game.WORLD_H / 2;
-    
-    // Keep radius tight but restore full depth
-    const craterRadius = radius * 0.6;
-    const craterDepth = depth;
-    
-    // Scorch radius: wide enough for vertex density but not huge
-    const scorchRadius = Math.max(2.0, craterRadius * 2.0);
-    let changed = false;
-    
-    for (let i = 0; i < pos.count; i++) {
-        const vx = pos.getX(i);
-        const vz = pos.getZ(i);
-        
-        const dx = vx - localX;
-        const dz = vz - localZ;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-        
-        // Physical deformation (bowl + rim)
-        if (dist <= craterRadius) {
-            const t = dist / craterRadius;
-            const bowl = Math.pow(Math.cos(t * Math.PI * 0.5), 2.0);
-            const rim = Math.pow(Math.max(0, 1 - Math.abs(t - 0.82) / 0.18), 2.0);
-            const noise = 0.85 + Math.sin(vx * 13.7 + vz * 7.3) * 0.15;
-            const deltaY = (-craterDepth * bowl + craterDepth * 0.15 * rim) * noise;
-            pos.setY(i, pos.getY(i) + deltaY);
-            changed = true;
+    const pos = geo?.attributes?.position;
+    const col = geo?.attributes?.color;
+    const segX = geo?.parameters?.widthSegments;
+    const segZ = geo?.parameters?.heightSegments;
+    if (!pos || !segX || !segZ) {
+        // Tolerate a brief editor/custom-terrain swap, but never let an
+        // unsupported geometry leave a saturated queue retrying forever.
+        Game._craterPerf.unsupportedGeometry = (Game._craterPerf.unsupportedGeometry || 0) + 1;
+        Game._craterUnsupportedRetries = (Game._craterUnsupportedRetries || 0) + 1;
+        if (Game._craterUnsupportedRetries >= 3) {
+            Game._craterPerf.dropped += Game._craterQueue.length;
+            Game._craterQueue.length = 0;
+            Game._craterUnsupportedRetries = 0;
         }
-        
-        // Scorch darkening (wider than crater, darkest at center).
-        // Floor kept well above black so the surface stays matte — near-black
-        // diffuse made the fixed specular response read as a wet sheen.
-        if (dist <= scorchRadius && col) {
-            const st = dist / scorchRadius; // 0 at center, 1 at edge
-            const darkFactor = 0.42 + 0.58 * Math.pow(st, 1.6);
-            // multiply toward the darkest reached so repeated hits don't go black
-            col.setXYZ(i,
-                Math.max(col.getX(i) * darkFactor, 0.18),
-                Math.max(col.getY(i) * darkFactor, 0.15),
-                Math.max(col.getZ(i) * darkFactor, 0.12));
-            changed = true;
+        return;
+    }
+    Game._craterUnsupportedRetries = 0;
+    const batch = Game._craterQueue.splice(0);
+    const stride = segX + 1;
+    const x0 = pos.getX(0), x1 = pos.getX(segX);
+    const z0 = pos.getZ(0), z1 = pos.getZ(segZ * stride);
+    const gridX = value => (value - x0) / (x1 - x0) * segX;
+    const gridZ = value => (value - z0) / (z1 - z0) * segZ;
+    let changed = false, positionChanged = false;
+    let minChangedY = Infinity, maxChangedY = -Infinity;
+    const sphere = geo.boundingSphere;
+    let maxRadiusSq = sphere ? sphere.radius * sphere.radius : 0;
+
+    for (const impact of batch) {
+        const localX = impact.wx - Game.WORLD_W / 2;
+        const localZ = impact.wz - Game.WORLD_H / 2;
+        const craterRadius = impact.radius * 0.6;
+        const scorchRadius = Math.max(2.0, craterRadius * 2.0);
+        const xa = gridX(localX - scorchRadius), xb = gridX(localX + scorchRadius);
+        const za = gridZ(localZ - scorchRadius), zb = gridZ(localZ + scorchRadius);
+        const minX = Game.clamp(Math.floor(Math.min(xa, xb)), 0, segX);
+        const maxX = Game.clamp(Math.ceil(Math.max(xa, xb)), 0, segX);
+        const minZ = Game.clamp(Math.floor(Math.min(za, zb)), 0, segZ);
+        const maxZ = Game.clamp(Math.ceil(Math.max(za, zb)), 0, segZ);
+        const craterSq = craterRadius * craterRadius;
+        const scorchSq = scorchRadius * scorchRadius;
+
+        for (let gz = minZ; gz <= maxZ; gz++) {
+            for (let gx = minX; gx <= maxX; gx++) {
+                const i = gz * stride + gx;
+                const vx = pos.getX(i), vz = pos.getZ(i);
+                const dx = vx - localX, dz = vz - localZ;
+                const distSq = dx * dx + dz * dz;
+                if (distSq > scorchSq) continue;
+                const dist = Math.sqrt(distSq);
+                if (distSq <= craterSq) {
+                    const t = dist / craterRadius;
+                    const bowl = Math.cos(t * Math.PI * 0.5) ** 2;
+                    const rim = Math.max(0, 1 - Math.abs(t - 0.82) / 0.18) ** 2;
+                    const noise = 0.85 + Math.sin(vx * 13.7 + vz * 7.3) * 0.15;
+                    const nextY = pos.getY(i)
+                        + (-impact.depth * bowl + impact.depth * 0.15 * rim) * noise;
+                    pos.setY(i, nextY);
+                    positionChanged = true;
+                    minChangedY = Math.min(minChangedY, nextY);
+                    maxChangedY = Math.max(maxChangedY, nextY);
+                    if (sphere) {
+                        const sx = vx - sphere.center.x;
+                        const sy = nextY - sphere.center.y;
+                        const sz = vz - sphere.center.z;
+                        maxRadiusSq = Math.max(maxRadiusSq, sx * sx + sy * sy + sz * sz);
+                    }
+                }
+                if (col) {
+                    const st = dist / scorchRadius;
+                    const dark = 0.42 + 0.58 * st ** 1.6;
+                    col.setXYZ(i,
+                        Math.max(col.getX(i) * dark, 0.18),
+                        Math.max(col.getY(i) * dark, 0.15),
+                        Math.max(col.getZ(i) * dark, 0.12));
+                }
+                changed = true;
+            }
         }
     }
-    
+
     if (changed) {
         pos.needsUpdate = true;
         if (col) col.needsUpdate = true;
         geo.computeVertexNormals();
         geo.attributes.normal.needsUpdate = true;
+        // Preserve fast local deformation without paying for two additional
+        // full-geometry bounds scans. Existing bounds only need to expand: x/z
+        // never change, and the old sphere already contains every old vertex.
+        if (positionChanged && geo.boundingBox) {
+            geo.boundingBox.min.y = Math.min(geo.boundingBox.min.y, minChangedY);
+            geo.boundingBox.max.y = Math.max(geo.boundingBox.max.y, maxChangedY);
+        }
+        if (positionChanged && sphere) sphere.radius = Math.sqrt(maxRadiusSq);
     }
+    Game._craterPerf.batches++;
+    Game._craterPerf.maxBatch = Math.max(Game._craterPerf.maxBatch, batch.length);
 };
 
 /**

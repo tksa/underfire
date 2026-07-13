@@ -701,28 +701,48 @@ Game._tankYield = (unit) => {
 };
 
 // ── Movement recorder (debug) ───────────────────────────────────────────────
-// Records EVERY living unit's position/heading/speed/stance/animation each frame
+// Samples every living unit's position/heading/speed/stance/animation at 15 Hz
 // so movement problems (rotation spins, jitter, repeated animations, sliding) can
-// be replayed/analysed. Start/stop from the debug panel (` key → "Movement
+// be replayed/analysed without the recorder itself becoming a late-game stall.
+// A fixed circular log keeps the newest samples. Start/stop from the debug panel
+// (` key → "Movement
 // Recorder") or call Game.startMoveRec() / Game.stopMoveRec(). Stopping prints a
 // per-unit jitter summary to the console (heading reversals, full turns made on
 // the spot, animation-clip switches, path length vs net travel = "wiggle") and
 // downloads the full sample log as JSON.
 Game._moveRec = null;
+Game.MOVE_REC_HZ = 15;
+Game.MOVE_REC_CAPACITY = 240000;
 Game.startMoveRec = () => {
     Game._moveRec = [];
     Game._moveRecT0 = Game.gameClock || 0;
+    Game._moveRecNextSample = Game._moveRecT0;
+    Game._moveRecWrite = 0;
+    Game._moveRecWrapped = false;
     if (Game.pushMessage) Game.pushMessage('Recording unit movement…', 1.5);
 };
 Game.recordMoveFrame = () => {
     if (!Game._moveRec) return;
-    const t = +(((Game.gameClock || 0) - Game._moveRecT0)).toFixed(3);
+    const now = Game.gameClock || 0;
+    if (now + 1e-6 < (Game._moveRecNextSample || 0)) return;
+    Game._moveRecNextSample = now + 1 / Game.MOVE_REC_HZ;
+    const t = +((now - Game._moveRecT0)).toFixed(3);
+    const append = sample => {
+        if (Game._moveRec.length < Game.MOVE_REC_CAPACITY) {
+            Game._moveRec.push(sample);
+            Game._moveRecWrite = Game._moveRec.length % Game.MOVE_REC_CAPACITY;
+        } else {
+            Game._moveRec[Game._moveRecWrite] = sample;
+            Game._moveRecWrite = (Game._moveRecWrite + 1) % Game.MOVE_REC_CAPACITY;
+            Game._moveRecWrapped = true;
+        }
+    };
     for (const u of Game.units) {
         if (!u.alive) continue;                       // ALL living units, both teams
         const order = u._lastMoveOrder || null;
         const waypoint = u.path && u.path.length ? u.path[0] : null;
         const finalWaypoint = u.path && u.path.length ? u.path[u.path.length - 1] : null;
-        Game._moveRec.push({
+        append({
             t, id: u.id, team: u.team, kind: u.kind, cls: u.class,
             x: +u.x.toFixed(3), z: +u.z.toFixed(3),
             a: +(u.angle || 0).toFixed(3), spd: +(u.currentSpeed || 0).toFixed(2),
@@ -749,11 +769,14 @@ Game.recordMoveFrame = () => {
             finalZ: finalWaypoint ? +finalWaypoint.z.toFixed(3) : null,
         });
     }
-    if (Game._moveRec.length > 400000) Game._moveRec.splice(0, 8000);
 };
 Game.stopMoveRec = () => {
     if (!Game._moveRec) { if (Game.pushMessage) Game.pushMessage('Not recording.', 1.2); return null; }
-    const data = Game._moveRec; Game._moveRec = null;
+    const raw = Game._moveRec;
+    const data = Game._moveRecWrapped
+        ? raw.slice(Game._moveRecWrite).concat(raw.slice(0, Game._moveRecWrite))
+        : raw;
+    Game._moveRec = null;
     const byId = {};
     data.forEach(s => { (byId[s.id] = byId[s.id] || []).push(s); });
     const summary = Object.keys(byId).map(id => {
@@ -1338,9 +1361,16 @@ Game._tankControlDefs = () => [
 // steady nearby troops (faster suppression recovery, higher break thresholds).
 Game.nearOfficer = (unit) => {
     const R = 14;
-    for (const o of Game.units) {
-        if (!o.alive || o.team !== unit.team) continue;
-        if (!(o.supportType === 'officer' || o._actingOfficer)) continue; // real or field-promoted
+    const now = Game.gameClock || 0;
+    if (!Game._officersByTeam || now >= (Game._officerCacheUntil || 0)) {
+        Game._officersByTeam = {};
+        for (const candidate of Game.units) {
+            if (!candidate.alive || !(candidate.supportType === 'officer' || candidate._actingOfficer)) continue;
+            (Game._officersByTeam[candidate.team] ||= []).push(candidate);
+        }
+        Game._officerCacheUntil = now + 0.35;
+    }
+    for (const o of Game._officersByTeam[unit.team] || []) {
         if (o === unit) continue;
         if (Game.distSq(o.x, o.z, unit.x, unit.z) <= R * R) return true;
     }
@@ -2668,7 +2698,7 @@ Game.isInSmoke = (x, z) => {
 
 Game.fogGrid = null;
 Game.FOG_RES = 2; // fog cells per world unit
-Game.FOG_UPDATE_INTERVAL = 0.12; // seconds between fog recomputes
+Game.FOG_UPDATE_INTERVAL = 0.2; // 5 Hz is responsive and avoids a constant 8.3 Hz CPU tax
 
 Game.initFogOfWar = () => {
     const cols = Math.ceil(Game.WORLD_W * Game.FOG_RES);
@@ -2684,6 +2714,15 @@ Game.initFogOfWar = () => {
     fogCanvas.height = 256;
     Game._fogCanvas = fogCanvas;
     Game._fogCtx = fogCanvas.getContext('2d');
+    Game._fogImageData = Game._fogCtx.createImageData(256, 256);
+    Game._fogBlurCanvas = document.createElement('canvas');
+    Game._fogBlurCanvas.width = 256;
+    Game._fogBlurCanvas.height = 256;
+    Game._fogBlurCtx = Game._fogBlurCanvas.getContext('2d');
+    Game._fogBlurCtx.filter = 'blur(3px)';
+    Game._fogVisibleCells = [];
+    Game._fogNextVisibleCells = [];
+    Game._fogWasDisabled = false;
     Game._fogTex = new THREE.CanvasTexture(fogCanvas);
     Game._fogTex.minFilter = THREE.LinearFilter;
     Game._fogTex.magFilter = THREE.LinearFilter;
@@ -2720,12 +2759,34 @@ Game.updateFogOfWar = (dt) => {
     Game._fogTimer = Game.FOG_UPDATE_INTERVAL;
     if (Game._fogDisabled) {
         // debug: full light, whole map visible
+        // Keep this authoritative while debug visibility is active: scenario/
+        // side reset paths are allowed to clear the grid between fog updates.
         Game.fogGrid.fill(1);
+        Game._fogVisibleCells.length = 0;
+        Game._fogWasDisabled = true;
     } else {
-    // Decay visible to explored
-    for (let i = 0; i < Game.fogGrid.length; i++) {
-        if (Game.fogGrid[i] > 0.5) Game.fogGrid[i] = 0.5;
+    // Decay only cells that were visible last pass. Sweeping the entire 360k
+    // grid every update dominated Mokra because 55 friendly units reveal only a
+    // fraction of it. Leaving debug full-visibility is the one full reset.
+    if (Game._fogWasDisabled) {
+        for (let i = 0; i < Game.fogGrid.length; i++) {
+            if (Game.fogGrid[i] > 0.5) Game.fogGrid[i] = 0.5;
+        }
+        Game._fogWasDisabled = false;
+    } else {
+        // A side/scenario reset can clear the grid without knowing about this
+        // cache. Do not resurrect its old visible cells as explored afterward.
+        for (const index of Game._fogVisibleCells) {
+            if (Game.fogGrid[index] === 1) Game.fogGrid[index] = 0.5;
+        }
     }
+    const visibleNow = Game._fogNextVisibleCells;
+    visibleNow.length = 0;
+    const reveal = index => {
+        if (Game.fogGrid[index] === 1) return;
+        Game.fogGrid[index] = 1;
+        visibleNow.push(index);
+    };
     // Reveal around friendly units
     Game.units.forEach(u => {
         if (!u.alive || u.team !== Game.playerTeam) return;
@@ -2743,7 +2804,7 @@ Game.updateFogOfWar = (dt) => {
                 const gx = cx + dx;
                 const gz = cz + dz;
                 if (gx >= 0 && gx < Game.fogCols && gz >= 0 && gz < Game.fogRows) {
-                    Game.fogGrid[gz * Game.fogCols + gx] = 1.0;
+                    reveal(gz * Game.fogCols + gx);
                 }
             }
         }
@@ -2763,7 +2824,7 @@ Game.updateFogOfWar = (dt) => {
                     if (dx * dx + dz * dz > r * r) continue;
                     const gx = cx + dx, gz = cz + dz;
                     if (gx >= 0 && gx < Game.fogCols && gz >= 0 && gz < Game.fogRows) {
-                        Game.fogGrid[gz * Game.fogCols + gx] = 1.0;
+                        reveal(gz * Game.fogCols + gx);
                     }
                 }
             }
@@ -2774,13 +2835,16 @@ Game.updateFogOfWar = (dt) => {
             if (f.state === 'onstation') stamp(f.cx, f.cz, (Game.FIGHTER.radius || 15) * 1.5);
         }
     }
+    const previousVisible = Game._fogVisibleCells;
+    Game._fogVisibleCells = visibleNow;
+    Game._fogNextVisibleCells = previousVisible;
     }
 
     // Render fog overlay to canvas
     if (Game._fogCtx) {
         const ctx = Game._fogCtx;
         const w = 256, h = 256;
-        const imgData = ctx.createImageData(w, h);
+        const imgData = Game._fogImageData;
         const data = imgData.data;
         for (let py = 0; py < h; py++) {
             for (let px = 0; px < w; px++) {
@@ -2806,11 +2870,9 @@ Game.updateFogOfWar = (dt) => {
         ctx.putImageData(imgData, 0, 0);
 
         // Smooth fog edges with a canvas blur pass
-        const tmpCanvas = document.createElement('canvas');
-        tmpCanvas.width = w;
-        tmpCanvas.height = h;
-        const tmpCtx = tmpCanvas.getContext('2d');
-        tmpCtx.filter = 'blur(3px)';
+        const tmpCanvas = Game._fogBlurCanvas;
+        const tmpCtx = Game._fogBlurCtx;
+        tmpCtx.clearRect(0, 0, w, h);
         tmpCtx.drawImage(ctx.canvas, 0, 0);
         ctx.clearRect(0, 0, w, h);
         ctx.drawImage(tmpCanvas, 0, 0);
@@ -4853,6 +4915,7 @@ Game.tick = (now) => {
         if (Game.updateThrownGrenades) Game.updateThrownGrenades(dt);
         if (Game.updateSmokeClouds) Game.updateSmokeClouds(dt);
         if (Game.updateTracers3D) Game.updateTracers3D(dt);
+        if (Game.updateCraterDeformations) Game.updateCraterDeformations(dt);
         if (Game.updateWreckFx) Game.updateWreckFx(dt);
         if (Game.updateFires) Game.updateFires(dt);
         if (Game.updateBuildings) Game.updateBuildings(dt);
@@ -4866,7 +4929,11 @@ Game.tick = (now) => {
         Game.updateTowing(dt);
         Game.updateRecon(dt);
         Game.updateFogOfWar(dt);
-        Game.updateCamouflage();
+        Game._camouflageTimer = (Game._camouflageTimer || 0) - dt;
+        if (Game._camouflageTimer <= 0) {
+            Game._camouflageTimer = 0.25;
+            Game.updateCamouflage();
+        }
         Game.updateBinoculars(dt);
         Game.updateEliteCrews();
         Game.updateMission(dt);
@@ -4902,10 +4969,20 @@ Game.tick = (now) => {
         if (vp) vp.classList.toggle('cmd-attack', wantAtkCursor);
     }
 
-    // Update HUD
-    Game.updateHUD();
+    // DOM reconstruction and the minimap canvas do not need render-rate updates.
+    // Ten HUD refreshes and eight minimap refreshes per second remain visually
+    // immediate while avoiding dozens of filters/innerHTML writes every frame.
+    Game._hudRefreshTimer = (Game._hudRefreshTimer || 0) - dt;
+    if (Game._hudRefreshTimer <= 0) {
+        Game._hudRefreshTimer = 0.1;
+        Game.updateHUD();
+    }
     Game.updateSelectionBox();
-    Game.updateMinimap();
+    Game._minimapRefreshTimer = (Game._minimapRefreshTimer || 0) - dt;
+    if (Game._minimapRefreshTimer <= 0) {
+        Game._minimapRefreshTimer = 0.125;
+        Game.updateMinimap();
+    }
 
     // Render 3D scene
     Game.renderScene();
