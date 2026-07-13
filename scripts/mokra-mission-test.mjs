@@ -8,6 +8,11 @@
 import { chromium } from 'playwright';
 
 const URL = process.env.SMOKE_URL || 'http://localhost:8741';
+const CAVALRY_CLIPS = [
+  'idle', 'walk', 'run',
+  'fire_forward', 'fire_backward', 'fire_left', 'fire_right',
+  'death', 'death2', 'death3', 'mount', 'dismount',
+];
 const errors = [];
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -22,7 +27,28 @@ await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 120_000 });
 await page.waitForFunction(() => window.Game && Game.units && Game.units.length > 0,
   null, { timeout: 120_000, polling: 500 });
 
-const state = await page.evaluate(async () => {
+// Model loading is asynchronous. Wait for the mounted reserve's tagged model
+// and canonical animation contract before taking the mission snapshot; this is
+// still a data-only check and does not inspect the rendered canvas.
+let cavalryModelWaitOk = true;
+try {
+  await page.waitForFunction(requiredClips => {
+    const mounted = Game.units.filter(unit => unit.alive && unit.team === Game.TEAM.POLISH
+      && unit.kind === 'mounted_ulan');
+    return mounted.length === 4 && mounted.every(unit => {
+      const data = unit.mesh && unit.mesh.userData;
+      return !unit._cavalryTransition && !unit._cavalryAwaitingModel
+        && data && data.isMountedCavalry === true
+        && /polish_mounted_ulan\.glb$/.test(data.modelPath || '')
+        && requiredClips.every(name => data.clipNames?.includes(name)
+          && data.actions && data.actions[name]);
+    });
+  }, CAVALRY_CLIPS, { timeout: 120_000, polling: 250 });
+} catch (error) {
+  cavalryModelWaitOk = false;
+}
+
+const state = await page.evaluate(async requiredCavalryClips => {
   const units = Game.units.filter(u => u.alive);
   const polish = units.filter(u => u.team === Game.TEAM.POLISH);
   const german = units.filter(u => u.team === Game.TEAM.GERMAN);
@@ -102,6 +128,16 @@ const state = await page.evaluate(async () => {
   const wz34Clear = !!wz34Tile && !wz34Tile.blocked && !wz34Tile.vehicleBlocked;
   const polishBodiesClear = polish.every(unit =>
     !Game._bodySolidCount || Game._bodySolidCount(unit, unit.x, unit.z, unit.angle) === 0);
+  const polishBodyConflicts = polish.filter(unit => Game._bodySolidCount
+    && Game._bodySolidCount(unit, unit.x, unit.z, unit.angle) > 0).map(unit => ({
+    id: unit.id,
+    kind: unit.kind,
+    group: unit.group,
+    x: unit.x,
+    z: unit.z,
+    tile: Game.getTileAtWorld(unit.x, unit.z)?.type || null,
+    solidSamples: Game._bodySolidCount(unit, unit.x, unit.z, unit.angle),
+  }));
   const polishVehiclesClear = polish
     .filter(unit => Game.isTank(unit.kind) || Game.isTruck(unit.kind))
     .every(unit => !Game._vehPenetration
@@ -111,6 +147,31 @@ const state = await page.evaluate(async () => {
   const medicReserveDistance = medic && reserve.length
     ? Math.min(...reserve.map(unit => Game.dist(medic.x, medic.z, unit.x, unit.z)))
     : 0;
+  const mountedUhlans = polish.filter(unit => unit.kind === 'mounted_ulan');
+  const mountedReserve = mountedUhlans.filter(unit => unit.group === 'pl_12th_uhlans_reserve');
+  const authoredCavalryReserve = deployment.cavalryReserve || [];
+  const reserveCenter = reserve.length ? {
+    x: reserve.reduce((sum, unit) => sum + unit.x, 0) / reserve.length,
+    z: reserve.reduce((sum, unit) => sum + unit.z, 0) / reserve.length,
+  } : null;
+  const mountedEastOfRailway = mountedReserve.every(unit =>
+    Game.railway && unit.x > Game.railway.centerX);
+  const mountedInReserveZone = authoredCavalryReserve.length === 4
+    && authoredCavalryReserve.every(position => mountedReserve.some(unit =>
+      unit.group === position.group
+      && Game.dist(unit.x, unit.z, position.x * Game.TILE, position.y * Game.TILE)
+        <= 1.1 * Game.TILE));
+  const mountedModelReady = mountedReserve.every(unit => {
+    const data = unit.mesh && unit.mesh.userData;
+    return data && data.isMountedCavalry === true
+      && /polish_mounted_ulan\.glb$/.test(data.modelPath || '')
+      && requiredCavalryClips.every(name => data.clipNames?.includes(name)
+        && data.actions && data.actions[name]);
+  });
+  const mountedStateReady = mountedReserve.every(unit =>
+    unit._cavalryCanMount === true && unit._cavalryMounted === true
+      && Game.isMountedCavalry(unit) && !Game.isFootInfantry(unit)
+      && !unit._cavalryTransition && !unit._cavalryAwaitingModel);
 
   // Advance the mission clock in one deterministic step while still paused;
   // the hold objective must resolve independently of a destroy-all condition.
@@ -146,8 +207,20 @@ const state = await page.evaluate(async () => {
     gunLineClear,
     wz34Clear,
     polishBodiesClear,
+    polishBodyConflicts,
     polishVehiclesClear,
     medicReserveDistance,
+    mountedUhlans: mountedUhlans.length,
+    mountedReserve: mountedReserve.length,
+    mountedEastOfRailway,
+    mountedInReserveZone,
+    mountedModelReady,
+    mountedStateReady,
+    reserveCenter,
+    cavalryReservePattern: authoredCavalryReserve,
+    mountedPositions: mountedReserve.map(unit => ({ x: unit.x, z: unit.z, group: unit.group })),
+    mountedClipNames: mountedReserve.map(unit => unit.mesh?.userData?.clipNames || []),
+    mountedModelPaths: mountedReserve.map(unit => unit.mesh?.userData?.modelPath || null),
     initialBofors: Game.missionState.initialBoforsIds.length,
     initialPolishStrength: Game.missionState.initialPolishStrength,
     allPolishDescribed: polish.every(u => typeof u.description === 'string' && u.description.length > 20),
@@ -181,7 +254,7 @@ const state = await page.evaluate(async () => {
     previewBadge: document.querySelector('.mission-card[data-mission="mokra"] .mc-preview')
       ?.textContent.trim() || '',
   };
-});
+}, CAVALRY_CLIPS);
 
 const fail = [];
 const expect = (condition, message) => { if (!condition) fail.push(message); };
@@ -189,7 +262,7 @@ expect(state.scenario === 'mokra' && state.selectedMission === 'mokra', 'Mokra i
 expect(state.playerTeam === 'polish' && state.enemyTeam === 'german', 'scenario teams are not Poland vs Germany');
 expect(state.polish > 0 && state.german > 0 && state.french === 0, 'incorrect opening force teams');
 expect(state.allPolishDescribed, 'one or more Polish units lacks an in-game description');
-for (const required of ['ulan', 'rkm_wz28', 'at_rifle_wz35', 'hmg', 'mortar46', 'mortar81',
+for (const required of ['ulan', 'mounted_ulan', 'rkm_wz28', 'at_rifle_wz35', 'hmg', 'mortar46', 'mortar81',
   'bofors37', 'fieldgun75', 'tks', 'wz34', 'officer', 'sapper', 'medic']) {
   expect(state.polishKinds.includes(required), `missing Polish unit kind: ${required}`);
 }
@@ -217,7 +290,15 @@ expect(state.gunLinePattern.join('|')
 expect(state.deploymentInterleaved && state.gunLineUnits === 6 && state.infantryLineUnits === 25,
   'infantry sections are not interleaved between every artillery position');
 expect(state.initialBofors === 3, 'secondary-objective Bofors tracking is incomplete');
-expect(state.initialPolishStrength === 55, 'reinforced Polish opening strength is wrong');
+expect(state.initialPolishStrength === 59, 'reinforced Polish opening strength is wrong');
+expect(state.mountedUhlans === 4 && state.mountedReserve === 4,
+  'the four mounted ułans are not assigned to pl_12th_uhlans_reserve');
+expect(state.mountedEastOfRailway && state.mountedInReserveZone,
+  'the mounted ułans are not deployed in the Polish reserve east of the railway');
+expect(cavalryModelWaitOk && state.mountedModelReady,
+  'the mounted ułan model or canonical animation clips did not become ready');
+expect(state.mountedStateReady,
+  'the opening mounted ułans are missing their mounted-state contract');
 expect(state.gunLineClear && state.wz34Clear,
   'a Polish gun-line or reconnaissance unit starts on blocked terrain');
 expect(state.polishBodiesClear && state.polishVehiclesClear,

@@ -777,7 +777,7 @@
     /* Sudden Strike-style contextual orders occupy the first visible slots;
        otherwise transport actions appended after the combat commands overflow
        below this fixed two-row grid. */
-    #cmdTow, #cmdCarrier, #cmdUnload { order: -1; }
+    #cmdCavalry, #cmdTow, #cmdCarrier, #cmdUnload { order: -1; }
     /* Move / Attack-move stance switch — the default right-click order mode */
     .stance-switch {
       display: flex;
@@ -1624,6 +1624,8 @@
               class="cmd-label">Crawl</span></div>
           <div class="cmd-btn" id="cmdAttackGround" title="Attack ground — fire on a spot (F)"><span class="cmd-icon"><img class="ui-ico" src="icons/artillery-shell.svg" alt=""></span><span
               class="cmd-label">Ground</span></div>
+          <div class="cmd-btn" id="cmdCavalry" title="Mount or dismount cavalry" style="display:none"><span class="cmd-icon">♞</span><span
+              class="cmd-label">Dismount</span></div>
           <div class="cmd-btn" id="cmdTow" title="Join or unjoin a nearby anti-tank gun" style="display:none"><span class="cmd-icon">⛓</span><span
               class="cmd-label">Join</span></div>
           <div class="cmd-btn" id="cmdCarrier" title="Load or unload infantry" style="display:none"><span class="cmd-icon">⇥</span><span
@@ -1971,7 +1973,7 @@
         'config', 'i18n', 'utils', 'engine', 'weapons', 'terrain', 'units',
         'pathfinding', 'combat', 'ai', 'camera', 'input', 'renderer', 'audio',
         'mission', 'scenarios/mokra', 'neural_export', 'unit_modules', 'ai_tactics', 'valor', 'buildings', 'garrison_ui',
-        'soldier_model', 'aircraft',
+        'soldier_model', 'cavalry_model', 'aircraft',
         'editor'
       ];
       classic.forEach(function (f) {

@@ -20,6 +20,29 @@ Game.tileCost = (unit, tx, ty, angle = unit.angle || 0, obstacleCtx = null) => {
     // gets a best-effort path (local avoidance + solid hulls own the truth).
     const dyn = (obstacleCtx && obstacleCtx.tiles.has(tx + ',' + ty)) ? 14 : 0;
     const isVeh = Game.isTank(unit.kind) || Game.isTruck(unit.kind);
+    const isMounted = Game.isMountedCavalry && Game.isMountedCavalry(unit);
+    if (isMounted) {
+        const p = Game.worldFromTile(tx, ty);
+        // A horse is not a point. Use its full circular footprint against solid
+        // terrain and keep it clear of parked hull rectangles while retaining a
+        // lighter point-state A* than the expensive eight-heading vehicle graph.
+        if (Game._bodySolidCount && Game._bodySolidCount(unit, p.x, p.z, angle) > 0) {
+            return Infinity;
+        }
+        if (obstacleCtx && Game._tankBoxPush) {
+            for (const other of obstacleCtx.vehicles) {
+                if (Game._tankBoxPush(p.x, p.z, other, unit.size, 0.25)) return Infinity;
+            }
+        }
+        let cost = tile.move + dyn;
+        if (tile.type === 'forest' || tile.type === 'hedge') cost += 1.0;
+        if (tile.type === 'mud') cost += 1.2;
+        if (tile.type === 'wheat') cost += 0.25;
+        if (tile.type === 'dense_forest') cost += 4.0;
+        if (tile.type === 'swamp') cost += 3.0;
+        if (tile.type === 'railway') cost += 0.7;
+        return cost;
+    }
     if (isVeh) {
         // Tanks CRUSH through dense forest (clearing trees) rather than route around
         // it — a low cost so A* takes the direct line through the woods, and the
@@ -105,6 +128,7 @@ Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0)
     const requestedEnd = Game.tileAtWorld(endX, endZ);
     const end = { tx: requestedEnd.tx, ty: requestedEnd.ty };
     const isVeh = Game.isTank(unit.kind) || Game.isTruck(unit.kind);
+    const isMounted = Game.isMountedCavalry && Game.isMountedCavalry(unit);
     const dirs = [
         { dx: 1, dy: 0, a: 0 },
         { dx: 1, dy: 1, a: Math.PI / 4 },
@@ -123,7 +147,7 @@ Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0)
         }
         return best;
     };
-    const endFits = (tx, ty) => isVeh
+    const endFits = (tx, ty) => (isVeh || isMounted)
         ? dirs.some(d => isFinite(Game.tileCost(unit, tx, ty, d.a, obstacleCtx)))
         : !Game.isBlocked(tx, ty);
     if (!endFits(end.tx, end.ty)) {
@@ -202,7 +226,7 @@ Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0)
             if (closed.has(nkey)) continue;
             const cost = Game.tileCost(unit, ntx, nty, moveAngle, obstacleCtx);
             if (!isFinite(cost)) continue;
-            if (isVeh) {
+            if (isVeh || isMounted) {
                 const from = current.parent
                     ? Game.worldFromTile(current.tx, current.ty)
                     : { x: startX, z: startZ };
@@ -211,7 +235,7 @@ Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0)
                     startAngle: current.angle,
                     endAngle: moveAngle,
                     obstacleCtx,
-                    margin: 0.20,
+                    margin: isMounted ? 0.25 : 0.20,
                 })) continue;
             } else if (dx !== 0 && dy !== 0
                 && (Game.isBlocked(current.tx + dx, current.ty)
@@ -264,6 +288,14 @@ Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0)
         }
         return Game.smoothVehiclePath(unit, startX, startZ, path, obstacleCtx, startAngle);
     }
+    if (isMounted && Game.smoothCavalryPath) {
+        const last = path[path.length - 1] || { x: startX, z: startZ };
+        if (Game.dist(last.x, last.z, endX, endZ) > 0.05
+            && Game.segmentPassable(unit, last.x, last.z, endX, endZ, { obstacleCtx })) {
+            path.push({ x: endX, z: endZ, _exactGoal: true });
+        }
+        return Game.smoothCavalryPath(unit, startX, startZ, path, obstacleCtx);
+    }
     return path;
 };
 
@@ -274,14 +306,29 @@ Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0)
  */
 Game.segmentPassable = (unit, ax, az, bx, bz, options = null) => {
     const isVeh = Game.isTank(unit.kind) || Game.isTruck(unit.kind);
+    const isMounted = Game.isMountedCavalry && Game.isMountedCavalry(unit);
     const length = Math.hypot(bx - ax, bz - az);
     const travelAngle = length > 0.001 ? Math.atan2(bz - az, bx - ax) : (unit.angle || 0);
     if (!isVeh) {
-        const steps = Math.max(1, Math.ceil(length));
+        const steps = Math.max(1, Math.ceil(length / (isMounted ? 0.4 : 1)));
+        const obstacleCtx = isMounted
+            ? ((options && options.obstacleCtx) || Game._buildDynObstacles(unit))
+            : null;
         for (let i = 1; i <= steps; i++) {
             const t = i / steps;
-            const tile = Game.getTileAtWorld(ax + (bx - ax) * t, az + (bz - az) * t);
+            const x = ax + (bx - ax) * t, z = az + (bz - az) * t;
+            const tile = Game.getTileAtWorld(x, z);
             if (!tile || tile.blocked) return false;
+            if (isMounted) {
+                if (Game._bodySolidCount && Game._bodySolidCount(unit, x, z, travelAngle) > 0) {
+                    return false;
+                }
+                if (Game._tankBoxPush) {
+                    for (const other of obstacleCtx.vehicles) {
+                        if (Game._tankBoxPush(x, z, other, unit.size, 0.25)) return false;
+                    }
+                }
+            }
         }
         return true;
     }
@@ -357,6 +404,32 @@ Game.segmentPassable = (unit, ax, az, bx, bz, options = null) => {
         }
     }
     return true;
+};
+
+// Greedy string-pulling for cavalry. Infantry can tolerate tile-centre doglegs;
+// a galloping horse cannot, so retain only the farthest full-width clear points.
+Game.smoothCavalryPath = (unit, startX, startZ, route, obstacleCtx = null) => {
+    if (!route || !route.length) return [];
+    const ctx = obstacleCtx || Game._buildDynObstacles(unit);
+    const out = [];
+    let ax = startX, az = startZ, i = 0;
+    while (i < route.length) {
+        let chosen = i;
+        for (let j = route.length - 1; j >= i; j--) {
+            if (Game.segmentPassable(unit, ax, az, route[j].x, route[j].z, {
+                obstacleCtx: ctx,
+            })) {
+                chosen = j;
+                break;
+            }
+        }
+        const wp = { ...route[chosen] };
+        out.push(wp);
+        ax = wp.x;
+        az = wp.z;
+        i = chosen + 1;
+    }
+    return out;
 };
 
 // Farthest-visible string pulling where visibility means a swept, full-width

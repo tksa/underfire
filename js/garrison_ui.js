@@ -35,7 +35,7 @@ Game.updateGarrisonUI = () => {
 
     // Does the current selection contain infantry that could still enter?
     const selInf = Game.selectedPlayerUnits
-        ? Game.selectedPlayerUnits().filter(u => u.alive && u.class === 'infantry'
+        ? Game.selectedPlayerUnits().filter(u => u.alive && Game.isFootInfantry(u)
             && !u._garrisoned && u._inVehicle == null)
         : [];
     const canEnter = selInf.length > 0;

@@ -51,6 +51,7 @@ The five-minute preview starts with a deliberately compressed defensive formatio
 - six north–south gun positions alternating three 37 mm Bofors anti-tank guns and three 75 mm field guns;
 - 25 dismounted infantry in five five-man sections, one in each interval between adjacent gun positions;
 - one full eight-man reserve squad behind the line;
+- four player-controlled `mounted_ulan` reserves east of the railway;
 - two Ckm wz. 30 HMGs, plus one 46 mm grenade launcher and one 81 mm mortar.
 
 This allocation makes the line readable and playable at the current map and mission scale. It is not a claim that the opening force represents the Wołyńska Cavalry Brigade's full historical establishment; the larger brigade-scale target remains documented in the campaign dossier.
@@ -60,6 +61,7 @@ This allocation makes the line readable and playable at the current map and miss
 | Unit | Battlefield role |
 |---|---|
 | Ułan (spieszony) | Dismounted cavalry rifleman; use cover and fire-and-manoeuvre, never cavalry charges against tanks. |
+| Mounted Ułan, 12th Regiment (`mounted_ulan`) | Four east-of-railway mobile reserves. Reposition on horseback, then dismount for sustained combat; this is distinct from the opening-line dismounted `ulan`. |
 | Strzelec piechoty | Attached infantry rifleman providing dependable long-range small-arms fire. |
 | Rkm wz. 28 | Mobile two-man Browning light-machine-gun team. |
 | Karabin ppanc. wz. 35 “Ur” | Concealed close-range anti-tank rifle team for early tank flanks and running gear. |
@@ -75,6 +77,14 @@ This allocation makes the line readable and playable at the current map and miss
 
 The editable definitions and descriptions are in [`data/units.csv`](../../data/units.csv), with built-in fallbacks in [`js/units.js`](../../js/units.js). Polish weapons have hand-authored behavior in [`js/weapons.js`](../../js/weapons.js).
 
+## Mounted reserve controls and movement
+
+The four eastern reserve units are directly player-controlled. Selecting an eligible reserve cavalry unit exposes the mount/dismount action. Dismounting changes it to the established foot-cavalry role; it can later remount, while the `ulan` soldiers that begin the scenario dismounted remain ordinary dismounted infantry rather than being silently converted into mounted units.
+
+Mounted movement is deliberately weightier than infantry movement: the horse accelerates and brakes progressively, cannot pivot through an unrestricted instant turn, and uses speed-synchronised walk/run playback so the 17-clip rigged horse-and-rider model follows actual movement speed. The mounted state is for reconnaissance, reserve movement, and disengagement. It does not provide an anti-tank charge, and cavalry should dismount before a sustained firefight.
+
+Horse-drawn artillery limbers are a separate system and remain planned. The implemented cavalry mount/dismount state does not imply that the 75 mm guns can yet be hitched to horses.
+
 ## German scenario roster
 
 The current allowlist uses Kar98k/MG34 infantry with one limited-issue MP38 squad leader, 5 cm and 8 cm mortars, PaK 36 support, Panzer I, Panzer II, a reconnaissance armoured car, and one rare Panzer IV in the final echelon. The mission fields no Panzer III.
@@ -89,8 +99,9 @@ The current allowlist uses Kar98k/MG34 infantry with one limited-issue MP38 squa
 | Railway, limited crossings, Mokra I–III, no major water | Implemented | Dedicated scenario generator; the legacy French river map is not used. |
 | Defensive hold objective and German attack waves | Implemented | Five-minute vertical slice with crossing-control defeat logic. |
 | Polish voice assets | Implemented | 75 unique assets are active across infantry and tank pools. Only two context-specific clips remain reserved; tank pools reuse vehicle-neutral takes, with dedicated crew recordings still desirable. |
-| Dedicated Polish infantry/vehicle/gun models and PNG skins | Placeholder | Shared animated soldier with khaki tint plus procedural vehicles/guns. |
-| Mounted cavalry and horse limbers | Planned | Requires horse, rider, dismount, hitch, and limber systems. |
+| Dedicated Polish infantry/vehicle/gun models and PNG skins | Partial | Mounted Ułans use a dedicated supplied 17-clip rigged horse-and-rider GLB; foot infantry still share the khaki-tinted animated soldier, and most Polish vehicles/guns remain procedural. |
+| Mounted cavalry reserve | Implemented | Four player-controlled `mounted_ulan` units deploy east of the railway, can mount/dismount, and use acceleration, braking, limited turning, and speed-synchronised walk/run animation. |
+| Horse artillery limbers | Planned | Horse teams, gun hitching, and limber/unlimber presentation are not part of the mounted-cavalry implementation. |
 | Armoured Train No. 53 “Śmiały” | Planned | Railway path exists; train entity, cars, weapons, timetable, and effects do not. |
 | Scripted Ju 87 phase | Planned | No player-callable air support is used as a substitute. |
 | Multi-state destroyed/immobilized/abandoned/recovered scoring | Planned | Current combat has component damage but not the complete dossier ledger. |
@@ -118,7 +129,8 @@ Runtime copies are mono 22,050 Hz, signed 16-bit FLAC audio in Ogg containers, p
 
 - Spell the battle **Mokra**, not “Morka” or “Mórka.”
 - Do not add a major lake or broad river to this map.
-- Polish cavalry fights primarily dismounted.
+- Polish cavalry fights primarily dismounted; the four mounted reserves represent battlefield mobility, not a replacement for the dismounted defensive line.
+- Do not add a mounted anti-tank charge. Sabres and horses are not substitutes for Bofors guns, wz. 35 anti-tank rifles, mines, or artillery.
 - Do not field 7TP tanks at Mokra.
 - Do not treat routine TKS tankettes as 20 mm tank hunters.
 - Use mostly Panzer I and II, very few Panzer IV, and no routine Panzer III.

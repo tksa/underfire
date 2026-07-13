@@ -84,7 +84,8 @@ Game.uMod.morale = (unit, ctx) => {
     unit._steadied = Game.nearOfficer(unit);
     const recovery = (unit.underFire > 0 ? 4 : 11) * (unit._steadied ? 1.8 : 1);
     unit.suppressionValue = Math.max(0, unit.suppressionValue - recovery * ctx.dt);
-    if (!Game.isTank(unit.kind)) {
+    if (!Game.isTank(unit.kind)
+        && !(Game.isMountedCavalry && Game.isMountedCavalry(unit))) {
         if (unit.suppressionValue > 88) {
             if (unit.stance !== 'prone') { unit.stance = 'prone'; unit._autoStance = true; }
         } else if (unit.suppressionValue > 62) {
@@ -403,7 +404,8 @@ Game.uMod.engage = (unit, ctx) => {
 // move order, a player-forced attack, or a hold/retreat order, and only ever
 // dashes a short distance. The enemy AI has its own version of this in ai.js.
 Game.uMod.takeCover = (unit, ctx) => {
-    if (ctx.isVeh || unit.class !== 'infantry') return;
+    if (ctx.isVeh || unit.class !== 'infantry'
+        || (Game.isMountedCavalry && Game.isMountedCavalry(unit))) return;
     if (unit.deployable || unit.entrenched || unit._garrisoned || unit._enterRec || unit._enterCarrierId != null) return;
     if (unit.forcedTargetId != null || unit.orderMode === 'retreat' || unit.retreating
         || unit.orderMode === 'hold') return;
@@ -501,12 +503,22 @@ Game.uMod.fire = (unit, ctx) => {
                     unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
                 }
             } else {
-                // Infantry: turn the body toward the target at a finite rate
-                // instead of snapping instantly each frame. A hard snap is what
-                // made riflemen visibly twitch when a target shifted or when two
-                // enemies were near-equidistant. ~8 rad/s is quick but smooth.
-                unit.angle = Game.rotateTo(unit.angle, aimAngleToEnemy, 8 * dt);
-                unit.turretAngle = unit.angle;
+                const mounted = Game.isMountedCavalry && Game.isMountedCavalry(unit);
+                // A rider can shoot across the saddle using the directional
+                // authored clips. Do not snap the whole horse toward each target
+                // while it is running; once nearly stopped it may turn naturally.
+                if (mounted) {
+                    if ((unit.currentSpeed || 0) < 0.6) {
+                        unit.angle = Game.rotateTo(unit.angle, aimAngleToEnemy,
+                            (unit.rotationSpeed || 2.2) * dt);
+                    }
+                    unit.turretAngle = aimAngleToEnemy;
+                } else {
+                    // Infantry: turn the body toward the target at a finite rate
+                    // instead of snapping instantly each frame.
+                    unit.angle = Game.rotateTo(unit.angle, aimAngleToEnemy, 8 * dt);
+                    unit.turretAngle = unit.angle;
+                }
                 if (ready && unit.cooldownLeft <= 0) {
                     Game.applyShot(unit, enemy);
                     const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;
@@ -531,6 +543,7 @@ Game.uMod.move = (unit, ctx) => {
     const dt = ctx.dt;
     const isVeh = ctx.isVeh;
     const isTruck = Game.isTruck(unit.kind);   // wheeled, bicycle-model steering
+    const isMounted = Game.isMountedCavalry && Game.isMountedCavalry(unit);
     const enemy = ctx.enemy;
     const hasTurret = ctx.hasTurret;
     const aimAngleToEnemy = ctx.aimAngleToEnemy;
@@ -539,7 +552,19 @@ Game.uMod.move = (unit, ctx) => {
 
     let maxSpeed = unit.speed;
 
-    if (!isVeh && !isTruck) {
+    if (isMounted) {
+        const speedFactor = Game.clamp(1 - unit.suppressionValue / 150, 0.42, 1);
+        maxSpeed *= speedFactor;
+        const tile = Game.getTileAtWorld(unit.x, unit.z);
+        if (tile) {
+            if (tile.type === 'road') maxSpeed *= 1.10;
+            else if (tile.type === 'mud' || tile.type === 'forest') maxSpeed *= 0.62;
+            else if (tile.type === 'wheat') maxSpeed *= 0.82;
+            else if (tile.type === 'dense_forest' || tile.type === 'swamp') maxSpeed *= 0.22;
+            else if (tile.type === 'railway') maxSpeed *= 0.55;
+        }
+        if (Game.getWeatherSpeedMod) maxSpeed *= Game.getWeatherSpeedMod();
+    } else if (!isVeh && !isTruck) {
         const speedFactor = Game.clamp(1 - unit.suppressionValue / 135, 0.3, 1);
         const STANCE_SPEED = { prone: 0.28, crouch: 0.55, stand: 1.0, run: 1.5, ease: 1.0, rest: 0.0 };
         maxSpeed *= 0.6 * speedFactor * (STANCE_SPEED[unit.stance] ?? 1.0);
@@ -560,7 +585,7 @@ Game.uMod.move = (unit, ctx) => {
         maxSpeed = 0;
     }
 
-    if ((isVeh || isTruck) && Game.getTerrainSlope) {
+    if ((isVeh || isTruck || isMounted) && Game.getTerrainSlope) {
         const slope = Game.getTerrainSlope(unit.x, unit.z);
         maxSpeed *= Game.clamp(1 - slope * 1.5, 0.45, 1);
     }
@@ -603,7 +628,7 @@ Game.uMod.move = (unit, ctx) => {
 
     // Foot-column pacing: ease off behind the man directly ahead so packed
     // files FLOW instead of accordion-stopping into each other's backs.
-    if (!isVeh && !isTruck && unit._enterCarrierId == null && !unit._unloading
+    if (!isVeh && !isTruck && !isMounted && unit._enterCarrierId == null && !unit._unloading
         && maxSpeed > 0 && unit.path && unit.path.length && Game._infantryFollow) {
         maxSpeed *= Game._infantryFollow(unit);
     }
@@ -704,13 +729,14 @@ Game.uMod.move = (unit, ctx) => {
             ? 0.18
             : (next && next._exactGoal && (isVeh || isTruck)
                 ? (isTruck ? 1.15 : 0.65)
-                : ((isVeh || isTruck) ? 1.5 : 0.4));
+                : ((isVeh || isTruck) ? 1.5
+                    : (isMounted ? Game.CAVALRY_MOVE.arrivalRadius : 0.4)));
 
         // SETTLE WHEN CROWDED: near its slot and no longer closing the gap (elbowed out
         // by friendlies), a unit calls it arrived instead of shuffling forever. Only
         // near the slot, so a unit still en route keeps trying for its exact circle
         // rather than giving up far away. Progress-based; a lone unit arrives precisely.
-        const settleNear = (isVeh || isTruck) ? 2.0 : 3.2;
+        const settleNear = (isVeh || isTruck || isMounted) ? 2.0 : 3.2;
         if (unit.path.length === 1 && d < settleNear && !unit._reverseMove && !unit._detour
             && (unit.currentSpeed || 0) < 0.20) {
             // Per-frame progress below 0.05u is normal while braking (at 30fps
@@ -769,7 +795,7 @@ Game.uMod.move = (unit, ctx) => {
             // otherwise the lorry freezes for a frame at 0.7-1.2u/s and visibly
             // jerks. The driver branches below cap speed to zero at this radius.
             if ((unit.path.length === 1 || (next && next._endPlayerReverse))
-                && (isVeh || isTruck)
+                && (isVeh || isTruck || isMounted)
                 && (unit.currentSpeed || 0) > 0.08) break;
             const arrivedWaypoint = unit.path[0];
             unit.path.shift();
@@ -840,7 +866,8 @@ Game.uMod.move = (unit, ctx) => {
                 unit._groupMoveActive = false;        // arrived — release the group pace cap
                 if (unit._reverseMove) { unit.currentSpeed = 0; unit._reversing = false; }  // stop dead, no forward lurch
                 unit._reverseMove = false;            // reverse-into-spot done
-                unit.currentSpeed = Math.max(0, unit.currentSpeed - maxSpeed * 0.8 * dt);
+                const arrivalBrake = isMounted ? Game.CAVALRY_MOVE.braking : maxSpeed * 0.8;
+                unit.currentSpeed = Math.max(0, unit.currentSpeed - arrivalBrake * dt);
                 break;
             }
 
@@ -852,7 +879,8 @@ Game.uMod.move = (unit, ctx) => {
                 ? 0.18
                 : (next && next._exactGoal && (isVeh || isTruck)
                     ? (isTruck ? 1.15 : 0.65)
-                    : ((isVeh || isTruck) ? 1.5 : 0.4));
+                    : ((isVeh || isTruck) ? 1.5
+                        : (isMounted ? Game.CAVALRY_MOVE.arrivalRadius : 0.4)));
             commitTruckFinalStop();
         }
 
@@ -1177,6 +1205,42 @@ Game.uMod.move = (unit, ctx) => {
                     }
                 }
                 unit.moving = true;
+            } else if (isMounted) {
+                // Horses build speed progressively, slow before tight turns and
+                // brake to the final point using v²=2ad. Translation always
+                // follows the horse's heading, so no infantry-style sideways snap
+                // or instant full-speed start is possible.
+                const cfg = Game.CAVALRY_MOVE;
+                const headingError = Game.angleDiff(unit.angle, ang);
+                const speedRatio = Game.clamp((unit.currentSpeed || 0) / Math.max(maxSpeed, 0.01), 0, 1);
+                const turnRate = (unit.rotationSpeed || 2.2) * (1 - speedRatio * 0.58);
+                unit.angle = Game.rotateTo(unit.angle, ang, turnRate * dt);
+                unit.turretAngle = unit.angle;
+
+                const alignment = Math.max(0, Math.cos(headingError));
+                let targetSpeed = maxSpeed * (Math.abs(headingError) < Math.PI / 2
+                    ? Game.clamp(alignment, 0.16, 1)
+                    : 0);
+                if (isLastWaypoint) {
+                    const stopSpeed = Math.sqrt(2 * cfg.braking
+                        * Math.max(0, d - arrivalDist));
+                    targetSpeed = Math.min(targetSpeed, stopSpeed);
+                }
+                if ((unit.currentSpeed || 0) < targetSpeed) {
+                    unit.currentSpeed = Math.min(targetSpeed,
+                        (unit.currentSpeed || 0) + cfg.acceleration * dt);
+                } else {
+                    unit.currentSpeed = Math.max(targetSpeed,
+                        (unit.currentSpeed || 0) - cfg.braking * dt);
+                }
+
+                const step = Math.min((unit.currentSpeed || 0) * dt, d);
+                if (step > 0.001) {
+                    unit.x += Math.cos(unit.angle) * step;
+                    unit.z += Math.sin(unit.angle) * step;
+                }
+                unit._reversing = false;
+                unit.moving = true;
             } else {
                 const turnRate = unit.rotationSpeed;
                 unit.angle = Game.lerpAngle(unit.angle, ang, Game.clamp(turnRate * dt, 0, 1));
@@ -1206,9 +1270,10 @@ Game.uMod.move = (unit, ctx) => {
             unit._truckSteer += Game.clamp(-unit._truckSteer, -1.35 * dt, 1.35 * dt);
         }
         if (unit.currentSpeed > 0.01) {
-            const coastRate = (isVeh || isTruck) ? maxSpeed * 0.8 : maxSpeed * 3.0;
+            const coastRate = isMounted ? Game.CAVALRY_MOVE.braking
+                : ((isVeh || isTruck) ? maxSpeed * 0.8 : maxSpeed * 3.0);
             unit.currentSpeed = Math.max(0, unit.currentSpeed - coastRate * dt);
-            if (isVeh || isTruck) {
+            if (isVeh || isTruck || isMounted) {
                 // Coast in the direction we were actually travelling — a reversing
                 // tank must not lurch FORWARD on its residual momentum when it stops.
                 const dir = unit._reversing ? -1 : 1;
@@ -1271,8 +1336,9 @@ Game.uMod.move = (unit, ctx) => {
         unit.x = Game.clamp(unit.x, rx, Game.WORLD_W - rx);
         unit.z = Game.clamp(unit.z, rz, Game.WORLD_H - rz);
     } else {
-        unit.x = Game.clamp(unit.x, 0.5, Game.WORLD_W - 0.5);
-        unit.z = Game.clamp(unit.z, 0.5, Game.WORLD_H - 0.5);
+        const edge = isMounted ? unit.size : 0.5;
+        unit.x = Game.clamp(unit.x, edge, Game.WORLD_W - edge);
+        unit.z = Game.clamp(unit.z, edge, Game.WORLD_H - edge);
     }
 
     // Continuous full-hull collision. Checking only the final centre left two
@@ -1425,7 +1491,8 @@ Game.uMod.move = (unit, ctx) => {
         for (const o of Game.units) {
             if (!o.alive || o.id === unit.id || !Game.isTank(o.kind)) continue;
             if (Game.distSq(unit.x, unit.z, o.x, o.z) > 49) continue;
-            const p = Game._tankBoxPush(unit.x, unit.z, o, unit.size * 0.7, 0.05);
+            const p = Game._tankBoxPush(unit.x, unit.z, o,
+                unit.size * (isMounted ? 1.0 : 0.7), 0.05);
             if (p) { unit.x += p.x; unit.z += p.z; }
         }
     }
@@ -1532,7 +1599,8 @@ Game.uMod.move = (unit, ctx) => {
                 let hull = null;
                 for (const o of Game.units) {
                     if (!o.alive || !Game.isTank(o.kind)) continue;
-                    if (Game._tankBoxPush && Game._tankBoxPush(unit.x, unit.z, o, unit.size * 0.7, 0.7)) { hull = o; break; }
+                    if (Game._tankBoxPush && Game._tankBoxPush(unit.x, unit.z, o,
+                        unit.size * (isMounted ? 1.0 : 0.7), 0.7)) { hull = o; break; }
                 }
                 unit.path = []; unit.moving = false; unit.currentSpeed = 0;
                 unit._progReplans = (unit._progReplans || 0) + 1;
@@ -1589,6 +1657,7 @@ Game.uMod.move = (unit, ctx) => {
 Game.updateUnit = (unit, dt) => {
     if (!unit.alive) return;
     if (unit._towed || unit._inVehicle != null) return;
+    if (Game.updateCavalryTransition && Game.updateCavalryTransition(unit, dt)) return;
 
     const M = Game.uMod;
     const ctx = {
@@ -1606,6 +1675,14 @@ Game.updateUnit = (unit, dt) => {
     M.health(unit, ctx);
     if (!unit.alive) return;
 
+    // During the first phase of dismounting, only the mounted driver runs so
+    // the horse decelerates along its current heading. It cannot acquire a new
+    // target or peel off toward cover before the dismount clip begins.
+    if (unit._cavalryTransition?.phase === 'braking') {
+        M.move(unit, ctx);
+        return;
+    }
+
     // Garrisoned infantry hold their position and fire from the windows: they
     // acquire + shoot (longer sight/range, hard cover) but never move or pursue.
     if (unit._garrisoned) {
@@ -1616,7 +1693,7 @@ Game.updateUnit = (unit, dt) => {
         // the classic reason tanks should never push into a held town without
         // infantry. Same 2-bundle pocket as the field tank-hunter; works for
         // BOTH sides' garrisons; respects hold-fire.
-        if (unit.class === 'infantry' && !unit.holdFire && Game.spawnThrownGrenade) {
+        if (Game.isFootInfantry(unit) && !unit.holdFire && Game.spawnThrownGrenade) {
             unit._atGrenades = unit._atGrenades ?? 2;
             if (unit._atGrenades > 0 && (unit._atNext == null || Game.gameClock >= unit._atNext)) {
                 let veh = null, bd = 8.5 * 8.5;

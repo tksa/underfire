@@ -153,8 +153,9 @@ Game.UNIT_STATS = {
     //  POLISH ARMY — MOKRA, 1 SEPTEMBER 1939
     // ═══════════════════════════════════════════════════
 
-    // Cavalry at Mokra fought predominantly dismounted. These units therefore
-    // use the normal infantry movement/animation system rather than horses.
+    // Cavalry at Mokra fought predominantly dismounted. The regular Ułan stays
+    // a foot soldier; a small mounted reserve is a separate kind so the horse
+    // model never replaces the twenty men already holding the gun line.
     polish_ulan: {
         label: 'Ułan (Dismounted)', kind: 'ulan', class: 'infantry',
         description: 'Dismounted cavalry rifleman of the Wołyńska Cavalry Brigade, trained to screen fields and fight from cover.',
@@ -163,6 +164,15 @@ Game.UNIT_STATS = {
         armor: 0,
         sight: 17, rotationSpeed: 8,
         color: '#8f9271', cost: 1, year: 1939,
+    },
+    polish_mounted_ulan: {
+        label: 'Mounted Ułan (12th Regiment)', kind: 'mounted_ulan', class: 'infantry',
+        description: 'Mounted reserve uhlan of the 12th Podolian Uhlan Regiment, using the horse for rapid redeployment east of the railway; dismount before sustained combat and never charge tanks.',
+        weapon: 'kbk_wz29',
+        speed: 9.0, hp: 130, size: 1.35,
+        armor: 0,
+        sight: 19, rotationSpeed: 2.2,
+        color: '#858866', cost: 2, year: 1939,
     },
     polish_rifleman: {
         label: 'Strzelec', kind: 'rifleman', class: 'infantry',
@@ -565,6 +575,18 @@ Game.isTank = (kind) => {
 };
 
 Game.isTruck = (kind) => ['fuel', 'supply', 'transport'].includes(kind);
+
+// Mounted cavalry deliberately remains classed as infantry for small-arms
+// combat and selection, but it is not *foot* infantry: horses cannot enter a
+// house/truck, crawl, throw grenades, or use the instant-pivot walking driver.
+Game.isMountedCavalry = (unitOrKind) => {
+    const kind = typeof unitOrKind === 'string'
+        ? unitOrKind
+        : unitOrKind && unitOrKind.kind;
+    return kind === 'mounted_ulan';
+};
+Game.isFootInfantry = (unit) => !!unit && unit.class === 'infantry'
+    && !Game.isMountedCavalry(unit);
 
 Game.isSupport = (kind) => {
     return ['hmg', 'mortar46', 'mortar50', 'mortar60', 'mortar81',
@@ -1131,6 +1153,12 @@ Game._loadUnitModel = (unit, mesh) => {
         && ((!isSup && unit.class === 'infantry') || soldierSupport)) {
         paths = [`models/${teamKind}.glb`, Game.SOLDIER_MODEL_PATH || 'models/soldier.glb'];
     }
+    // The unmounted half of a cavalry reserve deliberately reuses the existing
+    // Polish Ułan soldier. Skip a nonexistent per-kind probe during a state
+    // transition so the swap resolves immediately from the shared model cache.
+    if (unit._cavalryCanMount && !unit._cavalryMounted) {
+        paths = [Game.SOLDIER_MODEL_PATH || 'models/soldier.glb'];
+    }
 
     // Per-model placement corrections, kept as live Game.* globals so the debug
     // panel ("Selected Model" group) can tune them and the copy-config can dump
@@ -1146,6 +1174,9 @@ Game._loadUnitModel = (unit, mesh) => {
     //    survives a model reload, and shows up in the copy-config.
     Game.MODEL_YAW = Game.MODEL_YAW || {
         french_s35: Math.PI, french_fuel: Math.PI, french_supply: Math.PI, french_transport: Math.PI,
+        // The authored cavalry faces local -X. The generic long-axis detector
+        // aligns +X, so this half-turn preserves the documented forward bearing.
+        polish_mounted_ulan: Math.PI,
     };
     Game.MODEL_Y_TRIM = Game.MODEL_Y_TRIM || {};
     Game.MODEL_WRAPPER_Y = Game.MODEL_WRAPPER_Y || { french_r35: 0.80 };
@@ -1158,6 +1189,9 @@ Game._loadUnitModel = (unit, mesh) => {
         french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35,
         french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1,
         german_panzer3: 1.35,
+        // Mounted units are intentionally compact at the isometric game camera:
+        // the previous 0.95 still dominated nearby infantry silhouettes.
+        polish_mounted_ulan: 0.72,
     };
     const MODEL_YAW = Game.MODEL_YAW, MODEL_Y_TRIM = Game.MODEL_Y_TRIM, MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT, MODEL_SCALE = Game.MODEL_SCALE;
     // Fused-mesh tanks (turret modelled into the hull, no separate node): aim by
@@ -1615,6 +1649,13 @@ Game._loadUnitModel = (unit, mesh) => {
             if (Game.isSoldierPath && Game.isSoldierPath(paths[idx]) && Game.splitSoldierAnim) {
                 clips = Game.splitSoldierAnim(clips);
             }
+            // The supplied cavalry GLB uses descriptive source names. Convert
+            // them once to the canonical names consumed by the shared animator;
+            // never depend on animation array order.
+            if (Game.isCavalryPath && Game.isCavalryPath(paths[idx])
+                && Game.prepareCavalryAnimations) {
+                clips = Game.prepareCavalryAnimations(clips);
+            }
             if (clips.length) {
                 mesh.userData.animations = clips;
                 mesh.userData.actions = {};
@@ -1637,6 +1678,22 @@ Game._loadUnitModel = (unit, mesh) => {
                 mesh.userData.soldierBaseModelX = model.position.x;
                 mesh.userData.soldierBaseModelZ = model.position.z;
                 if (Game.applySoldierTransforms) Game.applySoldierTransforms(unit);
+            } else {
+                mesh.userData.isSoldier = false;
+                mesh.userData.soldierModel = null;
+                mesh.userData.soldierLegRest = null;
+                mesh.userData._legBones = undefined;
+            }
+            mesh.userData.modelPath = paths[idx];
+            if (Game.isCavalryPath && Game.isCavalryPath(paths[idx])) {
+                mesh.userData.isMountedCavalry = true;
+                mesh.userData.cavalryModel = model;
+            } else {
+                mesh.userData.isMountedCavalry = false;
+                mesh.userData.cavalryModel = null;
+            }
+            if (unit._cavalryCanMount && Game.onCavalryModelLoaded) {
+                Game.onCavalryModelLoaded(unit, paths[idx]);
             }
             console.log(`Loaded model: ${paths[idx]} for ${unit.label}`);
         }).catch(() => {
@@ -1654,7 +1711,8 @@ Game._unitFootprint = (kindOrUnit, size) => {
     const kind = (kindOrUnit && kindOrUnit.kind !== undefined) ? kindOrUnit.kind : kindOrUnit;
     const sz = size != null ? size : ((kindOrUnit && kindOrUnit.size) || 0.85);
     const big = Game.isTank(kind) || Game.isTruck(kind);
-    return sz * (big ? (Game.TANK_SEP_RADIUS || 1.3) : 0.7);
+    const mounted = Game.isMountedCavalry(kind);
+    return sz * (big ? (Game.TANK_SEP_RADIUS || 1.3) : (mounted ? 1.0 : 0.7));
 };
 
 // Find a clear spot near (x,z) so a new unit doesn't spawn on top of another.
@@ -1787,6 +1845,11 @@ Game.makeUnit = (team, kind, x, z, opts = {}) => {
         deployable: ['at25', 'at47', 'pak36', 'bofors37', 'fieldgun75', 'hmg'].includes(base.kind || kind),
         deployed: true,
         _deployT: 0,
+        // Only units that originate as mounted cavalry retain a horse to remount.
+        // Ordinary dismounted uhlans on the defensive line do not gain one.
+        _cavalryCanMount: Game.isMountedCavalry(base.kind || kind),
+        _cavalryMounted: Game.isMountedCavalry(base.kind || kind),
+        _cavalryAwaitingModel: Game.isMountedCavalry(base.kind || kind),
         mesh: null,
     };
 
@@ -1901,6 +1964,7 @@ Game.formationOffsets = (count, spacing = 2.0, type) => {
 //    wins over ground-snap + trim, persists, survives reload, shows in copy-config.
 Game.MODEL_YAW = Game.MODEL_YAW || {
     french_s35: Math.PI, french_fuel: Math.PI, french_supply: Math.PI, french_transport: Math.PI,
+    polish_mounted_ulan: Math.PI,
 };
 Game.MODEL_Y_TRIM = Game.MODEL_Y_TRIM || {};
 Game.MODEL_WRAPPER_Y = Game.MODEL_WRAPPER_Y || { french_r35: 0.80 };
@@ -1908,6 +1972,7 @@ Game.MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT || {};
 Game.MODEL_SCALE = Game.MODEL_SCALE || {
     french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35,
     french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1,
+    polish_mounted_ulan: 0.72,
 };
 
 // Rebuild the loaded model for every live unit of a teamKind, re-reading the

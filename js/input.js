@@ -115,7 +115,7 @@ Game.moveOrderParticipants = (units, mode = 'move') => {
         .filter(u => u.alive && u.supportType === 'transport')
         .map(u => u.id));
     if (!movingCarriers.size) return chosen;
-    return chosen.filter(u => !(u.class === 'infantry'
+    return chosen.filter(u => !(Game.isFootInfantry(u)
         && u._enterCarrierId != null
         && movingCarriers.has(u._enterCarrierId)));
 };
@@ -423,7 +423,7 @@ Game.orderRetreat = (x, z) => {
         u.retreating = true;
         const threat = (u._engageId != null ? Game.getUnitById(u._engageId) : null) || Game.nearestEnemy(u);
         u._retreatThreat = (threat && threat.alive) ? { x: threat.x, z: threat.z } : null;
-        if (!Game.isTank(u.kind)) { u.stance = 'run'; u._autoStance = true; }
+        if (Game.isFootInfantry(u)) { u.stance = 'run'; u._autoStance = true; }
         u.path = Game.findPath(u, u.x, u.z, tx, tz);
         u.moving = true;
         u.stopTimer = 0;
@@ -710,7 +710,7 @@ Game.STANCE_ORDER = ['run', 'stand', 'crouch', 'prone'];
 Game.STANCE_LABEL = { run: 'Run', stand: 'Walk', crouch: 'Crouch', prone: 'Crawl' };
 
 Game.setStanceForSelection = () => {
-    const selected = Game.selectedPlayerUnits().filter(u => !Game.isTank(u.kind));
+    const selected = Game.selectedPlayerUnits().filter(Game.isFootInfantry);
     if (!selected.length) return;
     const idx = Game.STANCE_ORDER.indexOf(selected[0].stance);
     const next = Game.STANCE_ORDER[(idx + 1) % Game.STANCE_ORDER.length];
@@ -720,7 +720,7 @@ Game.setStanceForSelection = () => {
 
 // Toggle selected infantry between crawling (prone) and standing.
 Game.toggleProneSelection = () => {
-    const sel = Game.selectedPlayerUnits().filter(u => !Game.isTank(u.kind));
+    const sel = Game.selectedPlayerUnits().filter(Game.isFootInfantry);
     if (!sel.length) return;
     const anyUp = sel.some(u => u.stance !== 'prone');
     sel.forEach(u => { u.stance = anyUp ? 'prone' : 'stand'; u._autoStance = false; });
@@ -733,7 +733,7 @@ Game.toggleProneSelection = () => {
 Game.nearestThrower = (x, z) => {
     let best = null, bd = Infinity;
     for (const u of Game.selectedPlayerUnits()) {
-        if (Game.isTank(u.kind)) continue;
+        if (!Game.isFootInfantry(u)) continue;
         const d = Game.distSq(u.x, u.z, x, z);
         if (d < bd) { bd = d; best = u; }
     }
@@ -781,7 +781,7 @@ Game.handleMouseSelection = () => {
         // Enter-building: if infantry are selected and the click lands on a
         // building (and not on a friendly unit you meant to select instead),
         // send the selected infantry in rather than changing the selection.
-        const enterInf = Game.selectedPlayerUnits().filter(u => u.alive && u.class === 'infantry'
+        const enterInf = Game.selectedPlayerUnits().filter(u => u.alive && Game.isFootInfantry(u)
             && !u._garrisoned && u._inVehicle == null);
         if (enterInf.length) {
             const picked0 = Game.unitAtScreen && Game.unitAtScreen(mouse.dragCurrentX, mouse.dragCurrentY);
@@ -1010,7 +1010,7 @@ Game.handleInputEvents = () => {
                     Game._commandMode = null;
                 } else if (Game._commandMode === 'garrison') {
                     Game.selectedPlayerUnits().forEach(u => {
-                        if (!Game.isTank(u.kind)) Game.enterBuilding(u, ground.x, ground.z);
+                        if (Game.isFootInfantry(u)) Game.enterBuilding(u, ground.x, ground.z);
                     });
                     Game._commandMode = null;
                 } else if (Game._commandMode === 'tnt') {
@@ -1071,13 +1071,14 @@ Game.handleInputEvents = () => {
                         });
                         if (enemyUnit) {
                             Game.orderAttackTarget(enemyUnit);
-                        } else if (onTransport && Game.selectedPlayerUnits().some(u => u.class === 'infantry')) {
+                        } else if (onTransport && Game.selectedPlayerUnits().some(Game.isFootInfantry)) {
                             Game.orderEnterCarrier(onTransport);
                         } else if (onBuilding && !onBuilding.collapsed) {
                             // Right-click a building: selected infantry move in and
                             // garrison it; otherwise armed vehicles/AT shell it.
                             // NEVER silent — if neither applies, say why.
-                            const inf = Game.selectedPlayerUnits().filter(u => u.alive && !Game.isTank(u.kind) && !u._garrisoned);
+                            const inf = Game.selectedPlayerUnits().filter(u => u.alive
+                                && Game.isFootInfantry(u) && !u._garrisoned);
                             if (inf.length) Game.orderEnterBuilding(onBuilding);
                             else if (haveArmed) Game.orderAttackGround(onBuilding.cx, onBuilding.cz);
                             else Game.pushMessage('Select infantry to enter the building (or armed units to shell it).', 2.0);
@@ -1403,7 +1404,7 @@ Game.handleInputEvents = () => {
 
         // Run toggle (S key) — infantry switches between run and walk
         if (e.code === 'KeyS') {
-            const inf = Game.selectedPlayerUnits().filter(u => !Game.isTank(u.kind));
+            const inf = Game.selectedPlayerUnits().filter(Game.isFootInfantry);
             if (inf.length) {
                 const toRun = inf.some(u => u.stance !== 'run');
                 inf.forEach(u => { u.stance = toRun ? 'run' : 'stand'; u._autoStance = false; });
@@ -1435,7 +1436,8 @@ Game.handleInputEvents = () => {
 
         // Entrench toggle (N key)
         if (e.code === 'KeyN') {
-            Game.selectedPlayerUnits().forEach(u => Game.entrenchUnit(u));
+            Game.selectedPlayerUnits().filter(Game.isFootInfantry)
+                .forEach(u => Game.entrenchUnit(u));
         }
 
         // Build sandbags (U key) — sappers only
@@ -1468,11 +1470,12 @@ Game.handleInputEvents = () => {
             else if (carrier._passengers && carrier._passengers.length) {
                 Game.unloadCarrier(carrier);
             } else {
-                let pool = sel.filter(u => u.class === 'infantry'
+                let pool = sel.filter(u => Game.isFootInfantry(u)
                     && Game.distSq(u.x, u.z, carrier.x, carrier.z) < 12 * 12);
                 if (!pool.length) {
                     pool = Game.units.filter(u => u.alive && u.team === carrier.team
-                        && u.class === 'infantry' && Game.distSq(u.x, u.z, carrier.x, carrier.z) < 10 * 10);
+                        && Game.isFootInfantry(u)
+                        && Game.distSq(u.x, u.z, carrier.x, carrier.z) < 10 * 10);
                 }
                 let n = 0;
                 pool.forEach(u => { if (Game.loadUnit(u, carrier)) n++; });
@@ -1498,9 +1501,11 @@ Game.handleInputEvents = () => {
             const garrisoned = Game.selectedPlayerUnits().filter(u => u._garrisoned);
             if (garrisoned.length > 0) {
                 garrisoned.forEach(u => Game.exitBuilding(u));
-            } else {
+            } else if (Game.selectedPlayerUnits().some(Game.isFootInfantry)) {
                 Game._commandMode = 'garrison';
                 Game.pushMessage('Garrison — right-click a building.', 2.0);
+            } else {
+                Game.pushMessage('Select infantry on foot to enter a building.', 1.5);
             }
         }
 

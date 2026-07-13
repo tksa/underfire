@@ -366,7 +366,9 @@ Game._collapseBuilding = (rec) => {
         } else {                                    // escaped, hurt + shaken
             u.hp = Math.max(1, u.hp - Game.rand(30, 60));
             u.suppressionValue = 100; u.shaken = 1.6;
-            u.stance = 'prone'; u._autoStance = true;
+            if (Game.isFootInfantry(u)) {
+                u.stance = 'prone'; u._autoStance = true;
+            }
             u.x = rec.cx + Game.rand(-rec.w * 0.5 - 1, rec.w * 0.5 + 1);
             u.z = rec.cz + Game.rand(-rec.d * 0.5 - 1, rec.d * 0.5 + 1);
             if (u.mesh) u.mesh.visible = true;
@@ -560,7 +562,7 @@ Game.GARRISON_COVER = 0.9;
 
 // Put a unit inside a building (respecting capacity). Returns success.
 Game.garrisonUnit = (unit, rec) => {
-    if (!unit || !unit.alive || !rec || rec.collapsed) return false;
+    if (!unit || !unit.alive || !Game.isFootInfantry(unit) || !rec || rec.collapsed) return false;
     if (rec.occupants.indexOf(unit.id) >= 0) return true;          // already inside
     if (rec.occupants.length >= rec.capacity) return false;        // full
     rec.occupants.push(unit.id);
@@ -621,7 +623,9 @@ Game.exitBuilding = (rec, count = Infinity, tx = null, tz = null) => {
         u.z = Game.clamp(door.z + Math.sin(a) * (0.7 + (i % 3) * 0.5), 1, Game.WORLD_H - 1);
         u.y = Game.getHeight ? Game.getHeight(u.x, u.z) : 0;
         u.path = []; u.moving = false;
-        u.stance = 'stand'; u._autoStance = false;
+        if (Game.isFootInfantry(u)) {
+            u.stance = 'stand'; u._autoStance = false;
+        }
         if (tx != null) {
             const A = (i / Math.max(1, ids.length)) * Math.PI * 2;
             const R = i === 0 ? 0 : 1.2 + (i % 5) * 0.6;
@@ -676,7 +680,8 @@ Game._hurtOccupants = (rec, amount) => {
 // Tanks/crews are ignored. Capacity is enforced on arrival (latecomers stop).
 Game.orderEnterBuilding = (rec) => {
     if (!rec || rec.collapsed) { Game.pushMessage('Must target a standing building!', 1.4); return; }
-    const inf = Game.selectedPlayerUnits().filter(u => u.alive && !Game.isTank(u.kind) && !u._garrisoned);
+    const inf = Game.selectedPlayerUnits().filter(u => u.alive
+        && Game.isFootInfantry(u) && !u._garrisoned);
     if (!inf.length) { Game.pushMessage('Select infantry to enter a building.', 1.4); return; }
     // Rank the building's doors by closeness to the squad's centre, then send the
     // squad in through the two nearest doors (alternating) so they use both
@@ -716,7 +721,10 @@ Game.updateBuildingEntry = (dt) => {
     for (const u of units) {
         const rec = u._enterRec;
         if (!rec) continue;
-        if (!u.alive || u._garrisoned) { u._enterRec = null; continue; }
+        if (!u.alive || !Game.isFootInfantry(u) || u._garrisoned) {
+            u._enterRec = null;
+            continue;
+        }
         if (rec.collapsed) { u._enterRec = null; continue; }
         // Close enough to the footprint to step inside?
         const near = Game._footprintDistSq ? Game._footprintDistSq(rec, u.x, u.z) <= 6.25 : false;

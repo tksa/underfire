@@ -865,8 +865,9 @@ Game.buildMoveRecUI = () => {
 Game.applySeparation = (unit, dt) => {
     let sepX = 0, sepZ = 0;
     const isVeh = Game.isTank(unit.kind) || Game.isTruck(unit.kind);
+    const isMounted = Game.isMountedCavalry && Game.isMountedCavalry(unit);
     const radMult = Game.TANK_SEP_RADIUS || 1.3;
-    const myRadius = isVeh ? unit.size * radMult : unit.size * 0.7;
+    const myRadius = isVeh ? unit.size * radMult : unit.size * (isMounted ? 1.0 : 0.7);
     // A tank rolling at speed crushes anyone under its hull.
     const tankMoving = isVeh && (unit.currentSpeed || 0) > 0.6;
     const crushRadius = unit.size * 1.15;
@@ -912,7 +913,8 @@ Game.applySeparation = (unit, dt) => {
             const relX = unit.x - other.x, relZ = unit.z - other.z;
             const ahead = relX * fX + relZ * fZ;               // + = in front of the tank
             const lateral = relX * -fZ + relZ * fX;            // signed offset across its path
-            const halfWidth = other.size * radMult + unit.size * 0.7 + 0.6;
+            const halfWidth = other.size * radMult
+                + unit.size * (isMounted ? 1.0 : 0.7) + 0.6;
             // Look well ahead (scaled by the tank's speed) so the man starts moving
             // out early rather than at the last second.
             const lookAhead = other.size * 2.6 + (other.currentSpeed || 0) * 2.5;
@@ -959,7 +961,8 @@ Game.applySeparation = (unit, dt) => {
         if (!isVeh && otherVeh) {
             const tankRolling = (other.currentSpeed || 0) > 0.6;
             const enemyRolling = tankRolling && other.team !== unit.team;
-            const push = Game._tankBoxPush(unit.x, unit.z, other, unit.size * 0.7, 0.12);
+            const push = Game._tankBoxPush(unit.x, unit.z, other,
+                unit.size * (isMounted ? 1.0 : 0.7), 0.12);
             if (push) {
                 if (!enemyRolling) {
                     // Resolve over a few frames, not in one pop: a deep overlap (a man
@@ -1051,7 +1054,9 @@ Game.applySeparation = (unit, dt) => {
             continue;
         }
 
-        const otherRadius = otherVeh ? other.size * radMult : other.size * 0.7;
+        const otherMounted = Game.isMountedCavalry && Game.isMountedCavalry(other);
+        const otherRadius = otherVeh ? other.size * radMult
+            : other.size * (otherMounted ? 1.0 : 0.7);
         const gap = 0.3;
         const minDist = myRadius + otherRadius + gap;
         const minDistSq = minDist * minDist;
@@ -1086,7 +1091,7 @@ Game.applySeparation = (unit, dt) => {
         // Infantry: push in any direction, but capped to a RUN speed so getting out of
         // a tank's way looks like scrambling clear, not a sideways teleport-bounce.
         const sepMag = Math.hypot(sepX, sepZ);
-        const maxSep = 4.5;
+        const maxSep = isMounted ? 2.4 : 4.5;
         if (sepMag > maxSep) {
             sepX = (sepX / sepMag) * maxSep;
             sepZ = (sepZ / sepMag) * maxSep;
@@ -1118,7 +1123,8 @@ Game._pathBlockedByVehicle = (unit, lookAhead = 12) => {
     }
     if (!parked.length) return null;
     const vehSized = Game.isTank(unit.kind) || Game.isTruck(unit.kind);
-    const r = unit.size * (vehSized ? 1.0 : 0.7);
+    const mountedSized = Game.isMountedCavalry && Game.isMountedCavalry(unit);
+    const r = unit.size * ((vehSized || mountedSized) ? 1.0 : 0.7);
     let px = unit.x, pz = unit.z, travelled = 0;
     for (let i = 0; i < unit.path.length && travelled < lookAhead; i++) {
         const wp = unit.path[i];
@@ -1164,9 +1170,11 @@ Game._vehicleAvoid = (unit) => {
     const radMult = Game.TANK_SEP_RADIUS || 1.3;
     const selfIsTank = Game.isTank(unit.kind);
     const isTruck = Game.isTruck(unit.kind);
+    const isMounted = Game.isMountedCavalry && Game.isMountedCavalry(unit);
     const vehSized = selfIsTank || isTruck;              // vehicle-sized footprint
     const myExt = vehSized && Game._vehicleHalfExtents ? Game._vehicleHalfExtents(unit) : null;
-    const myR = vehSized ? Math.hypot(myExt.hl, myExt.hw) : unit.size * 0.7;
+    const myR = vehSized ? Math.hypot(myExt.hl, myExt.hw)
+        : unit.size * (isMounted ? 1.0 : 0.7);
     const goal = unit.path[unit.path.length - 1];
     // Arriving at the final destination — let de-overlap settle it, don't circle.
     if (unit.path.length === 1 && Game.dist(unit.x, unit.z, goal.x, goal.z) < myR * 2.2) {
@@ -1202,7 +1210,7 @@ Game._vehicleAvoid = (unit) => {
     // Most-blocking TANK inside a corridor straight ahead. Trucks turn wide, so
     // they look further ahead to start the detour in time.
     let block = null, blockD = Infinity;
-    const lookAhead = myR + (isTruck ? 9 : (selfIsTank ? 6 : 3.5));
+    const lookAhead = myR + (isTruck ? 9 : (selfIsTank ? 6 : (isMounted ? 6 : 3.5)));
     for (const o of Game.units) {
         if (!o.alive || o.id === unit.id || !(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
         if (unit._enterCarrierId === o.id) continue;
@@ -2395,7 +2403,7 @@ Game.findCarrierEntryPath = (inf, tx, tz) => {
 
 Game.loadUnit = (inf, carrier) => {
     if (!inf.alive || !carrier.alive || inf === carrier) return false;
-    if (inf.class === 'vehicle' || Game.isTank(inf.kind) || inf.deployable) return false; // foot troops only
+    if (!Game.isFootInfantry(inf) || inf.deployable) return false; // foot troops only
     carrier._passengers = carrier._passengers || [];
     if (carrier._passengers.length >= Game.carrierCapacity(carrier)) { Game.pushMessage(`${carrier.label} is full.`, 1.5); return false; }
     carrier._passengers.push(inf.id);
@@ -2427,7 +2435,7 @@ Game.orderEnterCarrier = (carrier) => {
     const room = Game.carrierCapacity(carrier)
         - (carrier._passengers ? carrier._passengers.length : 0) - carrier._boardingQueue.length;
     const rear = Game.transportEntryPoint(carrier);
-    const inf = Game.selectedPlayerUnits().filter(u => u.alive && u.class === 'infantry'
+    const inf = Game.selectedPlayerUnits().filter(u => u.alive && Game.isFootInfantry(u)
         && u._inVehicle == null && !u._garrisoned && !carrier._boardingQueue.includes(u.id))
         .sort((a, b) => Game.distSq(a.x, a.z, rear.x, rear.z) - Game.distSq(b.x, b.z, rear.x, rear.z))
         .slice(0, Math.max(0, room));
@@ -2602,7 +2610,7 @@ Game.toggleSelectedCarrier = () => {
         return;
     }
     const pool = Game.units.filter(u => u.alive && u.team === carrier.team
-        && u.class === 'infantry' && u._inVehicle == null
+        && Game.isFootInfantry(u) && u._inVehicle == null
         && Game.distSq(u.x, u.z, carrier.x, carrier.z) < 10 * 10);
     let n = 0;
     pool.forEach(u => { if (Game.loadUnit(u, carrier)) n++; });
@@ -5035,6 +5043,7 @@ Game.boot = async () => {
         cmdFighter: () => { if (Game.fighterTotalAvailable && Game.fighterTotalAvailable() > 0) { Game.toggleFighterMenu(); } else { Game.pushMessage('No fighters available!', 2.0); } },
         cmdRotate: () => { Game._commandMode = 'rotate'; Game.pushMessage('Rotate — right-click direction.', 2.0); },
         cmdProne: () => { Game.toggleProneSelection(); },
+        cmdCavalry: () => { Game.toggleSelectedCavalry(); },
         cmdTow: () => { Game.toggleSelectedTow(); },
         cmdCarrier: () => { Game.toggleSelectedCarrier(); },
         cmdUnload: () => {

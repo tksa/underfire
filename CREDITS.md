@@ -2,8 +2,9 @@
 
 Most bundled third-party assets are **CC0 / Public Domain** (no attribution legally
 required); listed here as good practice and to record provenance. The **UI icons**
-are attribution-licensed, and the user-provided Polish voice recordings have
-separate provenance with no CC0/public-domain claim made here.
+are attribution-licensed, while the user-provided Polish voice recordings and
+mounted-cavalry model have separate provenance with no CC0/public-domain claim
+made here.
 
 ## UI Icons (game-icons.net — CC-BY 3.0)
 Command-bar glyphs in `icons/` are from [game-icons.net](https://game-icons.net),
@@ -61,6 +62,32 @@ original models created for Under Fire by the project (tksa, with ChatGPT +
 Sam3D), released as **CC0 / public domain**. (Optimized for instancing: meshes
 simplified and textures downscaled via gltf-transform; the walls are re-skinned
 in-engine with a procedural dark fieldstone texture.)
+
+## Polish Mounted Cavalry Model (user-provided; separate provenance)
+
+The project owner supplied the rigged horse-and-rider GLB used for the Polish
+`mounted_ulan` runtime model (`models/polish_mounted_ulan.glb`). The supplied
+asset contains 17 animation clips; the project uses it for the four player-controlled
+mounted reserves at Mokra and their mount/dismount presentation.
+
+The source was provided directly to the project, without a public source URL or a
+public licence declaration. **No CC0, public-domain, or other public-redistribution
+licence is asserted for this model in this document.** Its source provenance and
+redistribution rights must be confirmed before distributing it outside the project.
+
+### Horse motion references (not bundled)
+
+The cavalry locomotion was visually compared with the following works by
+**Amitesh Nandan**, both licensed under
+[CC BY-ND 4.0](https://creativecommons.org/licenses/by-nd/4.0/):
+
+- [Horse Trot](https://skfb.ly/6VDWA)
+- [Horse Run](https://skfb.ly/6VCoE)
+
+The reference GLBs are not included in the game, and their morph-target animation
+data was not copied or retargeted. They were used only to study gait silhouette,
+leg phasing, suspension, and cadence while authoring the project's separate
+skeletal animation.
 
 ## Textures (OpenGameArt.org, CC0)
 - **Dirty Grass Seamless** (ground detail normal + AO) — used as terrain detail maps.
@@ -158,9 +185,8 @@ Thanks to the people kicking the tyres and telling us what's broken:
 
 - `models/dewoitine_d520.glb` — "Dewoitine D.520" (https://skfb.ly/MPER) by
   **helijah**, licensed under **Creative Commons Attribution 4.0**
-  (http://creativecommons.org/licenses/by/4.0/). NOTE: this is the project's
-  first CC-BY (attribution-required) asset — everything else is CC0. Keep this
-  credit intact wherever the model ships.
+  (http://creativecommons.org/licenses/by/4.0/). This is an
+  attribution-required asset; keep this credit intact wherever the model ships.
 - Fighter engine drone and strafing audio are synthesized in code (no asset).
 - `models/bloch_mb152.glb` — "Bloch MB.152" by **helijah** (Sketchfab),
   licensed under **Creative Commons Attribution 4.0** — attribution required.

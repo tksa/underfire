@@ -157,6 +157,7 @@ Game.updateAI = (unit, dt, enemy) => {
     unit.retreating = false; // re-asserted below only while actually falling back
 
     const isVeh = Game.isTank(unit.kind);
+    const isFoot = Game.isFootInfantry(unit);
     const supp = unit.suppressionValue || 0;
     const hpPct = unit.hp / unit.maxHp;
     const inCover = (unit.coverBonus || 0) > 0.32;
@@ -169,7 +170,7 @@ Game.updateAI = (unit, dt, enemy) => {
         ? enemy
         : (unit._lastThreat && (Game.gameClock - (unit._threatTime || 0) < 8) ? unit._lastThreat : null);
 
-    const setStance = (s) => { if (!isVeh) { unit.stance = s; unit._autoStance = true; } };
+    const setStance = (s) => { if (isFoot) { unit.stance = s; unit._autoStance = true; } };
     // Mokra's German armour owns stable scenario corridors. Reuse them for AI
     // firing-position, rally and patrol plans as well as stuck recovery so a
     // contact decision cannot launch the general 80k-state vehicle A* on the
@@ -192,7 +193,7 @@ Game.updateAI = (unit, dt, enemy) => {
     // ── TANK HUNTER: a foot soldier with an enemy tank right on top of him pulls
     //    an anti-tank grenade bundle and lobs it (RWM close-assault). Checked
     //    before the cover/retreat branches so a cornered man still fights back. ──
-    if (!isVeh && unit.class === 'infantry') {
+    if (isFoot) {
         unit._atGrenades = unit._atGrenades ?? 2;
         if (unit._atGrenades > 0 && (unit._atNext == null || Game.gameClock >= unit._atNext)) {
             let tank = null, bd = 7 * 7;
@@ -229,7 +230,7 @@ Game.updateAI = (unit, dt, enemy) => {
         // Panic: a broken, heavily-suppressed soldier with no officer near may bolt
         // in a random direction instead of an orderly fall-back (RWM moralerndmove).
         const rally = unit._rally || unit.holdPoint || { x: unit.x, z: unit.z };
-        if (!isVeh && !unit._steadied && supp > 70 && Game.rand(0, 1) < 0.25 && threatPos) {
+        if (isFoot && !unit._steadied && supp > 70 && Game.rand(0, 1) < 0.25 && threatPos) {
             // Commit to ONE bolt direction until it's spent — re-rolling a fresh
             // random direction every think tick had the panicking man swivelling
             // on the spot instead of running anywhere.
@@ -250,7 +251,7 @@ Game.updateAI = (unit, dt, enemy) => {
     }
 
     // ── PINNED: heavy suppression — go prone, crawl to the nearest cover ──
-    if (supp > 75 + steady && !isVeh) {
+    if (supp > 75 + steady && isFoot) {
         unit._ai = 'pinned';
         setStance('prone');
         if (!inCover && threatPos) {
@@ -267,7 +268,7 @@ Game.updateAI = (unit, dt, enemy) => {
     //    cover" or the threat blinked — the cancel/replan cycle left men
     //    twitching in circles between refuges. He keeps going (still shooting;
     //    fire isn't gated on being halted) and re-evaluates once he arrives. ──
-    if (!isVeh && (unit._ai === 'seekcover' || unit._ai === 'shelter') && unit.path && unit.path.length) {
+    if (isFoot && (unit._ai === 'seekcover' || unit._ai === 'shelter') && unit.path && unit.path.length) {
         // Sprint the open ground, drop to a crouch for the last couple of
         // meters (suppression can still force him lower via the morale module).
         const wp = unit.path[unit.path.length - 1];
@@ -283,7 +284,7 @@ Game.updateAI = (unit, dt, enemy) => {
     // FOOT TROOPS ONLY: armor doesn't scurry for infantry cover. (Ungated, a
     // tank ran this branch, picked "the lee of the nearest friendly tank" —
     // which was ITSELF — and chased that moving point in circles on the spot.)
-    if (!isVeh && threatPos && !inCover && role !== 'maneuver'
+    if (isFoot && threatPos && !inCover && role !== 'maneuver'
         && (enemy || supp > 15 || unit.underFire > 0)) {
         // Face the fire even from an unseen shooter — via the per-frame facing
         // goal (a discrete turn step per think tick read as jerky small turns).
@@ -416,7 +417,7 @@ Game.updateAI = (unit, dt, enemy) => {
     if (threatPos) {
         unit._ai = 'alert';
         unit._faceGoal = Game.angleTo(unit.x, unit.z, threatPos.x, threatPos.z);
-        if (!isVeh) setStance(supp > 35 ? 'prone' : 'crouch');
+        if (isFoot) setStance(supp > 35 ? 'prone' : 'crouch');
         unit.path = [];
         return;
     }

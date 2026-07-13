@@ -188,9 +188,18 @@ Game.loadModel = (path) => {
     if (Game.modelCache[path]) {
         return Promise.resolve(Game._cloneModel(Game.modelCache[path]));
     }
+    // Scenario spawns create several same-kind units in one synchronous burst.
+    // Before the first GLB reached modelCache, every unit started its own network
+    // request and full parse (four cavalry reserves meant four 8.4 MB parses).
+    // Share that in-flight work, then clone the cached rig per waiting unit.
+    Game._modelLoads = Game._modelLoads || {};
+    if (Game._modelLoads[path]) {
+        return Game._modelLoads[path].then(() => Game._cloneModel(Game.modelCache[path]));
+    }
 
     const isFBX = path.toLowerCase().endsWith('.fbx');
     const isPLY = path.toLowerCase().endsWith('.ply');
+    let request;
 
     if (isFBX) {
         // Lazy-init FBX loader
@@ -198,7 +207,7 @@ Game.loadModel = (path) => {
             Game.fbxLoader = new Game.FBXLoader();
         }
         if (!Game.fbxLoader) return Promise.reject('No FBX loader available');
-        return new Promise((resolve, reject) => {
+        request = new Promise((resolve, reject) => {
             Game.fbxLoader.load(
                 path,
                 (group) => {
@@ -215,7 +224,7 @@ Game.loadModel = (path) => {
             Game.plyLoader = new Game.PLYLoader();
         }
         if (!Game.plyLoader) return Promise.reject('No PLY loader available');
-        return new Promise((resolve, reject) => {
+        request = new Promise((resolve, reject) => {
             Game.plyLoader.load(
                 path,
                 (geometry) => {
@@ -242,7 +251,7 @@ Game.loadModel = (path) => {
     } else {
         // GLTF/GLB
         if (!Game.gltfLoader) return Promise.reject('No GLTF loader available');
-        return new Promise((resolve, reject) => {
+        request = new Promise((resolve, reject) => {
             Game.gltfLoader.load(
                 path,
                 (gltf) => {
@@ -258,6 +267,12 @@ Game.loadModel = (path) => {
             );
         });
     }
+    Game._modelLoads[path] = request;
+    const clear = () => {
+        if (Game._modelLoads[path] === request) delete Game._modelLoads[path];
+    };
+    request.then(clear, clear);
+    return request;
 };
 
 /**

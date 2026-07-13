@@ -481,15 +481,28 @@ Game.spawnMokraScenario = () => {
         y,
         group: `pl_line_${i + 1}`,
     }));
+    // A small mobile element of the 12th Podolian Uhlans waits east of the
+    // railway. These four begin mounted; unlike the twenty Uhlans already in
+    // the defensive line, they retain horses and can dismount/remount in place.
+    const cavalryReserve = [
+        { x: 72, y: 59 }, { x: 74, y: 59 },
+        { x: 72, y: 61 }, { x: 74, y: 61 },
+    ];
     Game.mokraDeployment = {
         gunLine: gunLine.map(position => ({ ...position })),
         infantryLine: infantryLine.map(position => ({ ...position })),
+        cavalryReserve: cavalryReserve.map(position => ({
+            ...position,
+            group: 'pl_12th_uhlans_reserve',
+        })),
     };
     gunLine.forEach(position => player(position.kind, position.x, position.y,
         'pl_gun_line', { angle: Math.PI }));
     infantryLine.forEach(position => Game.spawnPolishLineSection(
         position.x * T, position.y * T, position.group));
     Game.spawnPolishSquad(70 * T, 51 * T, 'pl_reserve');
+    cavalryReserve.forEach(position => player('mounted_ulan', position.x, position.y,
+        'pl_12th_uhlans_reserve', { angle: Math.PI, veterancy: 0.12 }));
 
     player('at_rifle_wz35', 55, 38, 'pl_at');
     player('at_rifle_wz35', 55, 61, 'pl_at');
@@ -500,7 +513,9 @@ Game.spawnMokraScenario = () => {
     player('tks', 76, 46, 'pl_armor');
     player('tks', 78, 53, 'pl_armor');
     player('wz34', 79, 43, 'pl_recon');
-    player('officer', 68, 50, 'pl_command');
+    // One tile west keeps the command group clear of Mokra II's sealed model
+    // overhang while retaining its command radius over the foot reserve.
+    player('officer', 67, 50, 'pl_command');
     player('medic', 70, 53, 'pl_command');
     player('sapper', 65, 56, 'pl_engineers');
     player('mechanic', 77, 55, 'pl_armor');

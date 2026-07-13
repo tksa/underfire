@@ -8,20 +8,24 @@ prompt ─▶ Meshy (low-poly text-to-3D) ─▶ Blender (MCP refine to the rule
 ```
 
 The game's model loader (`js/units.js`) already auto-loads `models/{team}_{kind}.glb`
-then `models/{kind}.glb`, normalizes/orients/ground-snaps, and wires turret/gun
-nodes. The pipeline's job is to make Meshy output **conform to the rules the
-loader expects**, so a model just drops in.
+then `models/{kind}.glb`, normalizes/orients/ground-snaps, wires turret/gun nodes,
+and creates animation actions for named GLB clips. The pipeline's job is to make
+an asset **conform to the rules the loader expects**, so a model drops in without
+unit-specific scene surgery.
 
 ## Scope (what gets a model vs stays procedural)
 
-- **Models via this pipeline:** vehicles, towed guns, AA, emplacements, static
+- **Static models via the Meshy/refine pipeline:** vehicles, towed guns, AA, emplacements, static
   support weapons. These are **static bodies with wired sub-parts** (rotating
   turret, recoiling gun) — exactly what the loader supports, and they need no
   walk cycle.
-- **Infantry stay procedural** for now. They animate (walk/crouch/prone/fire) via
-  code; a static mesh can't run convincingly, and rigging hundreds of them isn't
-  worth it. Rigged infantry is an optional later branch (Meshy/Mixamo rig +
-  an engine `AnimationMixer`), tracked separately — not part of the core pipeline.
+- **Rigged characters use a separate preservation path.** The shared foot soldier
+  and Polish `mounted_ulan` are skinned GLBs driven by an `AnimationMixer`. Never
+  send these assets through a static-only refinement pass that removes an armature,
+  changes bind transforms, or drops/renames animation clips.
+- **Polish mounted cavalry:** the supplied horse-and-rider source has 17 named
+  animation clips. Its runtime path is `models/polish_mounted_ulan.glb`; the
+  existing `models/soldier.glb` remains the source for dismounted `ulan` infantry.
 
 ## Rule 1 — Sizing (proportional, anchored to infantry)
 
@@ -38,6 +42,7 @@ Real-world reference dimensions (metres) used by the Blender step:
 | Unit | kind | L × W × H (m) | scale by |
 |---|---|---|---|
 | Infantry | fusilier/grenadier/… | 0.6 × 0.6 × 1.8 | height |
+| Horse and rider | mounted_ulan | preserve the supplied source proportions | horizontal footprint |
 | Hotchkiss H35 | h35 | 4.22 × 1.95 × 2.13 | length |
 | Renault R35 | r35 | 4.02 × 1.87 × 2.13 | length |
 | Somua S35 | s35 | 5.45 × 2.12 × 2.62 | length |
@@ -60,13 +65,19 @@ Real-world reference dimensions (metres) used by the Blender step:
 - **Up = +Y**, upright, **bottom at y = 0** (Blender grounds it; the loader also
   ground-snaps as a safety net).
 - Origin centered on the footprint (X/Z), at the base (Y).
+- Rigged locomotion cycles must be authored in place. World translation belongs
+  to unit movement; baked root travel would move the render away from its collision
+  and selection position.
 
 ## Rule 3 — Poly budget & cleanliness
 - **Decimate** to a low budget — vehicles ≲ 4–6k tris, guns/infantry ≲ 2–3k —
   these render in quantity.
-- Single skinned material with a baked texture; **strip embedded lights/cameras**
-  (the loader strips them, Blender should too).
+- Use a small material/texture set; **strip embedded lights/cameras** (the loader
+  strips them, Blender should too).
 - Triangulated, no n-gons, no loose geometry.
+- For animated characters, keep the armature, skin weights, inverse bind matrices,
+  clip names, and all required keyframes intact. Optimisation must be checked
+  against the rig rather than treated as ordinary static decimation.
 
 ## Rule 4 — Wired sub-parts (so the loader can animate them)
 The loader looks up child nodes by name:
@@ -78,6 +89,21 @@ The loader looks up child nodes by name:
 
 So a tank must export as a hierarchy: hull (root) → turret (rotates) → gun
 (recoils), with correct origins. The Blender step renames/parents these.
+
+## Rule 5 — Rigged character and cavalry clips
+
+An animated character ships as one coherent GLB scene containing its skinned
+mesh, skeleton, and named animation clips. The loader clones the rig per unit and
+builds an action for every exported clip. Preserve the original names instead of
+merging the 17 cavalry clips into a single timeline.
+
+The mounted-cavalry controller selects the appropriate actions from the supplied
+set and synchronises walk/run playback to measured movement speed. Acceleration,
+braking, and turn limits are simulation behavior; animation should follow that
+speed rather than provide root motion. Mount/dismount is a unit-state transition
+between the dedicated `mounted_ulan` presentation and the existing dismounted
+`ulan` role. It is not a horse-limber or gun-hitch system, and no animation should
+imply an anti-tank cavalry charge.
 
 ## The steps
 
@@ -91,6 +117,14 @@ So a tank must export as a hierarchy: hull (root) → turret (rotates) → gun
    `models/{team}_{kind}.glb`.
 3. **Game**: loader auto-loads it, applies `Game.SCALE`, wires turret/gun. Verify
    in-engine (size vs infantry, facing, turret tracks, recoil).
+
+The three steps above describe static equipment. For an already-rigged character
+such as the supplied Polish cavalry model, begin with the source GLB in Blender,
+preserve its skeleton and all 17 clips, apply only rig-safe orientation/material/
+texture optimisation, and export directly to `models/polish_mounted_ulan.glb`.
+Do not use `scripts/blender_refine.py` unchanged for this asset: that helper is
+written for static meshes and turret/gun hierarchy cleanup, not animation-rig
+preservation.
 
 ## Blender MCP setup (one-time, your machine)
 

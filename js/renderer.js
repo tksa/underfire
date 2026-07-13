@@ -51,7 +51,8 @@ Game.syncUnitMeshes = (dt) => {
                         Game.cameraShake = Math.max(Game.cameraShake || 0, 12);
                         if (Game.Audio && Game.Audio.explosion) Game.Audio.explosion(unit.x, unit.z);
                     }
-                } else if (unit.mesh.userData.isSoldier && Game.playSoldierDeath) {
+                } else if ((unit.mesh.userData.isSoldier || unit.mesh.userData.isMountedCavalry)
+                    && Game.playSoldierDeath) {
                     // Skinned soldier: play a random death animation (holds the last
                     // frame) instead of the rigid fall-over. Clear any tilt another
                     // code path may have applied so the clip plays upright.
@@ -524,6 +525,9 @@ Game._chooseClip = (unit) => {
     // Debug: force one clip on all soldiers (skip '_raw' — handled by the scrub override).
     if (ud.isSoldier && Game.SOLDIER_FORCE_CLIP && Game.SOLDIER_FORCE_CLIP !== '_raw'
         && names.includes(Game.SOLDIER_FORCE_CLIP)) return Game.SOLDIER_FORCE_CLIP;
+    if (ud.isMountedCavalry && Game.chooseCavalryClip) {
+        return Game.chooseCavalryClip(unit, names);
+    }
     const pick = (list) => list.find(n => names.includes(n));
     const st = unit.stance || 'stand';
     // Locomotion keys off MEASURED displacement (move module), so a man shoved
@@ -578,6 +582,12 @@ Game._playClip = (unit, name, fade = 0.25) => {
 Game._updateModelAnimation = (unit, dt) => {
     const ud = unit.mesh && unit.mesh.userData;
     if (!ud || !ud.mixer) return;
+    // Mount/dismount are authored one-shots. The ordinary locomotion selector
+    // must not replace them before their final pose has completed.
+    if (ud.isMountedCavalry && unit._cavalryTransition?.phase === 'animating') {
+        ud.mixer.update(dt);
+        return;
+    }
     // Soldier debug override (e.g. RAW-timeline scrub) fully handles the frame.
     if (ud.isSoldier && Game._soldierAnimOverride && Game._soldierAnimOverride(unit, dt)) return;
     if (ud.actions) {
@@ -605,6 +615,9 @@ Game._updateModelAnimation = (unit, dt) => {
         }
     }
     if (ud.isSoldier && Game._soldierTimeScale) Game._soldierTimeScale(unit);
+    if (ud.isMountedCavalry && Game.updateCavalryAnimationSpeed) {
+        Game.updateCavalryAnimationSpeed(unit);
+    }
     ud.mixer.update(dt);
     // Procedural walk legs (the baked clip has no stride) — override the clip's
     // static legs AFTER the mixer writes them.
@@ -1792,9 +1805,27 @@ Game.updateHUD = () => {
     // Crawl button reflects prone state of selected infantry
     const proneBtn = document.getElementById('cmdProne');
     if (proneBtn) {
-        const inf = Game.selectedPlayerUnits().filter(u => !Game.isTank(u.kind));
+        const inf = Game.selectedPlayerUnits().filter(u => Game.isFootInfantry(u));
         const proneActive = inf.length > 0 && inf.every(u => u.stance === 'prone');
         proneBtn.classList.toggle('active', proneActive);
+    }
+
+    // Mounted reserves retain their horse when dismounted, so the same selected
+    // unit can change state without losing health, ammo, experience or its group.
+    const cavalryBtn = document.getElementById('cmdCavalry');
+    if (cavalryBtn) {
+        const cavalry = Game.selectedPlayerUnits().filter(u => u._cavalryCanMount);
+        const busy = cavalry.some(u => u._cavalryTransition || u._cavalryAwaitingModel);
+        const allMounted = cavalry.length > 0 && cavalry.every(u => u._cavalryMounted);
+        const allUnmounted = cavalry.length > 0 && cavalry.every(u => !u._cavalryMounted);
+        cavalryBtn.style.display = cavalry.length ? 'flex' : 'none';
+        cavalryBtn.classList.toggle('disabled', busy);
+        cavalryBtn.classList.toggle('active', allMounted);
+        const label = cavalryBtn.querySelector('.cmd-label');
+        if (label) label.textContent = busy ? 'Changing' : (allMounted ? 'Dismount' : 'Mount');
+        cavalryBtn.title = busy
+            ? 'Cavalry is changing state'
+            : (allUnmounted ? 'Mount cavalry' : 'Dismount cavalry');
     }
 
     // Hold button lights up while the selection is holding fire

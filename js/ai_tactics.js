@@ -66,7 +66,7 @@ Game.AI.ambientCfg = {
  *   rest   -> sit down, recover composure faster, slow to react
  */
 Game.uMod.ambient = (unit, ctx) => {
-    if (!unit.alive || unit.class !== 'infantry') return;
+    if (!unit.alive || !Game.isFootInfantry(unit)) return;
     if (unit._garrisoned || unit._enterRec || unit._enterCarrierId != null || unit._inVehicle != null || unit._towed) return;
 
     const cfg = Game.AI.ambientCfg;
@@ -184,7 +184,7 @@ Game.AI._nearestComrade = (unit, radius) => {
     let best = null, bd = radius * radius;
     for (const a of Game.units) {
         if (!a.alive || a === unit) continue;
-        if (a.team !== unit.team || a.class !== 'infantry') continue;
+        if (a.team !== unit.team || !Game.isFootInfantry(a)) continue;
         if (a.moving || (a.path && a.path.length)) continue;   // not one hurrying off
         const d = Game.distSq(unit.x, unit.z, a.x, a.z);
         if (d > 0.5 && d < bd) { bd = d; best = a; }
@@ -220,7 +220,7 @@ Game.AI.POSTURE_CYCLE = [null, 'attention', 'ease'];
 // Apply a fixed posture to the selected foot troops and light the matching HUD
 // button. mode: null (auto wind-down) | 'attention' | 'ease'.
 Game.AI.applyPosture = (mode) => {
-    const sel = Game.selectedPlayerUnits().filter(u => u.class === 'infantry');
+    const sel = Game.selectedPlayerUnits().filter(Game.isFootInfantry);
     if (!sel.length) { Game.pushMessage('Select troops to set their posture.', 1.5); return; }
     sel.forEach(u => {
         u._postureOrder = mode;
@@ -235,7 +235,7 @@ Game.AI.applyPosture = (mode) => {
 
 // Cycle the selected troops' posture (X key): Auto -> Attention -> At Ease -> Auto.
 Game.cyclePosture = () => {
-    const sel = Game.selectedPlayerUnits().filter(u => u.class === 'infantry');
+    const sel = Game.selectedPlayerUnits().filter(Game.isFootInfantry);
     if (!sel.length) { Game.pushMessage('Select troops to set their posture.', 1.5); return; }
     const cur = (sel[0]._postureOrder === 'attention' || sel[0]._postureOrder === 'ease') ? sel[0]._postureOrder : null;
     const next = Game.AI.POSTURE_CYCLE[(Game.AI.POSTURE_CYCLE.indexOf(cur) + 1) % Game.AI.POSTURE_CYCLE.length];
@@ -244,7 +244,7 @@ Game.cyclePosture = () => {
 
 // Enter "place a guard area" mode — the next right-click sets the patrol centre.
 Game.AI.beginGuard = () => {
-    const sel = Game.selectedPlayerUnits().filter(u => u.class === 'infantry' || u.supportType);
+    const sel = Game.selectedPlayerUnits().filter(u => Game.isFootInfantry(u) || u.supportType);
     if (!sel.length) { Game.pushMessage('Select troops to set a guard.', 1.5); return; }
     Game._commandMode = 'guard';
     Game.pushMessage('Guard — right-click the area to patrol.', 2.5);
@@ -259,7 +259,7 @@ Game.AI._reflectPostureUI = (mode) => {
 
 // Put the selected troops on guard over a circular area (centre x,z, radius r).
 Game.AI.setGuard = (x, z, r) => {
-    const sel = Game.selectedPlayerUnits().filter(u => u.class === 'infantry' || u.supportType);
+    const sel = Game.selectedPlayerUnits().filter(u => Game.isFootInfantry(u) || u.supportType);
     if (!sel.length) { Game.pushMessage('Select troops to set a guard.', 1.5); return; }
     const rad = r || Game.AI.ambientCfg.guardRadius;
     sel.forEach(u => {
