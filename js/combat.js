@@ -74,6 +74,8 @@ Game.applyShot = (shooter, target) => {
 
     // Barrel tip position — try to get from actual 3D gun mesh
     const isTankShooter = Game.isTank(shooter.kind);
+    const isFieldGunShooter = shooter.kind === 'fieldgun75';
+    const isHeavyGunShooter = isTankShooter || isFieldGunShooter;
     const fireAngle = isTankShooter ? (shooter.turretAngle || shooter.angle) : shooter.angle;
     let muzzleX, muzzleZ;
 
@@ -104,7 +106,7 @@ Game.applyShot = (shooter, target) => {
             muzzleZ = shooter.z + Math.sin(fireAngle) * 4.0;
         }
     } else {
-        const barrelLen = isTankShooter ? 4.0 : 0.6;
+        const barrelLen = isTankShooter ? 4.0 : (isFieldGunShooter ? 1.15 : 0.6);
         muzzleX = shooter.x + Math.cos(fireAngle) * barrelLen;
         muzzleZ = shooter.z + Math.sin(fireAngle) * barrelLen;
     }
@@ -141,7 +143,7 @@ Game.applyShot = (shooter, target) => {
         life: 0.12 + d / 80,
         total: 0.12 + d / 80,
         team: shooter.team,
-        big: isTankShooter,
+        big: isHeavyGunShooter,
         terrainDamage: terrainDmg,
         mesh: null,
     });
@@ -156,7 +158,7 @@ Game.applyShot = (shooter, target) => {
         // Foot soldiers never boom like a gun — a crewman's pistol or an AT rifle
         // is still a small-arms crack, even when its w_type came over as "at"/"gun".
         const isBigGun = !isMG && shooter.class !== 'infantry'
-            && (['tankgun', 'atgun', 'cannon', 'at', 'aa', 'gun', 'howitzer', 'flak'].includes(wt)
+            && (['tankgun', 'atgun', 'fieldgun', 'cannon', 'at', 'aa', 'gun', 'howitzer', 'flak'].includes(wt)
                 || isTankShooter || shooter.class === 'vehicle');
         if (isMG) {
             Game.Audio.mg(muzzleX, muzzleZ);
@@ -181,7 +183,7 @@ Game.applyShot = (shooter, target) => {
     });
 
     // Tank recoil + muzzle flash + barrel smoke
-    if (isTankShooter) {
+    if (isHeavyGunShooter) {
         shooter.recoilTime = 0.001;  // start recoil (counts up in renderer)
         shooter.recoil = Game.recoilForWeapon ? Game.recoilForWeapon(weapon) : null;
         shooter.joltTime = 0.001;    // suspension rock timeline

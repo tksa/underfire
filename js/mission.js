@@ -117,6 +117,9 @@ Game.setPlayerSide = (side) => {
 
     // Despawn everything (corpses and wrecks included) + dependent state.
     for (const u of Game.units) {
+        if (u.kind === 'fieldgun75' && u.mesh && Game.detachFieldGunCrew) {
+            Game.detachFieldGunCrew(u.mesh);
+        }
         if (u.mesh && Game.unitsGroup) Game.unitsGroup.remove(u.mesh);
     }
     Game.units.length = 0;

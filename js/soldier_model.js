@@ -138,6 +138,7 @@ Game.SOLDIER_SKINS = {
 Game.SOLDIER_TEAM_ABBR = { french: 'fr', german: 'de', polish: 'pl' };
 Game.SOLDIER_KIND_ROLE = {
     fusilier: 'rifle', dragoon: 'rifle', grenadier: 'rifle', ulan: 'rifle', rifleman: 'rifle',
+    fieldgun_crew: 'rifle',
     smg: 'smg', sturmtrupp: 'smg', mp38: 'smg',
     fm24: 'mg', mg34: 'mg', rkm_wz28: 'mg', at_rifle_wz35: 'rifle', sniper: 'sniper',
     medic: 'medic', mechanic: 'mechanic', sapper: 'sapper', officer: 'officer',
@@ -194,7 +195,7 @@ Game.applySoldierMaterialParams = () => {
 Game._soldierSkinTex = (url) => {
     Game._soldierTexCache = Game._soldierTexCache || {};
     if (!Game._soldierTexCache[url]) {
-        const t = new Game.THREE.TextureLoader().load(url);
+        const t = new Game.THREE.TextureLoader().load(Game.assetUrl(url));
         t.flipY = false;                         // glTF UV convention (matches the extracted skin)
         t.colorSpace = Game.THREE.SRGBColorSpace;
         Game._soldierTexCache[url] = t;
@@ -209,11 +210,21 @@ Game.applySoldierSkin = (model, team, kind) => {
     const tex = url ? Game._soldierSkinTex(url) : null;
     const tint = (team in Game.SOLDIER_SKIN_TINT) ? Game.SOLDIER_SKIN_TINT[team] : 0xffffff;
     const roleTint = Game.SOLDIER_ROLE_TINT[abbr + '_' + role];
+    const unarmed = kind === 'medic' || kind === 'fieldgun_crew';
+    // The rifle is a clean subtree in soldier.glb. Hide the slot itself so a
+    // future material/name change cannot accidentally re-arm medics or gunners;
+    // the mesh regex below remains a compatibility fallback.
+    if (unarmed) {
+        model.traverse(o => {
+            if (o.name === 'weapon_slot_018') o.visible = false;
+        });
+    }
     model.traverse(o => {
         if (!o.isMesh || !o.material) return;
         const isGun = /lambert1|mauser|k98|k_98/i.test((o.material.name || '') + ' ' + (o.name || ''));
-        // The medic is a non-combatant: same body, no rifle in his hands.
-        if (isGun && kind === 'medic') o.visible = false;
+        // Medics and gun layers use the shared body without carrying its baked
+        // rifle. Artillery crew need both hands free at the breech/trails.
+        if (isGun && unarmed) o.visible = false;
         const mats = (Array.isArray(o.material) ? o.material : [o.material]).map(m => {
             const c = m.clone();          // own material per unit -> no leak to the shared source
             if (!isGun) {
