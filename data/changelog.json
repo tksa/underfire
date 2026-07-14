@@ -1,8 +1,33 @@
 {
- "version": "v0.16.0",
- "build": "0102abb",
+ "version": "v0.16.1",
+ "build": "c7009d6",
  "generated": "2026-07-14",
  "commits": [
+  {
+   "hash": "c7009d6",
+   "date": "2026-07-14",
+   "subject": "terrain-hugging selection ring"
+  },
+  {
+   "hash": "bc760fb",
+   "date": "2026-07-14",
+   "subject": "kill the mass-order freeze"
+  },
+  {
+   "hash": "03dbe37",
+   "date": "2026-07-14",
+   "subject": "railway-aware reference captures for the terrain model"
+  },
+  {
+   "hash": "e99fbb4",
+   "date": "2026-07-14",
+   "subject": "keep the Mokra railway visible in reference mode"
+  },
+  {
+   "hash": "69434df",
+   "date": "2026-07-14",
+   "subject": "release v0.16.0"
+  },
   {
    "hash": "0102abb",
    "date": "2026-07-14",
@@ -47,31 +72,6 @@
    "hash": "421c6ee",
    "date": "2026-07-14",
    "subject": "refresh Mokra, GDD and model-pipeline docs for the new slice"
-  },
-  {
-   "hash": "790540e",
-   "date": "2026-07-14",
-   "subject": "serve heavyweight assets from the Bunny CDN in production"
-  },
-  {
-   "hash": "3111a7c",
-   "date": "2026-07-14",
-   "subject": "directional move orders and persistent cavalry horses"
-  },
-  {
-   "hash": "fb9a293",
-   "date": "2026-07-14",
-   "subject": "crewed 75 mm Armata field-gun model"
-  },
-  {
-   "hash": "e00af28",
-   "date": "2026-07-14",
-   "subject": "textured railway line from a CC BY modular track pack"
-  },
-  {
-   "hash": "68ddf98",
-   "date": "2026-07-14",
-   "subject": "ignore the local voice-generator workspace"
   }
  ]
 }

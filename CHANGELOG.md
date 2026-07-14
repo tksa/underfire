@@ -6,6 +6,13 @@ The start-mission screen's "Latest Updates" panel is generated from the git comm
 log (`scripts/gen-changelog.mjs` → `data/changelog.json`), so it stays current
 without hand-editing.
 
+## v0.16.1 — The Freeze Fix
+
+- **Mass orders no longer freeze the game.** Ordering a large force with vehicles across the map used to hang the whole game for many seconds (profiled at 58 seconds for a 104-unit attack-move) while every vehicle's full-hull route computed synchronously. Vehicle routes now compute on a per-frame budget through a route queue: the click responds instantly and hulls start rolling as their routes land. Pathfinding itself is far cheaper (open-field checks skip the hull sweep entirely) and bounded (an unreachable destination costs bounded work instead of a full-map search). Stall recoveries, truck route rebuilds, and attack-move resumes go through the same queue with backoff, ending the re-plan churn that dragged the town-fight framerate down.
+- **Selection ring reads correctly everywhere:** it now drapes over the terrain surface (no more sinking into slopes) and is properly hidden behind vehicles and buildings instead of drawing on top of them.
+- **Reference dataset learns railways:** capture batches scatter track runs in every orientation (always including a full east-west line) and the generation prompt renders them as realistic rural single-track railways. Capture-only; gameplay maps are untouched.
+- **Menu wordmark** reads as one "UnderFire" mark.
+
 ## v0.16.0 — Anti-Tank Doctrine, Rolling Wheels, Push Crews
 
 - **Infantry anti-tank doctrine:** rifles and machine guns never fire on armor they cannot penetrate, whether auto-acquired or ordered (soft-skinned trucks, transports, and towed guns stay valid targets). A plain attack order on armor is refused with a hint; infantry near a tank they cannot hurt automatically dash to cover and kneel, or give ground when caught in the open.
