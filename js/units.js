@@ -1087,11 +1087,16 @@ Game._createUnitMesh = (unit) => {
         color: 0x39ff5e,                 // match the green move cursor (was gold)
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.9
+        opacity: 0.9,
+        // Selection must stay readable when the unit sits behind a rise:
+        // ignore the depth buffer and draw late (below the fog overlay's 999).
+        depthTest: false,
+        depthWrite: false
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.03;
+    ring.renderOrder = 998;
     ring.visible = false;
     group.add(ring);
     group.userData.selectionRing = ring;

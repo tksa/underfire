@@ -264,9 +264,10 @@ Game.buildMokraRailwayMeshes = () => {
         geometry.boundingBox.getSize(size);
         if (size.x <= 0 || size.z <= 0) throw new Error('The straight railway module has invalid bounds');
 
-        // Keep the source proportions, but reduce the complete track by 20%
-        // so its rails, sleepers and height fit the compressed Mokra map.
-        const scale = (Game.TILE * 0.92 * 0.8) / size.x;
+        // Keep the source proportions, but reduce the complete track to 64%
+        // (an initial -20%, then a further -20% pass) so its rails, sleepers
+        // and height fit the compressed Mokra map.
+        const scale = (Game.TILE * 0.92 * 0.64) / size.x;
         const segmentLength = size.z * scale;
         const count = Math.ceil(Game.WORLD_H / segmentLength);
         const coveredLength = count * segmentLength;
