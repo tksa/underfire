@@ -571,7 +571,7 @@ Game.isVehicle = (unit) => {
 Game.isTank = (kind) => {
     // Check all possible vehicle kinds
     return ['s35', 'h35', 'r35', 'b1', 'panhard', 'panzer1', 'panzer2', 'panzer3', 'panzer4', 'sdkfz',
-        'tks', 'wz34'].includes(kind);
+        'tks', 'wz34', '7tp', '7tp_dw', '7tp_dwr', 'tks20'].includes(kind);
 };
 
 Game.isTruck = (kind) => ['fuel', 'supply', 'transport'].includes(kind);
@@ -1153,7 +1153,11 @@ Game._loadUnitModel = (unit, mesh) => {
             && Game.onCavalryModelLoadFailed) Game.onCavalryModelLoadFailed(unit);
         return;
     }
+    // Kind-level aliases: variants that share another unit's GLB (the MG
+    // tankette uses the 20mm model's body and simply fires its own weapon).
+    const MODEL_ALIAS = { polish_tks: 'polish_tks20' };
     let paths = [`models/${teamKind}.glb`, `models/${unit.kind}.glb`];
+    if (MODEL_ALIAS[teamKind]) paths.unshift(`models/${MODEL_ALIAS[teamKind]}.glb`);
     // Foot infantry share one skinned soldier model (per-faction skin + named
     // sub-clips split from its baked animation). A team/kind-specific GLB still
     // wins if present; otherwise every rifleman falls back to the soldier.
@@ -1207,6 +1211,11 @@ Game._loadUnitModel = (unit, mesh) => {
         french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1,
         german_panzer3: 1.35,
         polish_fieldgun75: 1.0,
+        // Sized against the German armor they fight: a 7TP (4.6 m) matches a
+        // Panzer II (4.8 m, scale 1.0); the TKS is a car-sized tankette
+        // (2.56 m) kept slightly above strict scale for readability.
+        polish_7tp: 1.0, polish_7tp_dw: 1.0, polish_7tp_dwr: 1.0,
+        polish_tks20: 0.8, polish_tks: 0.8,
         // The mounted asset is 15% smaller than its earlier tuning
         // (0.72 × 0.85 = 0.612); its parked clone keeps this exact horse scale.
         polish_mounted_ulan: 0.612,
@@ -1215,7 +1224,9 @@ Game._loadUnitModel = (unit, mesh) => {
     // Fused-mesh tanks (turret modelled into the hull, no separate node): aim by
     // rotating the whole hull. The B1 model now has a real "turret" node, so it's
     // no longer listed here — the loader wires its turret for true traverse.
-    const MODEL_HULL_AIM = new Set();
+    // TKS 20mm: the gun sits in a fixed casemate (no turret ring) — aim with
+    // the hull like other fused meshes. The MG tankette shares its model.
+    const MODEL_HULL_AIM = new Set(['polish_tks20', 'polish_tks']);
     // Models whose turret is real geometry but NOT in a named node (Sketchfab
     // exports with generic "Object_N" mesh names). We group the listed meshes into
     // a synthetic pivot at load time so the turret traverses for real. `head`/`gun`
@@ -1229,6 +1240,18 @@ Game._loadUnitModel = (unit, mesh) => {
         // H35: the turret ("tower") is its own mesh, but with a baked origin — group
         // it so we re-pivot at the turret-ring centre rather than the model origin.
         french_h35: { meshes: ['body_tower_0'], head: 'body_tower_0' },
+        // 7TP family (turret/gun/turret2 nodes split in Blender from the fused
+        // source meshes). The dw hulls carry TWO independent turrets: `mirror`
+        // groups get their own ring pivots and copy the main turret's traverse.
+        polish_7tp: { meshes: ['turret', 'gun'], head: 'turret', gun: 'gun' },
+        polish_7tp_dwr: {
+            meshes: ['turret', 'gun'], head: 'turret', gun: 'gun',
+            mirror: [{ meshes: ['turret2'], head: 'turret2' }],
+        },
+        polish_7tp_dw: {
+            meshes: ['turret'], head: 'turret',
+            mirror: [{ meshes: ['turret2'], head: 'turret2' }],
+        },
     };
     // Single fused mesh (no separate turret geometry, e.g. a baked GLB): split the
     // mesh at load time into hull + turret by region so the turret can traverse.
@@ -1444,6 +1467,31 @@ Game._loadUnitModel = (unit, mesh) => {
                     mesh.userData.turretAxis = 'y';
                     mesh.userData.turretBaseRot = { x: turretGroup.rotation.x, y: turretGroup.rotation.y, z: turretGroup.rotation.z };
                     unit.hasTurret = true;
+                    // Twin-turret hulls (7TP dw): each extra turret gets its OWN
+                    // ring pivot and copies the main turret's traverse each frame.
+                    if (turretGroupCfg.mirror) {
+                        const mirrors = [];
+                        for (const mcfg of turretGroupCfg.mirror) {
+                            const mparts = mcfg.meshes.map(n => byName[n]).filter(Boolean);
+                            const mhead = byName[mcfg.head] || mparts[0];
+                            if (!mparts.length || !mhead) continue;
+                            const mbox = new THREE.Box3().setFromObject(mhead);
+                            const mpivot = new THREE.Vector3();
+                            mbox.getCenter(mpivot);
+                            const mgroup = new THREE.Group();
+                            mgroup.name = 'turretMirror';
+                            model.add(mgroup);
+                            model.updateMatrixWorld(true);
+                            mgroup.position.copy(model.worldToLocal(mpivot.clone()));
+                            mgroup.updateMatrixWorld(true);
+                            mparts.forEach(m => mgroup.attach(m));
+                            mirrors.push({
+                                group: mgroup,
+                                baseRot: { x: mgroup.rotation.x, y: mgroup.rotation.y, z: mgroup.rotation.z },
+                            });
+                        }
+                        if (mirrors.length) mesh.userData.turretMirrors = mirrors;
+                    }
                     console.log(`Turret grouped from ${parts.length} meshes for ${unit.label}: axis=y`);
                 } else {
                     console.warn(`Turret-group config for ${unit.label} matched no meshes!`);

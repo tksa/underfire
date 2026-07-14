@@ -183,6 +183,17 @@ Game.syncUnitMeshes = (dt) => {
             unit.mesh.userData.turret.rotation.y = base.y;
             unit.mesh.userData.turret.rotation.z = base.z;
             unit.mesh.userData.turret.rotation[axis] = base[axis] + turretRelative;
+            // Twin-turret hulls: the extra turrets copy the traverse about
+            // their own ring pivots (7TP dw's pair of MG turrets).
+            const mirrors = unit.mesh.userData.turretMirrors;
+            if (mirrors) {
+                for (const m of mirrors) {
+                    m.group.rotation.x = m.baseRot.x;
+                    m.group.rotation.y = m.baseRot.y;
+                    m.group.rotation.z = m.baseRot.z;
+                    m.group.rotation[axis] = m.baseRot[axis] + turretRelative;
+                }
+            }
 
             // Recoil animation (per-caliber spring-damper: sin * exp decay)
             const rc = unit.recoil || { gun: 0.18, head: 0.014, dur: 0.3 };

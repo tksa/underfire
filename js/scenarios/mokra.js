@@ -178,9 +178,15 @@ Game.generateMokraMap = () => {
 // scenario while retaining it for editor/debug code that explicitly changes
 // currentScenario later.
 const _generateLegacyMap = Game.generateMap;
-Game.generateMap = () => Game.currentScenario === 'mokra'
-    ? Game.generateMokraMap()
-    : _generateLegacyMap();
+Game.generateMap = () => {
+    // Mokra is wall-to-wall cultivated fields: at full density the shared
+    // rock/twig field scatter reads as junk strewn everywhere. Grass and
+    // wheat rendering are unaffected.
+    Game.FIELD_CLUTTER_MUL = Game.currentScenario === 'mokra' ? 0.25 : 1;
+    return Game.currentScenario === 'mokra'
+        ? Game.generateMokraMap()
+        : _generateLegacyMap();
+};
 
 const MOKRA_RAIL_MODEL = 'models/railway/train_track_straight.glb';
 
@@ -707,9 +713,19 @@ Game.spawnMokraScenario = () => {
     player('hmg', 60, 74, 'pl_support');
     player('mortar46', 67, 43, 'pl_support');
     player('mortar81', 72, 57, 'pl_support');
-    player('tks', 76, 46, 'pl_armor');
-    player('tks', 78, 53, 'pl_armor');
-    player('wz34', 79, 43, 'pl_recon');
+    // Armor reserve east of the line, parked in the open field BELOW the
+    // centre road (y 49-51 is road) and facing west toward the German
+    // approach. The 7TP platoon (all three variants) stiffens the tankettes;
+    // the 20mm TKS rearmaments can actually hurt German armor.
+    const west = { angle: Math.PI };
+    player('tks', 76, 56, 'pl_armor', west);
+    player('tks20', 78, 59, 'pl_armor', west);
+    player('tks20', 76, 62, 'pl_armor', west);
+    player('7tp', 81, 56, 'pl_armor', west);
+    player('7tp', 83, 59, 'pl_armor', west);
+    player('7tp_dwr', 81, 62, 'pl_armor', west);
+    player('7tp_dw', 83, 64, 'pl_armor', west);
+    player('wz34', 79, 43, 'pl_recon', west);
     // One tile west keeps the command group clear of Mokra II's sealed model
     // overhang while retaining its command radius over the foot reserve.
     player('officer', 67, 50, 'pl_command');
@@ -801,6 +817,29 @@ Game.updateMokraMission = (dt) => {
         return;
     }
 
+    // German air raid: the siren gives ~4 seconds of warning, then two Bf-110
+    // runs bomb positions near currently-held Polish ground. Bombs use the
+    // shared air-strike machinery (they hurt BOTH sides in the blast), and the
+    // flyover model is spawned by updateAirStrikes when each run begins.
+    if (!Game._mokraAirRaid) {
+        Game._mokraAirRaid = () => {
+            if (Game.Audio && Game.Audio.airRaidSiren) Game.Audio.airRaidSiren();
+            Game.pushMessage('Air raid! German bombers approaching from the west!', 5);
+            const targets = Game.units.filter(u => u.alive
+                && u.team === Game.playerTeam && !u._inVehicle);
+            for (let run = 0; run < 2; run++) {
+                const pick = targets.length
+                    ? targets[Math.floor(Game.rand(0, targets.length)) % targets.length]
+                    : { x: Game.WORLD_W * 0.55, z: Game.WORLD_H * 0.5 };
+                Game.airStrikes.push({
+                    x: Game.clamp(pick.x + Game.rand(-6, 6), 5, Game.WORLD_W - 5),
+                    z: Game.clamp(pick.z + Game.rand(-6, 6), 5, Game.WORLD_H - 5),
+                    delay: 4.0 + run * 2.2, shells: 8, done: false,
+                });
+            }
+        };
+    }
+
     // Three timed attack echelons keep the battle operational rather than a
     // single destroy-all skirmish.
     const waveTimes = [55, 125, 205];
@@ -816,6 +855,10 @@ Game.updateMokraMission = (dt) => {
         if (ms.nextWave === 3 && Game.Audio && Game.Audio.eventVoice) {
             Game.Audio.eventVoice('f_mokra_final');
         }
+        // Luftwaffe support precedes the second and final echelons: the air-raid
+        // siren sounds, then Bf-110s bomb near the Polish line. Historically the
+        // brigade was bombed repeatedly through the day at Mokra.
+        if (ms.nextWave >= 2 && Game._mokraAirRaid) Game._mokraAirRaid();
         ms.nextWave++;
     }
 

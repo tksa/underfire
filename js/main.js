@@ -1535,6 +1535,50 @@ Game.callAirStrike = (x, z) => {
     }
 };
 
+// ── Bomber flyover: a Bf-110 crosses the strike point during the bombing run,
+// north to south like the strike tracers, and flies off the map. Purely
+// visual; the walking bomb stick below carries the damage.
+Game._bombers = [];
+Game._spawnBomberFlyover = (x, z) => {
+    if (!Game.THREE || !Game.scene || !Game.loadModel) return;
+    const THREE = Game.THREE;
+    const launch = (proto) => {
+        const mesh = proto.clone();
+        mesh.traverse(o => { o.castShadow = false; o.receiveShadow = false; });
+        const fromX = x + Game.rand(-8, 8), fromZ = z - 95;
+        const len = Math.hypot(x - fromX, 95);
+        const dx = (x - fromX) / len, dz = 95 / len;
+        mesh.rotation.y = Math.atan2(dx, dz);   // model nose is +Z
+        Game.scene.add(mesh);
+        Game._bombers.push({ mesh, x: fromX, z: fromZ, dx, dz, speed: 36, alt: 27, life: 6.5 });
+    };
+    if (Game._bomberProto) { launch(Game._bomberProto); return; }
+    Game.loadModel('models/german_bf110.glb').then(model => {
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        // Same oversized read as the fighters (Game.FIGHTER.scale): planes at
+        // altitude must stay legible from the RTS camera.
+        const s = 7.0 / Math.max(0.001, size.x, size.z);
+        model.scale.setScalar(s);
+        Game._bomberProto = model;
+        launch(model);
+    }).catch(() => { /* flyover is optional garnish; bombs still fall */ });
+};
+
+Game.updateBombers = (dt) => {
+    for (let i = Game._bombers.length - 1; i >= 0; i--) {
+        const b = Game._bombers[i];
+        b.x += b.dx * b.speed * dt;
+        b.z += b.dz * b.speed * dt;
+        b.life -= dt;
+        b.mesh.position.set(b.x, b.alt, b.z);
+        if (b.life <= 0) {
+            Game.scene.remove(b.mesh);
+            Game._bombers.splice(i, 1);
+        }
+    }
+};
+
 Game.updateAirStrikes = (dt) => {
     for (let i = Game.airStrikes.length - 1; i >= 0; i--) {
         const strike = Game.airStrikes[i];
@@ -1547,6 +1591,7 @@ Game.updateAirStrikes = (dt) => {
                 strike._runStarted = true;
                 strike._shellT = 0;
                 Game.lastAttackPos = { x: strike.x, z: strike.z };
+                if (Game._spawnBomberFlyover) Game._spawnBomberFlyover(strike.x, strike.z);
                 // Bombing run visual — tracer lines from approach direction
                 for (let t = 0; t < 5; t++) {
                     const approachX = strike.x + Game.rand(-3, 3);
@@ -4972,6 +5017,7 @@ Game.tick = (now) => {
         Game.updateSupportUnits(dt);
         if (Game.updateIndirectShells) Game.updateIndirectShells(dt);
         if (Game.updateAirStrikes) Game.updateAirStrikes(dt);
+        if (Game.updateBombers) Game.updateBombers(dt);
         if (Game.updateFighters) Game.updateFighters(dt);
         if (Game.updateThrownGrenades) Game.updateThrownGrenades(dt);
         if (Game.updateSmokeClouds) Game.updateSmokeClouds(dt);

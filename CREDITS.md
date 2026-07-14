@@ -90,6 +90,28 @@ modules, converting its legacy specular-glossiness material to standard PBR,
 and externalising its shared diffuse and normal maps. Digital Goblin does not endorse Under
 Fire. See `models/railway/ATTRIBUTION.md` for the per-file notice.
 
+"7TP JW low poly for free" ([source](https://skfb.ly/oTuBy)) and "7TP DW
+Refited low poly for free" ([source](https://skfb.ly/oTuDn)) are by
+**adrielcz**, used under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). They provide the
+three 7TP variants (`models/polish_7tp.glb`, `models/polish_7tp_dw.glb`,
+`models/polish_7tp_dwr.glb`). Modified for Under Fire by separating the
+turret and gun geometry into named nodes so the turrets traverse in-engine,
+removing the emissive maps, and downscaling/re-encoding the textures.
+adrielcz does not endorse Under Fire.
+
+"TKS 20mm tankette" (`models/polish_tks20.glb`) is by **Call_ada**
+([source](https://skfb.ly/p7QTH)), used under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Modified by
+renaming the gun node for in-engine muzzle wiring and downscaling/re-encoding
+the textures. Call_ada does not endorse Under Fire.
+
+"Bf-110" (`models/german_bf110.glb`) is by **philano**
+([source](https://skfb.ly/oLKJG)), used under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Modified by
+decimating the mesh and downscaling/re-encoding the texture for the bombing
+flyover. philano does not endorse Under Fire.
+
 "French Panhard 178" (`models/french_panhard.glb`) is by **42manako**
 (https://skfb.ly/pw9AX), used under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
