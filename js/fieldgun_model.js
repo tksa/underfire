@@ -22,8 +22,8 @@ Game.FIELDGUN75_CREW_COUNT = 2;
 Game.FIELDGUN75_CREW_PLACEMENTS = Object.freeze([
     // Coordinates are defined before the gun's per-model half-turn, when its
     // trails extend toward +Z. The crew host inherits that half-turn below.
-    Object.freeze({ x: -0.23, z: 0.48, phase: 0.00, restStance: 'crouch', role: 'trail_left' }),
-    Object.freeze({ x:  0.23, z: 0.64, phase: 0.50, restStance: 'crouch', role: 'trail_right' }),
+    Object.freeze({ x: -0.23, z: 0.40, phase: 0.00, restStance: 'crouch', role: 'trail_left' }),
+    Object.freeze({ x:  0.23, z: 0.54, phase: 0.50, restStance: 'crouch', role: 'trail_right' }),
 ]);
 
 Game.FIELDGUN_PUSH_KEYS = Object.freeze([
@@ -90,6 +90,89 @@ Game._makeFieldGunCrewman = (materials) => {
 
     root.userData.controls = { left, right, upper, armL, armR };
     return root;
+};
+
+// Push stance for the real soldier rigs, tuned visually in Blender against the
+// reference push cycle: torso driven forward over the trails, both arms
+// extended forward-and-down onto the carriage, head back up toward the road.
+// Angles are radians; "down" angles are measured below the horizontal.
+Game.FIELDGUN_PUSH_POSE = Object.freeze({
+    torsoLean: 0.52,
+    headBack: -0.42,
+    upperArmDown: 0.70,
+    forearmDown: 0.91,
+    armFlare: 0.10,
+});
+
+// While the push is active the whole man steps in toward the carriage (world
+// units, scaled by the push blend) so the reaching hands meet the trails
+// instead of hovering behind them. At rest he kneels back at his placement.
+Game.FIELDGUN_PUSH_CLOSE = 0.15;
+
+// Solve the push-stance target quaternions on the actual runtime rig instead of
+// baking Blender values: bone rest frames differ between the source GLB and any
+// re-export, so aiming the real limb vectors here is convention-proof. Must run
+// while the clone still holds its bind pose (before the mixer first updates).
+Game._solveFieldGunPushPose = (figure) => {
+    const THREE = Game.THREE;
+    const model = figure.userData.soldierModel;
+    const P = Game.FIELDGUN_PUSH_POSE;
+    if (!THREE || !model || !P) return null;
+    const names = {
+        torso: 'torso_010', head: 'head_017',
+        shoulderL: 'shoulder_left_011', armL: 'arm_left_012', fistL: 'fist_left_013',
+        shoulderR: 'shoulder_right_014', armR: 'arm_right_015', fistR: 'fist_right_016',
+    };
+    const bones = {};
+    model.traverse(object => {
+        for (const key in names) if (object.name === names[key]) bones[key] = object;
+    });
+    if (!bones.torso || !bones.shoulderL || !bones.armL
+        || !bones.shoulderR || !bones.armR) return null;
+
+    const rest = {};
+    for (const key in bones) rest[key] = bones[key].quaternion.clone();
+    figure.updateMatrixWorld(true);
+
+    // The wrapped soldier faces figure-local +Z (same tuning as line infantry);
+    // the figure's own yaw has already turned him toward the breech.
+    const F = new THREE.Vector3(0, 0, 1).applyQuaternion(figure.quaternion).normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+    const side = new THREE.Vector3().crossVectors(F, up).normalize();
+    const leanAxis = new THREE.Vector3().crossVectors(up, F).normalize();
+
+    // Rotate a bone by a solver-frame delta, keeping its origin fixed.
+    const premul = (bone, delta) => {
+        const parentQ = bone.parent.getWorldQuaternion(new THREE.Quaternion());
+        bone.quaternion.premultiply(
+            parentQ.clone().invert().multiply(delta).multiply(parentQ));
+        figure.updateMatrixWorld(true);
+    };
+    // Aim the from→to limb vector at a direction (rotates the "from" bone).
+    const aimLimb = (from, to, dir) => {
+        const a = from.getWorldPosition(new THREE.Vector3());
+        const b = to.getWorldPosition(new THREE.Vector3());
+        premul(from, new THREE.Quaternion().setFromUnitVectors(
+            b.sub(a).normalize(), dir));
+    };
+    const reach = (down, flare) => F.clone().multiplyScalar(Math.cos(down))
+        .addScaledVector(up, -Math.sin(down)).addScaledVector(side, flare).normalize();
+
+    premul(bones.torso, new THREE.Quaternion().setFromAxisAngle(leanAxis, P.torsoLean));
+    aimLimb(bones.shoulderL, bones.armL, reach(P.upperArmDown, -P.armFlare));
+    aimLimb(bones.shoulderR, bones.armR, reach(P.upperArmDown, P.armFlare));
+    if (bones.fistL) aimLimb(bones.armL, bones.fistL, reach(P.forearmDown, -P.armFlare * 0.6));
+    if (bones.fistR) aimLimb(bones.armR, bones.fistR, reach(P.forearmDown, P.armFlare * 0.6));
+    if (bones.head) premul(bones.head, new THREE.Quaternion().setFromAxisAngle(leanAxis, P.headBack));
+
+    // Capture the solved locals as blend targets, then restore the bind pose.
+    const solved = ['torso', 'head', 'shoulderL', 'armL', 'shoulderR', 'armR'];
+    const targets = solved.filter(key => bones[key]).map(key => ({
+        bone: bones[key], quat: bones[key].quaternion.clone(),
+    }));
+    for (const key in bones) bones[key].quaternion.copy(rest[key]);
+    figure.updateMatrixWorld(true);
+    return targets;
 };
 
 Game._fieldGunSoldierRestPose = (model) => {
@@ -206,8 +289,13 @@ Game._makeFieldGunSoldierCrewman = (model, placement, index) => {
         fieldGunFacingRoot: facingRoot,
         fieldGunRole: placement.role,
         fieldGunRestStance: placement.restStance,
+        fieldGunHomeZ: placement.z,
         phaseOffset: placement.phase,
     });
+    // Solve while the clone is still in its bind pose, before the first
+    // mixer/animation update below can disturb the limb vectors.
+    figure.userData.pushPose = Game._solveFieldGunPushPose
+        ? Game._solveFieldGunPushPose(figure) : null;
     figure.userData.animationUnit = {
         mesh: figure,
         stance: placement.restStance,
@@ -342,6 +430,7 @@ Game.attachFieldGunCrew = (unit, unitMesh) => {
         figure.rotation.y = Math.PI;
         figure.userData.baseY = 0.01;
         figure.userData.kneelSide = index % 2;
+        figure.userData.fieldGunHomeZ = placement.z;
         figure.userData.phaseOffset = placement.phase;
         crew.add(figure);
         return figure;
@@ -384,12 +473,110 @@ Game._sampleFieldGunPush = (phase) => {
     return pose;
 };
 
+// Roll the wheels with the carriage. The GLB carries `wheel_left`/`wheel_right`
+// nodes with hub-centred origins; the axle is the disc's thin local axis, so
+// the spin adapts to whatever axis conventions load/export produced.
+Game.updateFieldGunWheels = (unit, dt) => {
+    const THREE = Game.THREE;
+    const ud = unit && unit.mesh && unit.mesh.userData;
+    if (!THREE || !ud) return;
+    const wrapper = ud.modelWrapper;
+    const childCount = wrapper ? wrapper.children.length : 0;
+    if (ud.fieldGunWheels === undefined || ud.fieldGunWheelScan !== childCount) {
+        // The gun model arrives asynchronously: rescan whenever the wrapper's
+        // content changes, so a late load still finds its wheels.
+        ud.fieldGunWheelScan = childCount;
+        const found = [];
+        unit.mesh.traverse(object => {
+            if (object.name !== 'wheel_left' && object.name !== 'wheel_right') return;
+            const geometry = object.geometry;
+            if (!geometry) return;
+            if (!geometry.boundingBox) geometry.computeBoundingBox();
+            const size = geometry.boundingBox.getSize(new THREE.Vector3());
+            const axis = size.x < size.y && size.x < size.z ? 'x'
+                : (size.y < size.z ? 'y' : 'z');
+            found.push({
+                node: object,
+                axle: new THREE.Vector3(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0),
+                radiusLocal: Math.max(size.x, size.y, size.z) * 0.5,
+            });
+        });
+        ud.fieldGunWheels = found.length ? found : null;
+    }
+    const lastX = ud.fieldGunWheelX, lastZ = ud.fieldGunWheelZ;
+    ud.fieldGunWheelX = unit.x;
+    ud.fieldGunWheelZ = unit.z;
+    if (!ud.fieldGunWheels || lastX == null || !(dt > 0)) return;
+    const dx = unit.x - lastX, dz = unit.z - lastZ;
+    if (dx * dx + dz * dz < 1e-10) return;
+    const tmp = Game._fieldGunWheelTmp || (Game._fieldGunWheelTmp = {
+        up: new THREE.Vector3(0, 1, 0),
+        disp: new THREE.Vector3(),
+        roll: new THREE.Vector3(),
+        axle: new THREE.Vector3(),
+        col: new THREE.Vector3(),
+    });
+    tmp.disp.set(dx, 0, dz);
+    // Rolling without slipping: the rotation vector for this displacement is
+    // (up × d) / r; each wheel takes its component along its own world axle.
+    tmp.roll.crossVectors(tmp.up, tmp.disp);
+    for (const wheel of ud.fieldGunWheels) {
+        const scale = tmp.col.setFromMatrixColumn(wheel.node.matrixWorld, 1).length() || 1;
+        const radius = Math.max(1e-4, wheel.radiusLocal * scale);
+        tmp.axle.copy(wheel.axle).transformDirection(wheel.node.matrixWorld);
+        wheel.node.rotateOnAxis(wheel.axle, tmp.roll.dot(tmp.axle) / radius);
+    }
+};
+
+// Snap the crew back to the exact state they were built in: every action
+// stopped, all accumulated clip/gait/blend state cleared, then the rest pose
+// replayed from scratch. This is the same path the initial load takes, so the
+// post-move rest can never drift from the spawn kneel.
+Game._resetFieldGunCrewRest = (unit, crew) => {
+    const ud = unit.mesh.userData;
+    ud.fieldGunPushBlend = 0;
+    ud.fieldGunPushTime = 0;
+    (crew.userData.figures || []).forEach(figure => {
+        const data = figure.userData;
+        if (data.mixer && data.mixer.stopAllAction) data.mixer.stopAllAction();
+        data._activeClip = null;
+        data._clipSince = undefined;
+        data._gaitBlend = 0;
+        data._gaitPhase = 0;
+        data._locoOn = false;
+        data._runOn = false;
+        const animationUnit = data.animationUnit;
+        if (animationUnit) {
+            animationUnit.stance = data.fieldGunRestStance || 'crouch';
+            animationUnit.currentSpeed = 0;
+            animationUnit._dispSpeed = 0;
+            if (Game._updateModelAnimation) Game._updateModelAnimation(animationUnit, 0);
+        }
+        Game._correctFieldGunCrewFacing(figure);
+        figure.position.y = 0.01;
+        if (data.fieldGunHomeZ != null) figure.position.z = data.fieldGunHomeZ;
+    });
+};
+
 Game.updateFieldGunCrew = (unit, dt) => {
     const ud = unit && unit.mesh && unit.mesh.userData;
     const crew = ud && ud.fieldGunCrew;
+    if (Game.updateFieldGunWheels) Game.updateFieldGunWheels(unit, dt);
     if (!crew || !crew.userData.figures) return;
     const speed = unit._dispSpeed != null ? unit._dispSpeed : (unit.currentSpeed || 0);
-    const pushing = speed > 0.06 && unit._canMove !== false;
+    // Hysteresis: engage the push at walk-clip pace (0.3, as _chooseClip), and
+    // drop it at the PROCEDURAL GAIT threshold (0.2, _soldierProceduralLegs),
+    // not below it. A lower drop-out kept "pushing" latched while the settling
+    // gun micro-jittered at 0.12..0.2 — a band where the walk clip plays but
+    // the gait is off, freezing the crew in a leaning half-stand. Pushing must
+    // imply striding legs; anything slower kneels.
+    const pushing = speed > (ud.fieldGunPushOn ? 0.2 : 0.3) && unit._canMove !== false;
+    // Movement just ended: let the pose EASE out (crouch crossfade + blend
+    // decay below), then anchor on the exact spawn rest state once the blend
+    // has died away — smooth on the way down, identical to load at the end.
+    if (ud.fieldGunPushOn && !pushing) ud.fieldGunRestPending = true;
+    if (pushing) ud.fieldGunRestPending = false;
+    ud.fieldGunPushOn = pushing;
     const response = Math.min(1, Math.max(0, dt * 7));
     ud.fieldGunPushBlend = Game.lerp(ud.fieldGunPushBlend || 0, pushing ? 1 : 0, response);
     if (pushing) {
@@ -397,7 +584,14 @@ Game.updateFieldGunCrew = (unit, dt) => {
         ud.fieldGunPushTime = ((ud.fieldGunPushTime || 0) + dt * cadence) % 1;
     }
 
-    const blend = ud.fieldGunPushBlend || 0;
+    let blend = ud.fieldGunPushBlend || 0;
+    if (ud.fieldGunRestPending && !pushing && blend < 0.02 && Game._resetFieldGunCrewRest) {
+        // The ease-out has finished (the crouch is already showing at nearly
+        // full weight), so rebuilding the state now is visually seamless.
+        ud.fieldGunRestPending = false;
+        Game._resetFieldGunCrewRest(unit, crew);
+        blend = 0;
+    }
     if (crew.userData.crewMode === 'soldier') {
         // These are genuine soldier rigs. Feed them through the same clip,
         // speed-sync and procedural-leg pipeline as ordinary Polish infantry so
@@ -415,6 +609,14 @@ Game.updateFieldGunCrew = (unit, dt) => {
             } else if (data.mixer) {
                 data.mixer.update(dt);
             }
+            // A resting artilleryman KNEELS, unconditionally. The shared clip
+            // chooser has speed/stance/min-hold bands that can strand a crewman
+            // in the standing idle after a move; his rest pose is not
+            // negotiable, so force the clip rather than trust the chooser.
+            if (!pushing && data._activeClip !== 'crouch'
+                && data.actions && data.actions.crouch && Game._playClip) {
+                Game._playClip(animationUnit, 'crouch', Game.SOLDIER_POSTURE_FADE || 0.3);
+            }
             // Animation clips may pose the body, but they must never turn an
             // artilleryman away from the heading established by his crew slot.
             Game._correctFieldGunCrewFacing(figure);
@@ -430,7 +632,19 @@ Game.updateFieldGunCrew = (unit, dt) => {
                 if (action && clip && clip.duration) action.time = clip.duration * phase;
                 data._gaitPhase = Math.PI * 2 * phase;
             }
+            // Push stance: blend the upper body from the clip's port-arms pose
+            // into the solved lean-and-reach so the hands stay planted on the
+            // carriage while the legs keep the shared procedural stride.
+            if (data.pushPose && blend > 0.01) {
+                for (const target of data.pushPose) {
+                    target.bone.quaternion.slerp(target.quat, blend);
+                }
+            }
             figure.position.y = 0.01;
+            if (data.fieldGunHomeZ != null) {
+                figure.position.z = data.fieldGunHomeZ
+                    - (Game.FIELDGUN_PUSH_CLOSE || 0) * blend;
+            }
         });
     } else {
         // Load-failure fallback: the two simple articulated figures mirror the
@@ -468,6 +682,10 @@ Game.updateFieldGunCrew = (unit, dt) => {
             c.armL.shoulder.rotation.x = pose.armL;
             c.armR.shoulder.rotation.x = pose.armR;
             figure.position.y = (figure.userData.baseY || 0) + pose.rootY;
+            if (figure.userData.fieldGunHomeZ != null) {
+                figure.position.z = figure.userData.fieldGunHomeZ
+                    - (Game.FIELDGUN_PUSH_CLOSE || 0) * blend;
+            }
         });
     }
 
