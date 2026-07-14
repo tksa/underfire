@@ -5229,6 +5229,7 @@ Game.boot = async () => {
             const tryFade = () => {
                 const quiet = !busy && (performance.now() - quietAt > 900);
                 if (quiet || performance.now() - t0 > 15000) {
+                    if (window.ufStopBootLoaderMessages) window.ufStopBootLoaderMessages();
                     bl.style.opacity = '0';
                     setTimeout(() => { bl.style.display = 'none'; }, 1300);
                 } else {

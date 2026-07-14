@@ -1223,17 +1223,153 @@
       margin-bottom: 8px;
       font-size: 12px;
     }
+
+    /* First-load cover. The rotating copy is deliberately thematic rather
+       than a fake percentage: boot time varies with model and texture cache. */
+    #bootLoader {
+      position: fixed;
+      inset: 0;
+      z-index: 6000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 28px;
+      overflow: hidden;
+      pointer-events: none;
+      opacity: 1;
+      color: #d7dde6;
+      background:
+        radial-gradient(circle at 50% 43%, rgba(58, 63, 64, 0.34), transparent 36%),
+        linear-gradient(180deg, #080a0c 0%, #000 100%);
+      transition: opacity 1.2s ease;
+    }
+
+    .boot-loader__content {
+      width: min(430px, 88vw);
+      text-align: center;
+    }
+
+    .boot-loader__spinner {
+      width: 46px;
+      height: 46px;
+      margin: 0 auto 25px;
+      border: 3px solid #22282e;
+      border-top-color: #d8ba7b;
+      border-radius: 50%;
+      animation: bootspin 1s linear infinite;
+    }
+
+    .boot-loader__kicker {
+      margin-bottom: 8px;
+      color: #d8ba7b;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+    }
+
+    .boot-loader__title {
+      color: #eef1f4;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: clamp(22px, 4.5vw, 31px);
+      font-weight: 600;
+      letter-spacing: 0.025em;
+    }
+
+    .boot-loader__message {
+      min-height: 1.5em;
+      margin-top: 15px;
+      color: #c9a45d;
+      font-size: 14px;
+      letter-spacing: 0.035em;
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .boot-loader__message.is-changing {
+      opacity: 0;
+      transform: translateY(3px);
+    }
+
+    .boot-loader__note {
+      margin-top: 17px;
+      color: #7f8993;
+      font-size: 11px;
+      line-height: 1.5;
+      letter-spacing: 0.025em;
+    }
+
+    @keyframes bootspin {
+      to { transform: rotate(360deg); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #bootLoader,
+      .boot-loader__message {
+        transition: none;
+      }
+
+      .boot-loader__spinner {
+        animation: none;
+      }
+    }
   </style>
 </head>
 
 <body>
-  <div id="bootLoader"
-    style="position:fixed;inset:0;background:#000;z-index:6000;display:flex;align-items:center;justify-content:center;opacity:1;transition:opacity 1.2s ease;pointer-events:none">
-    <div style="width:46px;height:46px;border:3px solid #22282e;border-top-color:#d8ba7b;border-radius:50%;animation:bootspin 1s linear infinite"></div>
-    <style>
-      @keyframes bootspin { to { transform: rotate(360deg); } }
-    </style>
+  <div id="bootLoader" role="status" aria-live="polite" aria-atomic="true"
+    aria-label="Preparing the battlefield. Still loading; the first deployment may take a moment.">
+    <div class="boot-loader__content">
+      <div class="boot-loader__spinner" aria-hidden="true"></div>
+      <div class="boot-loader__kicker">Field preparations</div>
+      <div class="boot-loader__title">Preparing the battlefield</div>
+      <div class="boot-loader__message" id="bootLoaderMessage" aria-hidden="true">Consulting operational maps…</div>
+      <div class="boot-loader__note" id="bootLoaderNote" aria-hidden="true">Still loading — the first deployment may take a moment.</div>
+    </div>
   </div>
+  <script>
+    (function () {
+      var messages = [
+        'Consulting operational maps…',
+        'Briefing field officers…',
+        'Issuing ammunition…',
+        'Fueling the armoured column…',
+        'Calibrating artillery sights…',
+        'Establishing field communications…',
+        'Preparing medical stations…',
+        'Checking railway crossings…',
+        'Forming infantry sections…',
+        'Camouflaging gun positions…',
+        'Plotting approach routes…',
+        'Awaiting reconnaissance reports…'
+      ];
+      var message = document.getElementById('bootLoaderMessage');
+      var note = document.getElementById('bootLoaderNote');
+      var index = 0;
+      var swapTimer = 0;
+      var longLoadTimer = window.setTimeout(function () {
+        if (note) note.textContent = 'Still loading — large battlefield assets are being prepared.';
+      }, 9000);
+      var rotationTimer = window.setInterval(function () {
+        if (!message) return;
+        message.classList.add('is-changing');
+        window.clearTimeout(swapTimer);
+        swapTimer = window.setTimeout(function () {
+          index = (index + 1) % messages.length;
+          message.textContent = messages[index];
+          message.classList.remove('is-changing');
+        }, 180);
+      }, 2000);
+
+      window.ufStopBootLoaderMessages = function () {
+        window.clearInterval(rotationTimer);
+        window.clearTimeout(swapTimer);
+        window.clearTimeout(longLoadTimer);
+        if (message) message.classList.remove('is-changing');
+      };
+    })();
+  </script>
   <div id="shell">
     <div id="viewport">
       <!-- Three.js canvas is injected here by engine.js -->

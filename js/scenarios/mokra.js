@@ -640,9 +640,13 @@ Game.spawnMokraScenario = () => {
     };
     gunLine.forEach(position => player(position.kind, position.x, position.y,
         'pl_gun_line', { angle: Math.PI }));
-    infantryLine.forEach(position => Game.spawnPolishLineSection(
-        position.x * T, position.y * T, position.group));
-    Game.spawnPolishSquad(70 * T, 51 * T, 'pl_reserve');
+    const attentionInfantry = [];
+    infantryLine.forEach(position => attentionInfantry.push(...Game.spawnPolishLineSection(
+        position.x * T, position.y * T, position.group)));
+    attentionInfantry.push(...Game.spawnPolishSquad(70 * T, 51 * T, 'pl_reserve'));
+    Game.mokraDeployment.attentionAngle = MOKRA_INFANTRY_ATTENTION_ANGLE;
+    Game.mokraDeployment.attentionScatterMax = 0.21;
+    Game.mokraDeployment.attentionUnitIds = attentionInfantry.map(unit => unit.id);
     cavalryReserve.forEach(position => player('mounted_ulan', position.x, position.y,
         'pl_12th_uhlans_reserve', { angle: Math.PI, veterancy: 0.12 }));
 
@@ -676,7 +680,7 @@ Game.spawnMokraScenario = () => {
         phase: 1, phaseName: 'Deployment', holdDuration: 300,
         deploymentDuration: MOKRA_DEPLOYMENT_SECONDS,
         deploymentRemaining: MOKRA_DEPLOYMENT_SECONDS,
-        deploymentStarted: false, combatStarted: false, sirenPlayed: false,
+        deploymentStarted: false, combatStarted: false,
         contestedTime: 0, enemyLosses: 0, enemyCommitted: 0,
         nextWave: 1, reinforcementTriggered: false,
         reinforcementReport: 'German armour is forming beyond the western map edge. Attack in 3:00.',
@@ -697,11 +701,7 @@ Game.startMokraDeployment = () => {
     if (Game.currentScenario !== 'mokra' || ms.deploymentStarted) return false;
     ms.deploymentStarted = true;
     ms.deploymentRemaining = ms.deploymentDuration || MOKRA_DEPLOYMENT_SECONDS;
-    if (!ms.sirenPlayed) {
-        if (Game.Audio?.airRaidSiren) Game.Audio.airRaidSiren();
-        ms.sirenPlayed = true;
-    }
-    Game.pushMessage('SIREN — German attack in 3:00. Deploy infantry into the woods!', 8);
+    Game.pushMessage('German attack in 3:00. Deploy infantry into the woods!', 8);
     return true;
 };
 
