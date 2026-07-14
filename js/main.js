@@ -3261,6 +3261,9 @@ Game._setRefFallenDividers = (on) => {
 // per-frame enforcement below.
 Game._refKeep = (o) => o === Game.terrainMesh
     || o.name === 'water-surface'
+    // The railway is part of the ground-truth layout: reference shots of the
+    // Mokra map must show the track line, like walls and fences.
+    || o.name === 'mokra-railway-model'
     || (o.name && o.name.startsWith('divider-'));
 
 // Models attach through async loader callbacks (dividers, bridge, windmill),
