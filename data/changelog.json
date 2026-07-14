@@ -1,8 +1,43 @@
 {
- "version": "v0.14.0",
- "build": "54a3508",
- "generated": "2026-07-13",
+ "version": "v0.15.0",
+ "build": "421c6ee",
+ "generated": "2026-07-14",
  "commits": [
+  {
+   "hash": "421c6ee",
+   "date": "2026-07-14",
+   "subject": "refresh Mokra, GDD and model-pipeline docs for the new slice"
+  },
+  {
+   "hash": "790540e",
+   "date": "2026-07-14",
+   "subject": "serve heavyweight assets from the Bunny CDN in production"
+  },
+  {
+   "hash": "3111a7c",
+   "date": "2026-07-14",
+   "subject": "directional move orders and persistent cavalry horses"
+  },
+  {
+   "hash": "fb9a293",
+   "date": "2026-07-14",
+   "subject": "crewed 75 mm Armata field-gun model"
+  },
+  {
+   "hash": "e00af28",
+   "date": "2026-07-14",
+   "subject": "textured railway line from a CC BY modular track pack"
+  },
+  {
+   "hash": "68ddf98",
+   "date": "2026-07-14",
+   "subject": "ignore the local voice-generator workspace"
+  },
+  {
+   "hash": "e2b942b",
+   "date": "2026-07-13",
+   "subject": "release v0.14.0"
+  },
   {
    "hash": "54a3508",
    "date": "2026-07-13",
@@ -37,41 +72,6 @@
    "hash": "3ab10b5",
    "date": "2026-07-12",
    "subject": "restore collision-aware truck movement"
-  },
-  {
-   "hash": "aa0becb",
-   "date": "2026-07-12",
-   "subject": "release v0.12.0"
-  },
-  {
-   "hash": "763db73",
-   "date": "2026-07-12",
-   "subject": "add Battle of Mokra preview"
-  },
-  {
-   "hash": "acee609",
-   "date": "2026-07-10",
-   "subject": "release v0.11.0"
-  },
-  {
-   "hash": "8505aaf",
-   "date": "2026-07-10",
-   "subject": "add Renault troop transport"
-  },
-  {
-   "hash": "f8ad618",
-   "date": "2026-07-09",
-   "subject": "refresh changelog"
-  },
-  {
-   "hash": "27689dc",
-   "date": "2026-07-09",
-   "subject": "solid building boundary so hulls stop at the wall"
-  },
-  {
-   "hash": "a2abda6",
-   "date": "2026-07-07",
-   "subject": "refresh changelog"
   }
  ]
 }
