@@ -146,3 +146,28 @@ The counters are cumulative from the relevant scenario construction/rebuild or p
 - Use HUD state signatures to avoid rebuilding unchanged markup even at 10 Hz, and throttle animation when the page/menu is hidden.
 - For long recorder captures, use chunked/typed storage and revoke the download Blob URL after export.
 - Confirm results in a hardware-accelerated browser with Chrome Performance, Memory, and WebGL tooling. Use user-supplied screenshots for visual validation.
+
+## v0.16.x Dyle mass-order investigation (2026-07-14)
+
+`scripts/dyle-assault-profile.mjs` (a Dyle-map sibling of the Mokra sampler) stages a doubled French force (104 units) and attack-moves everyone into the village, sampling idle / advance / assault phases headlessly.
+
+### Baseline evidence
+
+A mass attack-move with ~9 vehicles froze the main thread for about **58 seconds** in a single long task: one synchronous full-hull heading-A* per selected vehicle in the input handler, up to **10.3 s per search**, with **1.9 million** `segmentPassable` sweeps. During the town fight, the assault-resume branch re-planned pathless vehicles **every frame** with no throttle, and truck stall recovery rebuilt multi-leg routes synchronously — together holding frames at ~600 ms.
+
+### Mitigations
+
+- **Open-region fast path** (`Game._regionClear`): when no static solid or parked-vehicle tile lies within hull reach of an A* node or edge, the full hull-sample test is skipped. Reads live tile flags, so no cache invalidation is needed when walls fall or buildings collapse.
+- **Distance-scaled search cap**: vehicle A* is bounded by `6000 + 300·distTiles` states instead of the full grid×8-heading space (720k states on a 300² map), so unreachable goals cost bounded work. `findPath` accepts an optional node budget.
+- **Vehicle route queue** (`Game.queueVehiclePath` / `Game.queueRouteJob` / `Game.processVehicleRouteQueue`): long-haul player orders (move, retreat, attack approach), assault resumes, stall recoveries, and truck multi-leg restores enqueue; the game loop drains at least one job per frame within a ~6 ms budget. Pending vehicles hold via `unit._routePending` (the move module treats an empty pending path as "waiting", never "arrived"), and a failed recovery search backs the unit off for 4-8 s instead of retrying each stall tick.
+
+### Post-fix verification (same scenario)
+
+| Phase | Before | After |
+| --- | --- | --- |
+| Order issue | one 58,240 ms long task, zero frames | no freeze; frames continue |
+| Advance | no frames rendered | 12.1 ms mean frame, p95 9.3 ms |
+| Assault | no frames rendered | 9.8 ms mean frame, p95 9.0 ms |
+| Worst single `findPath` | 10,347 ms | ~150 ms (queued, ≤1 per frame) |
+
+Remaining tail: a queued cross-map vehicle search can still hold one frame for 100-180 ms (9-26 such frames per 8 s under the stress scenario). If that reads as micro-stutter in real play, the next step is a resumable/time-sliced A* inside the queue rather than lower caps.

@@ -11,6 +11,33 @@ Game.heuristic = (a, b) => {
     return 0.75 * (Math.max(dx, dy) + 0.41421356 * Math.min(dx, dy));
 };
 
+/**
+ * Open-region fast path for the hull tests below. True when NO static solid
+ * (and no parked-vehicle tile from the obstacle context) lies within `reach`
+ * of the segment (ax,az)→(bx,bz): the full hull-sample sweep cannot possibly
+ * hit anything, so callers may skip it. Reads live tile flags, so it needs no
+ * cache invalidation when walls fall or buildings collapse. On the profiled
+ * Dyle assault this removes ~90% of the per-edge sampling (open fields).
+ */
+Game._regionClear = (ax, az, bx, bz, reach, obstacleCtx, vehSolid) => {
+    const T = Game.TILE;
+    const tx0 = Math.floor((Math.min(ax, bx) - reach) / T);
+    const tx1 = Math.floor((Math.max(ax, bx) + reach) / T);
+    const ty0 = Math.floor((Math.min(az, bz) - reach) / T);
+    const ty1 = Math.floor((Math.max(az, bz) + reach) / T);
+    const tiles = obstacleCtx && obstacleCtx.tiles;
+    for (let ty = ty0; ty <= ty1; ty++) {
+        for (let tx = tx0; tx <= tx1; tx++) {
+            const tile = Game.getTile(tx, ty);
+            if (!tile) return false;                    // off-map: precise path decides
+            if (tile.blocked) return false;
+            if (vehSolid && tile.vehicleBlocked && tile.type !== 'dense_forest') return false;
+            if (tiles && tiles.has(tx + ',' + ty)) return false;
+        }
+    }
+    return true;
+};
+
 Game.tileCost = (unit, tx, ty, angle = unit.angle || 0, obstacleCtx = null) => {
     const tile = Game.getTile(tx, ty);
     if (!tile || tile.blocked) return Infinity;
@@ -26,12 +53,18 @@ Game.tileCost = (unit, tx, ty, angle = unit.angle || 0, obstacleCtx = null) => {
         // A horse is not a point. Use its full circular footprint against solid
         // terrain and keep it clear of parked hull rectangles while retaining a
         // lighter point-state A* than the expensive eight-heading vehicle graph.
-        if (Game._bodySolidCount && Game._bodySolidCount(unit, p.x, p.z, angle) > 0) {
-            return Infinity;
-        }
-        if (obstacleCtx && Game._tankBoxPush) {
-            for (const other of obstacleCtx.vehicles) {
-                if (Game._tankBoxPush(p.x, p.z, other, unit.size, 0.25)) return Infinity;
+        // In the open (no solid or parked tile within reach) the footprint
+        // cannot hit anything: skip the sampling entirely.
+        const open = obstacleCtx && obstacleCtx.reach != null
+            && Game._regionClear(p.x, p.z, p.x, p.z, obstacleCtx.reach, obstacleCtx, false);
+        if (!open) {
+            if (Game._bodySolidCount && Game._bodySolidCount(unit, p.x, p.z, angle) > 0) {
+                return Infinity;
+            }
+            if (obstacleCtx && Game._tankBoxPush) {
+                for (const other of obstacleCtx.vehicles) {
+                    if (Game._tankBoxPush(p.x, p.z, other, unit.size, 0.25)) return Infinity;
+                }
             }
         }
         let cost = tile.move + dyn;
@@ -50,18 +83,23 @@ Game.tileCost = (unit, tx, ty, angle = unit.angle || 0, obstacleCtx = null) => {
         const p = Game.worldFromTile(tx, ty);
         // Configuration-space test: the complete oriented body must fit at this
         // node, with clearance from terrain and every parked vehicle. A centre
-        // point on a legal tile is not enough for a 3.6u-long truck.
-        if (Game._bodySolidCount && Game._bodySolidCount(unit, p.x, p.z, angle) > 0) return Infinity;
-        if (obstacleCtx && Game._vehicleOBB && Game._obbPenetration) {
-            const bodies = Game._vehicleCollisionOBBs
-                ? Game._vehicleCollisionOBBs(unit, p.x, p.z, angle)
-                : [Game._vehicleOBB(unit, p.x, p.z, angle)];
-            for (const other of obstacleCtx.vehicles) {
-                const otherBodies = Game._vehicleCollisionOBBs
-                    ? Game._vehicleCollisionOBBs(other)
-                    : [Game._vehicleOBB(other)];
-                for (const body of bodies) for (const otherBody of otherBodies) {
-                    if (Game._obbPenetration(body, otherBody, 0.20)) return Infinity;
+        // point on a legal tile is not enough for a 3.6u-long truck. In the
+        // open (no solid or parked tile within hull reach) it trivially fits.
+        const open = obstacleCtx && obstacleCtx.reach != null
+            && Game._regionClear(p.x, p.z, p.x, p.z, obstacleCtx.reach, obstacleCtx, true);
+        if (!open) {
+            if (Game._bodySolidCount && Game._bodySolidCount(unit, p.x, p.z, angle) > 0) return Infinity;
+            if (obstacleCtx && Game._vehicleOBB && Game._obbPenetration) {
+                const bodies = Game._vehicleCollisionOBBs
+                    ? Game._vehicleCollisionOBBs(unit, p.x, p.z, angle)
+                    : [Game._vehicleOBB(unit, p.x, p.z, angle)];
+                for (const other of obstacleCtx.vehicles) {
+                    const otherBodies = Game._vehicleCollisionOBBs
+                        ? Game._vehicleCollisionOBBs(other)
+                        : [Game._vehicleOBB(other)];
+                    for (const body of bodies) for (const otherBody of otherBodies) {
+                        if (Game._obbPenetration(body, otherBody, 0.20)) return Infinity;
+                    }
                 }
             }
         }
@@ -119,10 +157,28 @@ Game._buildDynObstacles = (unit) => {
             }
         }
     }
-    return { tiles: set, vehicles };
+    // Hull reach for the open-region fast path: the farthest any collision
+    // body corner (including a towed trailer) extends from the unit anchor,
+    // plus enough slack to cover every sweep/penetration margin used below
+    // (the truck steering envelope is the largest at 1.0).
+    let reach;
+    if (Game.isTank(unit.kind) || Game.isTruck(unit.kind)) {
+        const bodies = Game._vehicleCollisionOBBs
+            ? Game._vehicleCollisionOBBs(unit)
+            : (Game._vehicleOBB ? [Game._vehicleOBB(unit)] : []);
+        let r = (unit.size || 0.8) * 2;
+        for (const body of bodies) {
+            r = Math.max(r, Math.hypot(body.x - unit.x, body.z - unit.z)
+                + Math.hypot(body.hl, body.hw));
+        }
+        reach = r + 1.2;
+    } else {
+        reach = (unit.size || 0.6) * 1.3 + 0.7;   // circular (cavalry) footprint + margins
+    }
+    return { tiles: set, vehicles, reach };
 };
 
-Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0) => {
+Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0, nodeBudget = null) => {
     const obstacleCtx = Game._buildDynObstacles(unit);
     const start = Game.tileAtWorld(startX, startZ);
     const requestedEnd = Game.tileAtWorld(endX, endZ);
@@ -204,7 +260,16 @@ Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0)
     hpush(node);
 
     let best = node, reached = null, expanded = 0;
-    const maxNodes = Game.MAP_COLS * Game.MAP_ROWS * (isVeh ? 8 : 1);
+    // Vehicle searches are capped in proportion to the crow-flies distance
+    // instead of the full grid×8-heading state space (720k states on a 300²
+    // map): an unreachable or labyrinthine goal must cost bounded work, not
+    // the profiled 10-second full-space sweep. The budget is generous — a
+    // clean route expands a small multiple of its own length.
+    const distTiles = Math.hypot(end.tx - start.tx, end.ty - start.ty);
+    let maxNodes = isVeh
+        ? Math.min(Game.MAP_COLS * Game.MAP_ROWS * 8, 6000 + Math.ceil(distTiles * 300))
+        : Game.MAP_COLS * Game.MAP_ROWS;
+    if (nodeBudget) maxNodes = Math.min(maxNodes, nodeBudget);
     while (heap.length && expanded < maxNodes) {
         const current = hpop();
         const currentKey = keyFor(current.tx, current.ty, current.dir);
@@ -231,7 +296,13 @@ Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0)
                     ? Game.worldFromTile(current.tx, current.ty)
                     : { x: startX, z: startZ };
                 const to = Game.worldFromTile(ntx, nty);
-                if (!Game.segmentPassable(unit, from.x, from.z, to.x, to.z, {
+                // Open-field edges (nothing solid or parked within hull reach
+                // of the whole segment) cannot fail the sweep: skip it. This
+                // is where the profiled 10-second cross-map searches burned
+                // ~200k full hull sweeps each on empty farmland.
+                const open = obstacleCtx.reach != null && Game._regionClear(
+                    from.x, from.z, to.x, to.z, obstacleCtx.reach, obstacleCtx, isVeh);
+                if (!open && !Game.segmentPassable(unit, from.x, from.z, to.x, to.z, {
                     startAngle: current.angle,
                     endAngle: moveAngle,
                     obstacleCtx,
@@ -575,4 +646,66 @@ Game.computeCover = (unit) => {
     if (unit.stance === 'prone') cover += 0.15;
     else if (unit.stance === 'crouch') cover += 0.08;
     return Game.clamp(cover, 0, 0.82);
+};
+
+// ── Vehicle route queue ──────────────────────────────────────────────────────
+// Mass orders used to run one synchronous full-hull A* per selected vehicle in
+// a single input frame (the profiled 58-second freeze on a Dyle attack-move).
+// Orders now enqueue vehicle routes; the game loop drains the queue on a small
+// per-frame time budget, so the UI keeps rendering while routes are computed.
+// The move module holds a route-pending vehicle in place until its path lands.
+Game._vehRouteQueue = [];
+
+// Queue a route for `unit` toward (ex, ez); `apply(path)` runs when computed.
+// A newer request for the same unit replaces the pending one (last order wins),
+// which also serves as cancellation for superseded orders.
+Game.queueVehiclePath = (unit, ex, ez, apply, startAngle = null, nodeBudget = null) => {
+    Game._vehRouteQueue = Game._vehRouteQueue.filter(job => {
+        if (job.unit !== unit) return true;
+        job.unit._routePending = false;
+        return false;
+    });
+    unit._routePending = true;
+    Game._vehRouteQueue.push({ unit, ex, ez, apply, startAngle, nodeBudget });
+};
+
+Game.cancelQueuedPath = (unit) => {
+    if (!unit._routePending) return;
+    unit._routePending = false;
+    Game._vehRouteQueue = Game._vehRouteQueue.filter(job => job.unit !== unit);
+};
+
+// Run an arbitrary route rebuild on the queue (multi-leg truck restores and
+// other compound searches). Same replacement semantics as queueVehiclePath.
+Game.queueRouteJob = (unit, run) => {
+    Game._vehRouteQueue = Game._vehRouteQueue.filter(job => {
+        if (job.unit !== unit) return true;
+        job.unit._routePending = false;
+        return false;
+    });
+    unit._routePending = true;
+    Game._vehRouteQueue.push({ unit, run });
+};
+
+// Drain jobs within a frame budget, always making progress on at least one.
+// Runs even while paused so orders issued during a pause are ready on resume.
+Game.processVehicleRouteQueue = () => {
+    const queue = Game._vehRouteQueue;
+    if (!queue.length) return;
+    const started = performance.now();
+    do {
+        const job = queue.shift();
+        const unit = job.unit;
+        unit._routePending = false;
+        if (!unit.alive) continue;
+        if (job.run) {
+            job.run();
+            continue;
+        }
+        // Route from wherever the unit is NOW: it may have drifted (or been
+        // shoved) since the order landed in the queue.
+        const path = Game.findPath(unit, unit.x, unit.z, job.ex, job.ez,
+            job.startAngle ?? unit.angle ?? 0, job.nodeBudget);
+        job.apply(path);
+    } while (queue.length && performance.now() - started < 6);
 };

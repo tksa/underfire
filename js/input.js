@@ -185,6 +185,8 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false,
         // A ground move/waypoint replaces a pending walk-to-horse order. Let the
         // cavalry runtime release the horse reservation as well as rider state.
         if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(unit);
+        // A new order also supersedes any route still waiting in the queue.
+        if (Game.cancelQueuedPath) Game.cancelQueuedPath(unit);
         const isQueued = queue && unit.path && unit.path.length > 0;
         const previousTargetX = unit.targetX;
         const previousTargetZ = unit.targetZ;
@@ -277,12 +279,30 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false,
                 queuedAdded++;
             }
         } else {
-            unit.path = Game.findPath(unit, unit.x, unit.z, tx, tz);
-            if (unit.path.length) unit.path[unit.path.length - 1]._orderStop = {
-                id: orderSerial, x: tx, z: tz,
-            };
+            const crowFlies = Math.hypot(tx - unit.x, tz - unit.z);
+            if ((Game.isTank(unit.kind) || Game.isTruck(unit.kind))
+                && Game.queueVehiclePath && crowFlies > 20) {
+                // Long vehicle hauls compute on the route queue's frame budget
+                // instead of freezing the click (one synchronous full-hull A*
+                // per selected vehicle was the mass-order stall). The unit
+                // holds via _routePending until its route lands.
+                unit.path = [];
+                Game.queueVehiclePath(unit, tx, tz, (path) => {
+                    if (unit._lastMoveOrder?.id !== orderSerial) return;   // superseded
+                    unit.path = path;
+                    if (path.length) {
+                        path[path.length - 1]._orderStop = { id: orderSerial, x: tx, z: tz };
+                        unit.stopTimer = 0;
+                    }
+                });
+            } else {
+                unit.path = Game.findPath(unit, unit.x, unit.z, tx, tz);
+                if (unit.path.length) unit.path[unit.path.length - 1]._orderStop = {
+                    id: orderSerial, x: tx, z: tz,
+                };
+            }
             if (queue) {
-                if (unit.path.length) queuedAdded++;
+                if (unit.path.length || unit._routePending) queuedAdded++;
                 else {
                     unit.targetX = previousTargetX;
                     unit.targetZ = previousTargetZ;
@@ -303,7 +323,7 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false,
         // unreachable point on the far side of an obstacle.
         const facingRadius = Game.isTank(unit.kind) || Game.isTruck(unit.kind)
             ? 2.0 : (unit._cavalryMounted ? 1.0 : 0.8);
-        const facingRouteAccepted = unit.path.length > 0
+        const facingRouteAccepted = unit.path.length > 0 || unit._routePending
             || Game.dist(unit.x, unit.z, tx, tz) <= facingRadius;
         unit._arrivalFacing = faceAngle != null && facingRouteAccepted ? {
             orderId: orderSerial,
@@ -549,7 +569,19 @@ Game.orderRetreat = (x, z) => {
         const threat = (u._engageId != null ? Game.getUnitById(u._engageId) : null) || Game.nearestEnemy(u);
         u._retreatThreat = (threat && threat.alive) ? { x: threat.x, z: threat.z } : null;
         if (Game.isFootInfantry(u)) { u.stance = 'run'; u._autoStance = true; }
-        u.path = Game.findPath(u, u.x, u.z, tx, tz);
+        if (Game.cancelQueuedPath) Game.cancelQueuedPath(u);
+        if ((Game.isTank(u.kind) || Game.isTruck(u.kind)) && Game.queueVehiclePath
+            && Game.dist(u.x, u.z, tx, tz) > 20) {
+            // Long vehicle fallback routes go through the frame-budgeted queue
+            // like ordinary moves; the hull holds until its route lands.
+            u.path = [];
+            Game.queueVehiclePath(u, tx, tz, (path) => {
+                if (u.orderMode !== 'retreat' || !u.retreating) return;   // superseded
+                u.path = path;
+            });
+        } else {
+            u.path = Game.findPath(u, u.x, u.z, tx, tz);
+        }
         u.moving = true;
         u.stopTimer = 0;
         u.orderDelay = 0;
@@ -669,6 +701,7 @@ Game.orderAttackTarget = (target) => {
         u.orderMode = 'aggressive';
         u.holdFire = false;
         u._combatReady = true; // explicit attack — engage on contact
+        if (Game.cancelQueuedPath) Game.cancelQueuedPath(u);
         const d = Game.dist(u.x, u.z, target.x, target.z);
         if (d > u.range * 0.9) {
             // Close to within weapon range, approaching from our side
@@ -676,7 +709,22 @@ Game.orderAttackTarget = (target) => {
             const standoff = u.range * 0.75;
             const gx = Game.clamp(target.x + Math.cos(ang) * standoff, 1, Game.WORLD_W - 1);
             const gz = Game.clamp(target.z + Math.sin(ang) * standoff, 1, Game.WORLD_H - 1);
-            u.path = Game.findPath(u, u.x, u.z, gx, gz);
+            if ((Game.isTank(u.kind) || Game.isTruck(u.kind)) && Game.queueVehiclePath
+                && Game.dist(u.x, u.z, gx, gz) > 20) {
+                // Long armored approaches queue like ordinary moves; the
+                // engage module takes over pursuit once the route lands.
+                u.path = [];
+                // Prime the pursuit anchor so the engage module treats the
+                // queued approach as fresh instead of instantly re-planning.
+                u._pursueAnchor = { x: target.x, z: target.z };
+                u._pursueTimer = 1.2;
+                Game.queueVehiclePath(u, gx, gz, (path) => {
+                    if (u.forcedTargetId !== target.id) return;   // superseded
+                    u.path = path;
+                });
+            } else {
+                u.path = Game.findPath(u, u.x, u.z, gx, gz);
+            }
             u.moving = true;
             u.orderDelay = Game.commandDelay(u);
         } else {

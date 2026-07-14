@@ -54,18 +54,36 @@ Game._restoreTruckRecovery = (unit, recovery) => {
     return rebuilt;
 };
 
-// Preserve the full general vehicle A* for player commands and every other
-// scenario. German Mokra attackers already own validated authored corridors, so
-// their dynamic/stuck recovery can rebuild the forward remainder in milliseconds
-// instead of launching an 80k-state heading search on the simulation frame.
+// German Mokra attackers own validated authored corridors, so their recovery
+// rebuilds the forward remainder in milliseconds. Every other vehicle's
+// recovery search goes through the route QUEUE with a reduced node budget:
+// a jam of stuck hulls used to fire one full synchronous heading-A* each per
+// stall tick — long frames made the stall timers fire faster, and the churn
+// fed itself (the profiled ~600 ms frames after a mass order into a corner).
+// Callers receive [] immediately and the route lands when computed; a failed
+// search backs the unit off recovery for several seconds instead of retrying
+// the same impossible goal every stall tick.
 Game._vehicleRecoveryRoute = (unit, goal, reason) => {
     const isMokraAttacker = unit._mokraAuthoredAttacker
         && Game.currentScenario === 'mokra'
         && unit.team === Game.TEAM.GERMAN
         && Game._recoverMokraVehicleRoute;
-    return isMokraAttacker
-        ? Game._recoverMokraVehicleRoute(unit, goal.x, goal.z, reason)
-        : Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
+    if (isMokraAttacker) {
+        return Game._recoverMokraVehicleRoute(unit, goal.x, goal.z, reason);
+    }
+    if (Game.queueVehiclePath) {
+        Game.queueVehiclePath(unit, goal.x, goal.z, (path) => {
+            unit.path = path;
+            unit.moving = path.length > 0;
+            if (path.length) {
+                unit._detour = null;
+            } else {
+                unit._recoveryBlockedUntil = (Game.gameClock || 0) + 4 + Game.rand(0, 4);
+            }
+        }, null, 9000);
+        return [];
+    }
+    return Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
 };
 
 // Per-frame upkeep: cover value + decay the short-lived timers.
@@ -407,10 +425,12 @@ Game.uMod.engage = (unit, ctx) => {
         } else {
             unit._pursueTimer = (unit._pursueTimer || 0) - dt;
             // Require a meaningful target move (>5u) before re-pathing, and never
-            // re-path faster than ~1.2s — removes the rapid re-plan jitter.
+            // re-path faster than ~1.2s — removes the rapid re-plan jitter. A
+            // route still pending in the vehicle queue is already on its way;
+            // re-pathing synchronously here would defeat the queued order.
             const targetMoved = !unit._pursueAnchor
                 || Game.distSq(unit._pursueAnchor.x, unit._pursueAnchor.z, enemy.x, enemy.z) > 25;
-            if (!unit.moving || unit._pursueTimer <= 0 || targetMoved) {
+            if (!unit._routePending && (!unit.moving || unit._pursueTimer <= 0 || targetMoved)) {
                 unit._pursueTimer = 1.2;
                 unit._pursueAnchor = { x: enemy.x, z: enemy.z };
                 // Armor advances to a scored FIRING POSITION (stand-off band, LOS,
@@ -457,7 +477,24 @@ Game.uMod.engage = (unit, ctx) => {
             ? Game.arrivalFacingRadius(unit) : 2.2;
         if (Game.dist(unit.x, unit.z, unit._assaultGoal.x, unit._assaultGoal.z)
             > assaultArrival) {
-            unit.path = Game.findPath(unit, unit.x, unit.z, unit._assaultGoal.x, unit._assaultGoal.z);
+            // Vehicles resume through the route queue: this branch re-fires on
+            // every frame the path is empty, and a synchronous full-hull A*
+            // per assault vehicle per frame was the town-fight slowdown. An
+            // unreachable goal settles instead of retrying forever.
+            const goal = unit._assaultGoal;
+            if ((Game.isTank(unit.kind) || Game.isTruck(unit.kind)) && Game.queueVehiclePath) {
+                if (!unit._routePending) {
+                    Game.queueVehiclePath(unit, goal.x, goal.z, (path) => {
+                        if (unit.orderMode !== 'assault' || unit._assaultGoal !== goal) return;
+                        unit.path = path;
+                        unit.moving = path.length > 0;
+                        if (!path.length) unit._assaultGoal = null;
+                    }, null, 16000);
+                }
+            } else {
+                unit.path = Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
+                if (!unit.path.length) unit._assaultGoal = null;   // unreachable: settle
+            }
             unit.moving = true;
         } else {
             unit._assaultGoal = null;     // arrived at the ordered spot
@@ -634,6 +671,13 @@ Game.uMod.move = (unit, ctx) => {
     const isVeh = ctx.isVeh;
     const isTruck = Game.isTruck(unit.kind);   // wheeled, bicycle-model steering
     const isMounted = Game.isMountedCavalry && Game.isMountedCavalry(unit);
+    // A vehicle whose route is still in the queue holds in place: its empty
+    // path must not read as "arrived" and silently cancel the order.
+    if (unit._routePending && (!unit.path || !unit.path.length)) {
+        unit.currentSpeed = 0;
+        unit._dispSpeed = 0;
+        return;
+    }
     const enemy = ctx.enemy;
     const hasTurret = ctx.hasTurret;
     const aimAngleToEnemy = ctx.aimAngleToEnemy;
@@ -1603,7 +1647,10 @@ Game.uMod.move = (unit, ctx) => {
         const moved = Math.hypot(unit.x - prevX, unit.z - prevZ);
         if (moved < 0.03) {
             unit._stuckT = (unit._stuckT || 0) + dt;
-            if (unit._stuckT > 1.3) {
+            // A recent failed recovery search put this unit on backoff: retrying
+            // the same impossible goal every stall tick is what churned frames.
+            if (unit._stuckT > 1.3
+                && (Game.gameClock || 0) >= (unit._recoveryBlockedUntil || 0)) {
                 unit._stuckT = 0;
                 unit._stuckReplans = (unit._stuckReplans || 0) + 1;
                 if (unit._stuckReplans > 2) {
@@ -1657,8 +1704,22 @@ Game.uMod.move = (unit, ctx) => {
                         // Rebuild every outstanding Shift stop, not merely the
                         // final node. Losing the prefix here made a briefly stuck
                         // truck jump directly to the last clicked destination.
+                        // The multi-leg rebuild runs on the route queue: several
+                        // trucks jammed together used to fire one synchronous
+                        // compound A* each per stall tick.
                         const recovery = Game._captureTruckRecovery(unit);
-                        unit.path = Game._restoreTruckRecovery(unit, recovery);
+                        if (Game.queueRouteJob) {
+                            unit.path = [];
+                            Game.queueRouteJob(unit, () => {
+                                unit.path = Game._restoreTruckRecovery(unit, recovery);
+                                unit.moving = unit.path.length > 0;
+                                if (!unit.path.length) {
+                                    unit._recoveryBlockedUntil = (Game.gameClock || 0) + 4 + Game.rand(0, 4);
+                                }
+                            });
+                        } else {
+                            unit.path = Game._restoreTruckRecovery(unit, recovery);
+                        }
                     } else {
                         const goal = unit.path[unit.path.length - 1];
                         unit.path = Game._vehicleRecoveryRoute(unit, goal, 'stuck');
