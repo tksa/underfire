@@ -5,13 +5,99 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Under Fire — A World War II RTS</title>
-  <link rel="icon" type="image/png" href="uf_logo.png">
-  <link rel="apple-touch-icon" href="uf_logo.png">
+  <script>
+    // Production serves heavyweight public assets through the Bunny Pull Zone.
+    // Localhost, previews and CI stay fully local. `?cdn=0` is an emergency
+    // production bypass; `?cdn=1` lets a developer exercise Bunny locally.
+    window.UF_ASSET_VERSION = 'v0.14.0';
+    (function () {
+      var CDN_ORIGIN = 'https://underfire.b-cdn.net';
+      var productionHosts = ['underfire.io', 'www.underfire.io', 'underfire.b-cdn.net'];
+      var override = new URLSearchParams(location.search).get('cdn');
+      var requested = override === '1'
+        || (override !== '0' && productionHosts.indexOf(location.hostname) !== -1);
+      window.UF_REQUEST_VERSION = requested ? window.UF_ASSET_VERSION : String(Date.now());
+      var cdnPaths = [
+        /^(?:models|textures|sounds|icons)\//i,
+        /^maps\/.*\.(?:avif|gif|jpe?g|png|webp)$/i,
+        /^(?:splash\.png|uf_logo\.png|under_vid\.mp4)$/i,
+      ];
+
+      window.UF_ASSET_CDN = {
+        origin: CDN_ORIGIN,
+        requested: requested,
+        enabled: requested,
+        fallbackReason: '',
+      };
+
+      window.ufAssetUrl = function (input) {
+        if (!input || typeof input !== 'string' || /^(?:blob:|data:)/i.test(input)) return input;
+        var parsed;
+        try { parsed = new URL(input, location.origin + '/'); }
+        catch (e) { return input; }
+        if (parsed.origin !== location.origin && parsed.origin !== CDN_ORIGIN) return input;
+        var path = parsed.pathname.replace(/^\/+/, '');
+        if (!window.UF_ASSET_CDN.enabled || !cdnPaths.some(function (rule) { return rule.test(path); })) {
+          return input;
+        }
+        var cdnUrl = new URL(path, CDN_ORIGIN + '/');
+        parsed.searchParams.forEach(function (value, key) { cdnUrl.searchParams.append(key, value); });
+        cdnUrl.searchParams.set('v', window.UF_ASSET_VERSION);
+        cdnUrl.hash = parsed.hash;
+        return cdnUrl.href;
+      };
+
+      window.ufApplyStaticAssets = function () {
+        document.documentElement.style.setProperty(
+          '--uf-splash-image',
+          'url("' + window.ufAssetUrl('splash.png') + '")'
+        );
+        var favicon = document.getElementById('ufFavicon');
+        var touchIcon = document.getElementById('ufTouchIcon');
+        if (favicon) favicon.href = window.ufAssetUrl('uf_logo.png');
+        if (touchIcon) touchIcon.href = window.ufAssetUrl('uf_logo.png');
+        document.querySelectorAll('[data-uf-src]').forEach(function (element) {
+          element.src = window.ufAssetUrl(element.getAttribute('data-uf-src'));
+        });
+        var menuVideo = document.getElementById('menuBgVideo');
+        if (menuVideo) {
+          menuVideo.poster = window.ufAssetUrl('splash.png');
+          menuVideo.load();
+        }
+      };
+
+      // A missing GLB CORS header would otherwise make the game boot without
+      // models. Probe the actual extension before boot and fall back to origin.
+      window.ufPrepareAssetCdn = async function () {
+        if (!window.UF_ASSET_CDN.requested) return false;
+        try {
+          var probe = CDN_ORIGIN + '/models/soldier.glb?v=' + encodeURIComponent(window.UF_ASSET_VERSION);
+          var response = await fetch(probe, { method: 'HEAD', mode: 'cors', cache: 'no-store' });
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          window.UF_ASSET_CDN.enabled = true;
+          return true;
+        } catch (error) {
+          window.UF_ASSET_CDN.enabled = false;
+          window.UF_ASSET_CDN.fallbackReason = error && error.message ? error.message : String(error);
+          console.warn('[assets] Bunny CDN unavailable; using the origin.', error);
+          window.ufApplyStaticAssets();
+          return false;
+        }
+      };
+
+      window.ufApplyStaticAssets();
+    })();
+  </script>
+  <link id="ufFavicon" rel="icon" type="image/png">
+  <link id="ufTouchIcon" rel="apple-touch-icon">
+  <script>
+    window.ufApplyStaticAssets();
+  </script>
   <style>
     /* Gothic blackletter logo face (German "Germanica" family) */
     @font-face {
       font-family: 'Germanica';
-      src: url("fonts/germanica_family/Plain Germanica.ttf") format("truetype");
+      src: url("fonts/germanica_family/plain-germanica.ttf") format("truetype");
       font-display: swap;
     }
 
@@ -110,7 +196,7 @@
       position: fixed; inset: 0; z-index: 10001;
       background:
         linear-gradient(rgba(8, 10, 13, 0.55), rgba(8, 10, 13, 0.8)),
-        url("splash.png") center / cover no-repeat, #0a0e12;
+        var(--uf-splash-image, url("splash.png")) center / cover no-repeat, #0a0e12;
       display: flex; align-items: center; justify-content: center;
       font-family: Inter, system-ui, sans-serif;
       transition: opacity 0.4s ease;
@@ -570,8 +656,9 @@
     #viewport.cmd-attack {
       cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34"><g transform="translate(0.7,1)" stroke="black" stroke-opacity="0.45" stroke-width="2.5" fill="none"><circle cx="17" cy="17" r="9"/><line x1="17" y1="1" x2="17" y2="8"/><line x1="17" y1="26" x2="17" y2="33"/><line x1="1" y1="17" x2="8" y2="17"/><line x1="26" y1="17" x2="33" y2="17"/></g><g stroke="%23ff4433" stroke-opacity="0.95" stroke-width="2.5" fill="none"><circle cx="17" cy="17" r="9"/><line x1="17" y1="1" x2="17" y2="8"/><line x1="17" y1="26" x2="17" y2="33"/><line x1="1" y1="17" x2="8" y2="17"/><line x1="26" y1="17" x2="33" y2="17"/></g><circle cx="17" cy="17" r="1.7" fill="%23ff4433"/></svg>') 17 17, crosshair;
     }
-    /* Hovering an enterable building with infantry selected: IconaMoon "Enter"
-       (Thin, CC BY 4.0 — see CREDITS.md), bright green + transparent + shadow. */
+    /* Hovering an enterable building/transport—or a linked riderless horse—with
+       eligible infantry selected: IconaMoon "Enter" (Thin, CC BY 4.0 — see
+       CREDITS.md), bright green + transparent + shadow. */
     #viewport.cmd-enter {
       cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none"><g transform="translate(0.6,0.9)" stroke="black" stroke-opacity="0.45" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H19V18C19 19.1 18.1 20 17 20H9"/><path d="M12 15L15 12L12 9M15 12H5"/></g><g stroke="%2339ff5e" stroke-opacity="0.9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H19V18C19 19.1 18.1 20 17 20H9"/><path d="M12 15L15 12L12 9M15 12H5"/></g></svg>') 16 16, pointer;
     }
@@ -610,6 +697,24 @@
       font-weight: 700;
       letter-spacing: 2px;
       text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    /* Persistent Mokra deployment warning, separate from transient messages. */
+    #mokraApproachCountdown {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 29;
+      color: #fff;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      line-height: 1.3;
+      text-align: center;
+      text-shadow: 0 2px 5px rgba(0, 0, 0, 0.95);
+      white-space: nowrap;
       pointer-events: none;
     }
 
@@ -1135,6 +1240,7 @@
       <div id="selectionBox"></div>
     </div>
     <div id="pauseBanner">⏸ Paused — issue orders, Space to resume</div>
+    <div id="mokraApproachCountdown" role="status" aria-live="polite" hidden></div>
 
     <!-- Debug Panel -->
     <div id="debugPanel">
@@ -1581,8 +1687,9 @@
           B: Air strike (wheel = planes) &nbsp; J: Recon &nbsp; Y: Binoculars &nbsp; K: TNT (sapper)<br>
           Space: Pause &nbsp; X: Exit vehicle &nbsp; L: Last attack<br>
           RC enemy: Attack target &nbsp; RC ground (mortar): Bombard<br>
+          RC drag ground: Move then face arrow direction; nearby = rotate<br>
           Arrows / screen edge: Pan &nbsp; + / -: Zoom<br>
-          Ctrl/Cmd/Shift+RC: Queue waypoint &nbsp; Esc: Menu &nbsp; Z: Formation &nbsp; /: Behavior
+          Shift+RC: Queue waypoint &nbsp; Ctrl/Cmd+RC: Gather &nbsp; Esc: Menu &nbsp; Z: Formation &nbsp; /: Behavior
         </div>
       </div>
       <div class="hud-section minimap-section">
@@ -1603,18 +1710,18 @@
         <div class="hud-title">Orders</div>
         <div class="stance-switch" title="Right-click order mode (E to toggle)">
           <button class="stance-btn active" id="stanceMove" data-stance="move"><span class="stance-icon">⇒</span>Move</button>
-          <button class="stance-btn" id="stanceAttack" data-stance="attack"><span class="stance-icon"><img class="ui-ico" src="icons/attack-move.svg" alt=""></span>Attack&nbsp;Move</button>
+          <button class="stance-btn" id="stanceAttack" data-stance="attack"><span class="stance-icon"><img class="ui-ico" data-uf-src="icons/attack-move.svg" alt=""></span>Attack&nbsp;Move</button>
         </div>
         <div class="cmd-grid">
           <div class="cmd-btn" id="cmdStop" title="Stop (V)"><span class="cmd-icon">■</span><span
               class="cmd-label">Stop</span></div>
           <div class="cmd-btn" id="cmdHold" title="Hold fire (T or H)"><span class="cmd-icon">⊘</span><span
               class="cmd-label">Hold</span></div>
-          <div class="cmd-btn" id="cmdGrenade" title="Grenade (Q)"><span class="cmd-icon"><img class="ui-ico" src="icons/grenade.svg" alt=""></span><span
+          <div class="cmd-btn" id="cmdGrenade" title="Grenade (Q)"><span class="cmd-icon"><img class="ui-ico" data-uf-src="icons/grenade.svg" alt=""></span><span
               class="cmd-label">Grenade</span></div>
-          <div class="cmd-btn" id="cmdSmoke" title="Smoke (N)"><span class="cmd-icon"><img class="ui-ico" src="icons/smoke.svg" alt=""></span><span
+          <div class="cmd-btn" id="cmdSmoke" title="Smoke (N)"><span class="cmd-icon"><img class="ui-ico" data-uf-src="icons/smoke.svg" alt=""></span><span
               class="cmd-label">Smoke</span></div>
-          <div class="cmd-btn" id="cmdAirStrike" title="Air Strike (B) — wheel to set planes"><span class="cmd-badge" id="airStrikeBadge">0</span><span class="cmd-icon"><img class="ui-ico" src="icons/bombing-run.svg" alt=""></span><span
+          <div class="cmd-btn" id="cmdAirStrike" title="Air Strike (B) — wheel to set planes"><span class="cmd-badge" id="airStrikeBadge">0</span><span class="cmd-icon"><img class="ui-ico" data-uf-src="icons/bombing-run.svg" alt=""></span><span
               class="cmd-label">Strike</span></div>
           <div class="cmd-btn" id="cmdFighter" title="Fighter cover (J) — right-click a patrol area; the plane flies in from the map edge nearest your click"><span class="cmd-badge" id="fighterBadge">2</span><span class="cmd-icon">✈</span><span
               class="cmd-label">Fighter</span></div>
@@ -1622,7 +1729,7 @@
               class="cmd-label">Rotate</span></div>
           <div class="cmd-btn" id="cmdProne" title="Crawl / Stand toggle (C cycles)"><span class="cmd-icon">⤓</span><span
               class="cmd-label">Crawl</span></div>
-          <div class="cmd-btn" id="cmdAttackGround" title="Attack ground — fire on a spot (F)"><span class="cmd-icon"><img class="ui-ico" src="icons/artillery-shell.svg" alt=""></span><span
+          <div class="cmd-btn" id="cmdAttackGround" title="Attack ground — fire on a spot (F)"><span class="cmd-icon"><img class="ui-ico" data-uf-src="icons/artillery-shell.svg" alt=""></span><span
               class="cmd-label">Ground</span></div>
           <div class="cmd-btn" id="cmdCavalry" title="Mount or dismount cavalry" style="display:none"><span class="cmd-icon">♞</span><span
               class="cmd-label">Dismount</span></div>
@@ -1765,8 +1872,8 @@
 
   <!-- ═══ MAIN MENU ═══ -->
   <div id="mainMenu">
-    <video id="menuBgVideo" autoplay muted loop playsinline poster="splash.png">
-      <source src="under_vid.mp4" type="video/mp4">
+    <video id="menuBgVideo" autoplay muted loop playsinline>
+      <source data-uf-src="under_vid.mp4" type="video/mp4">
     </video>
     <div class="menu-overlay"></div>
     <div class="menu-panel">
@@ -1911,14 +2018,14 @@
     // data/changelog.json is generated from the git commit log at deploy time
     // (scripts/gen-changelog.mjs) and fetched here — no build step. Falls back to
     // a short built-in list if it can't be loaded.
-    const UNDER_VERSION = 'v0.14.0';
+    const UNDER_VERSION = window.UF_ASSET_VERSION || 'dev';
     const vEl = document.getElementById('menuVersion');
     const upEl = document.getElementById('menuUpdates');
     if (vEl) vEl.textContent = UNDER_VERSION;
 
     const FALLBACK_NOTES = [
       'Four mounted Ułans of the 12th Podolian Regiment join the Polish reserve at Mokra.',
-      'Mounted reserves can dismount and remount while retaining health, ammunition, experience and unit identity.',
+      'Dismounting leaves an unselectable riderless horse; the linked Ułan must return to it before remounting.',
       'Horse movement now accelerates, turns and brakes progressively with speed-synchronised walk and run animation.',
       'Mounted cavalry uses full-width paths and stays out of buildings, troop transports and foot-only actions.',
       'Shared GLB requests are parsed once and cloned, avoiding duplicate cavalry-model loading work.',
@@ -1929,7 +2036,7 @@
         `<div class="update-entry"><div class="update-ver">${version}<span class="ud-date">${date || ''}</span></div>`
         + `<ul class="update-notes">${notes.map(n => `<li>${n}</li>`).join('')}</ul></div>`;
     };
-    fetch('data/changelog.json?v=' + Date.now())
+    fetch('data/changelog.json?v=' + encodeURIComponent(window.UF_REQUEST_VERSION || UNDER_VERSION))
       .then(r => r.ok ? r.json() : Promise.reject(new Error('no changelog')))
       .then(data => {
         const ver = data.version || UNDER_VERSION;
@@ -1961,19 +2068,20 @@
   }
   </script>
 
-  <!-- Game scripts. Loaded via a tiny inline loader that appends a per-load
-       cache-buster, so a fresh deploy is always picked up immediately (no stale
-       browser/CDN cache). index.html itself is served no-cache. Classic scripts
+  <!-- Game scripts. Loaded via a tiny inline loader that appends the release
+       version, so browsers can reuse one cached object until a new release is
+       deployed. index.html itself is served no-cache. Classic scripts
        are written in dependency order with document.write so they execute in
        order; main.js (ES module) is written last. No build step. -->
   <script>
     (function () {
-      var v = Date.now(); // changes every load => always fresh
+      var v = encodeURIComponent(window.UF_REQUEST_VERSION || window.UF_ASSET_VERSION || 'dev');
+      window.ufApplyStaticAssets();
       var classic = [
         'config', 'i18n', 'utils', 'engine', 'weapons', 'terrain', 'units',
         'pathfinding', 'combat', 'ai', 'camera', 'input', 'renderer', 'audio',
         'mission', 'scenarios/mokra', 'neural_export', 'unit_modules', 'ai_tactics', 'valor', 'buildings', 'garrison_ui',
-        'soldier_model', 'cavalry_model', 'aircraft',
+        'soldier_model', 'fieldgun_model', 'cavalry_model', 'aircraft',
         'editor'
       ];
       classic.forEach(function (f) {

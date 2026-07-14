@@ -118,7 +118,7 @@ Under Fire is **100% static files** — there is no backend, no database, no ser
 **Minimum requirements**
 - Any web server that serves static files: **nginx**, Apache, Caddy, or a CDN/static host.
 - ~Tens of MB of disk (code + current assets; grows with art/audio).
-- Outbound access for the **player's browser** to the Three.js CDN (cdnjs) used by the importmap. If you prefer zero external dependencies, vendor Three.js locally into the repo and point the importmap at it — then nothing external is needed.
+- Outbound access for the **player's browser** to `underfire.b-cdn.net` in production. Three.js and the other JavaScript dependencies are vendored in the repository; localhost and CI need no third-party CDN.
 - **HTTPS** (use a free Let's Encrypt cert). Browsers increasingly require a secure context for some web APIs, and audio/pointer features behave best over HTTPS.
 
 **Recommended server config**
@@ -153,11 +153,29 @@ server {
 
 **Deploying updates**
 - Easiest: a deploy webhook or GitHub Action that `git pull`s `main` (or `rsync`s the built artifact) to `/var/www/under` on tag/release. Because there is no build, "deploy" is just "put the files there".
+- Production uses Bunny Storage for heavyweight assets. Upload the origin first, sync changed CDN assets to Storage second, purge the Pull Zone third, then run `node scripts/bunny-cdn-check.mjs`.
+- Change `UF_ASSET_VERSION` in `index.html` for every release that replaces a same-name asset. Bunny must vary its cache by the stable `v` query parameter; do not use a per-page `Date.now()` cache key.
 - Roll back by checking out the previous tag.
 - If you use Cloudflare Pages/Netlify/Vercel for hosting too, production deploys happen automatically on merge to `main` and you may not need your own server at all — your server then becomes optional/custom-domain only.
 
 ---
 
-## 8. Domain note
+## 8. Bunny CDN and cache refresh
+
+The complete production settings, CORS extension list, safe purge command, cache-refresh order, validation check and checksum procedure are in [Bunny CDN Operations](CDN.md).
+
+Required deployment secrets:
+
+- `BUNNY_STORAGE_PASSWORD` — the write-capable Storage Zone password
+- `BUNNY_API_KEY`
+- `BUNNY_PULL_ZONE_ID`
+
+They belong in the deployment environment or CI secret store only. The public page must never contain them.
+
+The release sequence is origin upload → Bunny Storage upload → Pull Zone purge → CDN contract check → hot-asset pre-warm → checksum verification. This order ensures the edge cannot refill itself with the old Storage object during a deployment.
+
+---
+
+## 9. Domain note
 
 Production points your domain at either your server (Option C / nginx) or your static host (Cloudflare Pages / Netlify / Vercel custom domain). Keep `main` = production; preview URLs are per-PR and disposable.

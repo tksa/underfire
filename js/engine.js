@@ -141,7 +141,14 @@ Game.initEngine = () => {
 
     // GLTF loader (+ Draco decoder for compressed meshes like the building model)
     if (Game.GLTFLoader) {
-        Game.gltfLoader = new Game.GLTFLoader();
+        // Resolve GLTF sidecars (external textures/buffers) through the same
+        // versioned asset boundary as the parent model. The modular railway
+        // deliberately shares two external textures across five small GLBs.
+        const loadingManager = THREE.DefaultLoadingManager;
+        if (loadingManager?.setURLModifier) {
+            loadingManager.setURLModifier(url => Game.assetUrl ? Game.assetUrl(url) : url);
+        }
+        Game.gltfLoader = new Game.GLTFLoader(loadingManager);
         if (Game.DRACOLoader) {
             const draco = new Game.DRACOLoader();
             // Decoder from jsDelivr (same CDN as our other libs — more reliable
@@ -199,6 +206,7 @@ Game.loadModel = (path) => {
 
     const isFBX = path.toLowerCase().endsWith('.fbx');
     const isPLY = path.toLowerCase().endsWith('.ply');
+    const requestUrl = Game.assetUrl ? Game.assetUrl(path) : path;
     let request;
 
     if (isFBX) {
@@ -209,7 +217,7 @@ Game.loadModel = (path) => {
         if (!Game.fbxLoader) return Promise.reject('No FBX loader available');
         request = new Promise((resolve, reject) => {
             Game.fbxLoader.load(
-                path,
+                requestUrl,
                 (group) => {
                     Game.modelCache[path] = group;
                     resolve(group.clone());
@@ -226,7 +234,7 @@ Game.loadModel = (path) => {
         if (!Game.plyLoader) return Promise.reject('No PLY loader available');
         request = new Promise((resolve, reject) => {
             Game.plyLoader.load(
-                path,
+                requestUrl,
                 (geometry) => {
                     geometry.computeVertexNormals();
                     // PLY may have vertex colors
@@ -253,7 +261,7 @@ Game.loadModel = (path) => {
         if (!Game.gltfLoader) return Promise.reject('No GLTF loader available');
         request = new Promise((resolve, reject) => {
             Game.gltfLoader.load(
-                path,
+                requestUrl,
                 (gltf) => {
                     // Cache the original scene and its animations
                     const scene = gltf.scene;

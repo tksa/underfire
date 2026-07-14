@@ -184,6 +184,7 @@ fxShake/fxWreckSmoke/fxDustLOS/fxFire/fxFireChance`).
 
 ## Notes
 - Bundled models/textures must be CC0 and listed in `CREDITS.md`.
-- Asset caches on the live host: HTML/JS/data are `no-cache`; if a referenced
-  texture/model 404s during a deploy window, bump `ASSET_V` in `js/terrain.js`
-  (cache-buster) and ensure the asset is uploaded.
+- Heavy production assets use the central Bunny resolver. If a referenced
+  texture/model 404s during a deploy window, ensure the origin file is uploaded,
+  change `UF_ASSET_VERSION`, then purge and validate Bunny as documented in
+  [Bunny CDN Operations](CDN.md).

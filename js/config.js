@@ -6,6 +6,18 @@
 window.Game = {};
 const Game = window.Game;
 
+// Network paths remain logical repository paths throughout the simulation.
+// Resolve them only at the load boundary so model-cache keys and unit identity
+// checks stay stable. Production routes heavyweight assets through Bunny;
+// localhost/CI and the automatic CDN fallback return the original paths.
+Game.assetVersion = window.UF_REQUEST_VERSION || window.UF_ASSET_VERSION || 'dev';
+Game.assetUrl = typeof window.ufAssetUrl === 'function'
+  ? window.ufAssetUrl
+  : (path => path);
+Game.prepareAssetCdn = typeof window.ufPrepareAssetCdn === 'function'
+  ? window.ufPrepareAssetCdn
+  : (async () => false);
+
 // Tile / map dimensions
 Game.TILE = 3;          // 3D world units per tile
 Game.MAP_COLS = 100;

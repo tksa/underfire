@@ -30,7 +30,7 @@ Under Fire is a browser-based WW2 RTS in active, early development. Its first an
 
 ## Play it
 
-No build step. It is plain HTML, CSS, JavaScript and Three.js (loaded from a CDN).
+No build step. It is plain HTML, CSS, JavaScript and a vendored, pinned Three.js build. Production serves heavyweight models, textures, audio, video and baked map imagery through Bunny; localhost serves every file locally.
 
 ```bash
 # from the repo root
@@ -45,11 +45,11 @@ Any static file server works (`npx serve`, `php -S`, nginx, etc.). Opening `inde
 - **Advance to the Dyle** — the first and default selected French-versus-German battle.
 - **Mokra: Hold the Railway** — the second selection, currently labelled **Preview**. Command Poland's reinforced Wołyńska Cavalry Brigade against German armour and hold the railway crossing. See the [implementation record](docs/scenarios/mokra.md) and the complete [Poland 1939 campaign dossier](docs/POLAND_1939_CAMPAIGN.md).
 
-The current Mokra slice covers a Polish defensive deployment, an appropriate early-war roster, the railway battlefield, and phased German attacks. Its deliberately compressed opening line alternates three 37 mm Bofors anti-tank guns with three 75 mm field guns; five five-man infantry sections occupy the gaps, with a full eight-man reserve squad, two HMGs, and one each of the 46 mm and 81 mm mortars. This is a playable vertical-slice allocation, not the full brigade establishment described in the campaign dossier.
+The current Mokra slice covers a Polish defensive deployment, an appropriate early-war roster, the railway battlefield, and phased German attacks. A siren and persistent white, top-centre three-minute countdown give Poland time to redeploy before the German vanguard enters from the western map edge at 3:00. Later echelons enter at 3:55, 5:05, and 6:25, with victory after five combat minutes at 8:00 total elapsed time. Its deliberately compressed opening line alternates three 37 mm Bofors anti-tank guns with three 75 mm field guns; five five-man infantry sections occupy the gaps, with a full eight-man reserve squad, two HMGs, and one each of the 46 mm and 81 mm mortars. This is a playable vertical-slice allocation, not the full brigade establishment described in the campaign dossier.
 
 Polish commands use 75 unique active assets from 77 supplied recordings. Infantry pools contain 16 selection, 30 movement, 6 core-attack, and 18 morale/patriotic takes; tank pools reuse vehicle-neutral recordings in pools of 15 selection, 17 movement, 5 core-attack, 18 shared vehicle-safe morale/patriotic, and 8 stop takes. The first accepted Polish infantry or tank attack order, then every third attack order after it, uses the relevant morale pool. Attack-move and attack-ground orders use attack semantics, while drag-box selection emits one aggregate acknowledgement. The final German Mokra echelon forces one `nie-zlamia-nas` cue.
 
-Only `formal-variants/oddzial-gotow-panie-kapitanie` and `patriotic/za-warszawe` remain reserved. Dedicated vehicle-crew recordings are still desirable, but Polish tanks are not silent. Mounted cavalry, Armoured Train No. 53 *Śmiały*, the scripted Ju 87 phase, and the protected withdrawal are documented future work rather than current gameplay.
+Only `formal-variants/oddzial-gotow-panie-kapitanie` and `patriotic/za-warszawe` remain reserved. Dedicated vehicle-crew recordings are still desirable, but Polish tanks are not silent. The four mounted reserve Ułans can dismount, leaving persistent riderless horses that cannot be controlled; a linked foot Ułan must walk back to its horse through the enter-style interaction before remounting. Horse-artillery limbers, Armoured Train No. 53 *Śmiały*, the scripted Ju 87 phase, and the protected withdrawal remain documented future work.
 
 ### Controls
 
@@ -185,8 +185,9 @@ in the browser console, once.
 
 ## Tech at a glance
 
-- **Three.js** (r0.180, via CDN importmap) for 3D rendering
-- **Postprocessing** ([pmndrs/postprocessing](https://github.com/pmndrs/postprocessing), CDN) — bloom, tilt-shift depth-of-field, colour grading, vignette, SMAA, plus an FSR-like render upscaler; all tunable live in the debug panel
+- **Three.js** (r0.180, vendored and pinned through the importmap) for 3D rendering
+- **Postprocessing** ([pmndrs/postprocessing](https://github.com/pmndrs/postprocessing), vendored) — bloom, tilt-shift depth-of-field, colour grading, vignette, SMAA, plus an FSR-like render upscaler; all tunable live in the debug panel
+- **Bunny CDN in production** for heavyweight public assets, with same-origin localhost fallback and the purge/verification procedure in [`docs/CDN.md`](docs/CDN.md)
 - **Procedural trees & hedges** via [EZ-Tree](https://github.com/dgreenheck/ez-tree) (geometry only), rendered with CC0 oak bark + leaf textures
 - Vanilla JS — a global `Game` namespace of classic scripts plus one ES-module entry (`js/main.js`)
 - **Per-unit logic split into modules** (`js/unit_modules.js`: move/fire/scan/health/morale/deploy/…) behind a thin `updateUnit` orchestrator
