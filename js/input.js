@@ -35,13 +35,19 @@ Game.cancelTruckManeuver = (unit, resetPreflight = true) => {
 // the circles are precisely where the units go. Vehicles are spread EVENLY across the
 // formation (not clumped at the front), and every unit is matched to its nearest slot
 // of the right kind to keep paths from crossing.
-Game.computeFormationTargets = (chosen, wx, wz) => {
+Game.computeFormationTargets = (chosen, wx, wz, faceAngle = null) => {
     const n = chosen.length;
     if (!n) return [];
     let cx = 0, cz = 0;
     chosen.forEach(u => { cx += u.x; cz += u.z; });
     cx /= n; cz /= n;
-    const angle = Math.atan2(wz - cz, wx - cx);
+    // A directional drag explicitly owns the formation heading. Offsets use
+    // local -Z as "forward" (notably the wedge leader), hence +PI/2 converts
+    // the world-facing angle into the offset rotation. Ordinary clicks retain
+    // the established travel-direction layout.
+    const angle = Number.isFinite(faceAngle)
+        ? faceAngle + Math.PI / 2
+        : Math.atan2(wz - cz, wx - cx);
     const cosA = Math.cos(angle), sinA = Math.sin(angle);
 
     // Spacing must clear the biggest footprint so slots never overlap.
@@ -120,9 +126,11 @@ Game.moveOrderParticipants = (units, mode = 'move') => {
         && movingCarriers.has(u._enterCarrierId)));
 };
 
-Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gather = false) => {
+Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false,
+    gather = false, facing = null) => {
     let chosen = Game.moveOrderParticipants(unitList || Game.selectedPlayerUnits(), mode);
     if (!chosen.length) return;
+    const faceAngle = facing && Number.isFinite(facing.angle) ? facing.angle : null;
     // Supply / fuel trucks can't fight, so an attack-move STOPS them where they are
     // (and cancels any move they were still finishing) — they only obey plain Move
     // orders. Halt them, then drop them so the rest of the group advances without them.
@@ -132,6 +140,7 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
                 Game.cancelTruckManeuver(u);
                 u.path = []; u.moving = false; u.orderMode = 'hold';
                 u._groupMoveActive = false;
+                u._arrivalFacing = null;
             }
         }
         chosen = chosen.filter(u => !Game.isTruck(u.kind));
@@ -149,7 +158,7 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
     // as separation allows — instead of taking spread formation slots.
     const targets = gather
         ? chosen.map(u => ({ unit: u, x: wx, z: wz }))
-        : Game.computeFormationTargets(chosen, wx, wz);
+        : Game.computeFormationTargets(chosen, wx, wz, faceAngle);
     const targetFor = new Map(targets.map(t => [t.unit.id, t]));
 
     // Group pace = the slowest member's EFFECTIVE speed, so armor/trucks wait for the
@@ -173,10 +182,14 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
     let queuedRejected = 0;
 
     chosen.forEach((unit, i) => {
+        // A ground move/waypoint replaces a pending walk-to-horse order. Let the
+        // cavalry runtime release the horse reservation as well as rider state.
+        if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(unit);
         const isQueued = queue && unit.path && unit.path.length > 0;
         const previousTargetX = unit.targetX;
         const previousTargetZ = unit.targetZ;
         const previousMoveOrder = unit._lastMoveOrder;
+        const previousArrivalFacing = unit._arrivalFacing;
         if (!isQueued && Game.isTruck(unit.kind)) {
             Game.cancelTruckManeuver(unit);
         }
@@ -208,6 +221,9 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
             clickX: wx, clickZ: wz,
             startX: unit.x, startZ: unit.z, startA: unit.angle || 0,
             goalX: tx, goalZ: tz,
+            faceX: facing && Number.isFinite(facing.x) ? facing.x : null,
+            faceZ: facing && Number.isFinite(facing.z) ? facing.z : null,
+            faceA: faceAngle,
         };
         if (isQueued) {
             const queuedStop = { id: orderSerial, x: tx, z: tz };
@@ -267,9 +283,34 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
             };
             if (queue) {
                 if (unit.path.length) queuedAdded++;
-                else { queuedRejected++; return; }
+                else {
+                    unit.targetX = previousTargetX;
+                    unit.targetZ = previousTargetZ;
+                    unit._lastMoveOrder = previousMoveOrder;
+                    unit._arrivalFacing = previousArrivalFacing;
+                    queuedRejected++;
+                    return;
+                }
             }
         }
+        // Store the terminal heading separately from the live path. Infantry
+        // and attack-move may rebuild their path without preserving waypoint
+        // metadata; the order id + goal guard keeps this intent authoritative
+        // until genuine arrival. A later accepted plain/queued click clears it.
+        // A pathless command is accepted only when already at the normal stop
+        // radius. The broader crowded-settle radius is for a route that really
+        // ran and later had to settle around friendly bodies, not an initially
+        // unreachable point on the far side of an obstacle.
+        const facingRadius = Game.isTank(unit.kind) || Game.isTruck(unit.kind)
+            ? 2.0 : (unit._cavalryMounted ? 1.0 : 0.8);
+        const facingRouteAccepted = unit.path.length > 0
+            || Game.dist(unit.x, unit.z, tx, tz) <= facingRadius;
+        unit._arrivalFacing = faceAngle != null && facingRouteAccepted ? {
+            orderId: orderSerial,
+            goalX: tx,
+            goalZ: tz,
+            angle: faceAngle,
+        } : null;
         // Attack-move: advance to the area but stop to engage any enemy that comes
         // into range, then push on. A plain move is a RELOCATE order: obey it and
         // get to the destination, do NOT stop to fight or chase (it can still
@@ -365,6 +406,88 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false, gath
     Game._clearFormationPreview();
 };
 
+// Final-facing orders survive route replans, but activate only when the matching
+// player order has genuinely reached its own destination.
+Game.arrivalFacingRadius = (unit) => {
+    if (Game.isTank(unit.kind) || Game.isTruck(unit.kind)) return 2.2;
+    if (unit._cavalryMounted) return 2.2;
+    // Matches uMod.move's accepted crowded-settle radius and also covers the
+    // 2.2u attack-move completion threshold.
+    return 3.2;
+};
+
+Game.clearArrivalFacing = (unit) => {
+    if (unit) unit._arrivalFacing = null;
+};
+
+Game.tryActivateArrivalFacing = (unit) => {
+    const facing = unit && unit._arrivalFacing;
+    if (!facing) return false;
+    const order = unit._lastMoveOrder;
+    if (!order || order.id !== facing.orderId) {
+        unit._arrivalFacing = null;
+        return false;
+    }
+    if (unit.path && unit.path.length) return false;
+    // Attack-move owns temporary pathless combat pauses. Its resume logic clears
+    // _assaultGoal only after the objective itself is accepted as reached.
+    if (unit.orderMode === 'assault' && unit._assaultGoal) return false;
+    if (Game.dist(unit.x, unit.z, facing.goalX, facing.goalZ)
+        > Game.arrivalFacingRadius(unit)) return false;
+
+    unit._faceAngle = facing.angle;
+    unit._faceUntil = (Game.gameClock || 0) + 4;
+    unit._faceGoal = null;
+    unit._arrivalFacing = null;
+    unit._groupMoveActive = false;
+    unit._engageId = null;
+    unit._engageTarget = null;
+    unit.moving = false;
+    unit.stopTimer = Math.max(unit.stopTimer || 0, 0.1);
+    return true;
+};
+
+Game.directionalOrderNearby = (chosen, wx, wz) => {
+    if (!chosen || !chosen.length) return false;
+    let cx = 0, cz = 0;
+    chosen.forEach(unit => { cx += unit.x; cz += unit.z; });
+    cx /= chosen.length;
+    cz /= chosen.length;
+    return Game.dist(cx, cz, wx, wz) <= 2.25;
+};
+
+Game.issueDirectionalCommand = (wx, wz, faceX, faceZ, options = {}) => {
+    const units = (options.units || Game.selectedPlayerUnits())
+        .filter(unit => unit.alive && unit.team === Game.playerTeam);
+    const queue = !!options.queue;
+    const gather = !!options.gather;
+    const mode = queue || gather
+        ? 'move' : (options.mode === 'attack' ? 'attack' : 'move');
+    const chosen = Game.moveOrderParticipants(units, mode);
+    const dx = faceX - wx, dz = faceZ - wz;
+    if (!chosen.length || Math.hypot(dx, dz) < 0.35) return false;
+    const angle = Math.atan2(dz, dx);
+
+    // A drag anchored beside the current formation is a facing adjustment, not
+    // an instruction to shuffle every unit into freshly generated slots.
+    if (!queue && !gather && Game.directionalOrderNearby(chosen, wx, wz)) {
+        Game.orderFaceAngle(angle, wx, wz, chosen, { x: faceX, z: faceZ });
+        return true;
+    }
+
+    if (mode === 'attack') chosen.forEach(unit => {
+        unit.bombardX = null;
+        unit.bombardZ = null;
+        unit._bombarding = false;
+    });
+    Game.issueCommand(wx, wz, mode, chosen, queue, gather, {
+        x: faceX,
+        z: faceZ,
+        angle,
+    });
+    return true;
+};
+
 /**
  * Set the persistent right-click order stance ('move' or 'attack') and reflect
  * it in the HUD switch + the battlefield cursor.
@@ -413,6 +536,8 @@ Game.orderRetreat = (x, z) => {
     if (!chosen.length) return;
     const tx = Game.clamp(x, 1, Game.WORLD_W - 1), tz = Game.clamp(z, 1, Game.WORLD_H - 1);
     chosen.forEach(u => {
+        if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
+        Game.clearArrivalFacing(u);
         u.forcedTargetId = null;
         u.bombardX = null; u.bombardZ = null; u._bombarding = false;
         u._enterRec = null;
@@ -449,6 +574,8 @@ Game.orderAttackGround = (x, z) => {
         const w = Game.WEAPONS[u.weaponKey];
         if (!w || w.fireType === 'none' || (w.gameRange || 0) <= 0) return; // unarmed
         any = true;
+        if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
+        Game.clearArrivalFacing(u);
         u._enterRec = null;
         u._enterCarrierId = null;
         if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
@@ -517,6 +644,8 @@ Game.orderAttackTarget = (target) => {
         const w = Game.WEAPONS[u.weaponKey];
         if (!w || w.fireType === 'none' || (w.gameRange || 0) <= 0) return; // unarmed
         any = true;
+        if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
+        Game.clearArrivalFacing(u);
         u._enterRec = null;
         u._enterCarrierId = null;
         if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
@@ -614,6 +743,7 @@ Game.updateOrderMarkers = (dt) => {
 
 // ── Formation Preview Markers ──
 Game._formationPreviews = [];
+Game._rightOrderArrow = null;
 
 Game._clearFormationPreview = () => {
     Game._formationPreviews.forEach(m => {
@@ -624,11 +754,57 @@ Game._clearFormationPreview = () => {
     Game._formationPreviews = [];
 };
 
-Game._showFormationPreview = (wx, wz) => {
+Game._clearRightOrderArrow = () => {
+    if (Game._rightOrderArrow) Game._rightOrderArrow.visible = false;
+};
+
+Game._showRightOrderArrow = (origin, tip, stance = 'move') => {
+    const THREE = Game.THREE;
+    if (!THREE || !Game.scene || !origin || !tip) return;
+    const startY = (Game.getHeight ? Game.getHeight(origin.x, origin.z) : 0) + 0.35;
+    const endY = (Game.getHeight ? Game.getHeight(tip.x, tip.z) : 0) + 0.35;
+    const delta = new THREE.Vector3(tip.x - origin.x, endY - startY, tip.z - origin.z);
+    const length = delta.length();
+    if (length < 0.01) {
+        Game._clearRightOrderArrow();
+        return;
+    }
+    const color = stance === 'attack' ? 0xff5544 : 0x88ff77;
+    const direction = delta.normalize();
+    const headLength = Math.min(1.2, Math.max(0.3, length * 0.28), length * 0.48);
+    const headWidth = Math.min(0.75, Math.max(0.22, headLength * 0.58));
+    let arrow = Game._rightOrderArrow;
+    if (!arrow || !arrow.parent) {
+        arrow = new THREE.ArrowHelper(direction,
+            new THREE.Vector3(origin.x, startY, origin.z),
+            length, color, headLength, headWidth);
+        arrow.traverse(object => {
+            object.raycast = () => { };
+            object.renderOrder = 1000;
+            if (object.material) {
+                object.material.transparent = true;
+                object.material.opacity = 0.95;
+                object.material.depthTest = false;
+                object.material.depthWrite = false;
+            }
+        });
+        Game.scene.add(arrow);
+        Game._rightOrderArrow = arrow;
+    } else {
+        arrow.position.set(origin.x, startY, origin.z);
+        arrow.setDirection(direction);
+        arrow.setLength(length, headLength, headWidth);
+        arrow.setColor(color);
+    }
+    arrow.visible = true;
+};
+
+Game._showFormationPreview = (wx, wz, faceAngle = null, unitList = null,
+    gather = false, stance = Game.orderStance, rotateOnly = false) => {
     Game._clearFormationPreview();
-    const attackMode = Game.orderStance === 'attack';
+    const attackMode = stance === 'attack';
     const chosen = Game.moveOrderParticipants(
-        Game.selectedPlayerUnits(), attackMode ? 'attack' : 'move');
+        unitList || Game.selectedPlayerUnits(), attackMode ? 'attack' : 'move');
     if (!chosen.length) return;
 
     const THREE = Game.THREE;
@@ -639,7 +815,11 @@ Game._showFormationPreview = (wx, wz) => {
     // Draw one circle at EACH unit's actual assigned slot (same computation the move
     // uses), so what you see is exactly where each unit will go. Vehicle slots get a
     // bigger ring to read as armor positions.
-    const targets = Game.computeFormationTargets(chosen, wx, wz);
+    const targets = rotateOnly
+        ? chosen.map(unit => ({ unit, x: unit.x, z: unit.z }))
+        : gather
+        ? chosen.map(unit => ({ unit, x: wx, z: wz }))
+        : Game.computeFormationTargets(chosen, wx, wz, faceAngle);
     targets.forEach(t => {
         const px = t.x, pz = t.z;
         const py = Game.getHeight ? Game.getHeight(px, pz) : 0;
@@ -667,11 +847,60 @@ Game._showFormationPreview = (wx, wz) => {
  * module instead of being snapped and instantly overwritten by path/aim logic.
  * Tanks swing hull + turret; infantry/guns pivot to face.
  */
+Game.orderFaceAngle = (angle, markerX, markerZ, unitList = null, facePoint = null) => {
+    const chosen = (unitList || Game.selectedPlayerUnits())
+        .filter(unit => unit.alive && unit.team === Game.playerTeam);
+    if (!chosen.length || !Number.isFinite(angle)) return;
+    const orderSerial = Game._moveOrderSerial = (Game._moveOrderSerial || 0) + 1;
+    chosen.forEach(unit => {
+        if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(unit);
+        Game.cancelTruckManeuver(unit);
+        Game.clearArrivalFacing(unit);
+        unit._faceAngle = angle;
+        unit._faceUntil = (Game.gameClock || 0) + 4;
+        unit._faceGoal = null;
+        unit.path = [];
+        unit.moving = false;
+        unit.forcedTargetId = null;
+        unit._engageId = null;
+        unit._engageTarget = null;
+        unit.bombardX = null;
+        unit.bombardZ = null;
+        unit._bombarding = false;
+        unit.stopTimer = Math.max(unit.stopTimer || 0, 0.2);
+        unit._lastMoveOrder = {
+            id: orderSerial,
+            t: Game.gameClock || 0,
+            mode: 'face',
+            queue: 0,
+            clickX: markerX,
+            clickZ: markerZ,
+            startX: unit.x,
+            startZ: unit.z,
+            startA: unit.angle || 0,
+            goalX: unit.x,
+            goalZ: unit.z,
+            faceX: facePoint && Number.isFinite(facePoint.x) ? facePoint.x : null,
+            faceZ: facePoint && Number.isFinite(facePoint.z) ? facePoint.z : null,
+            faceA: angle,
+        };
+    });
+    Game.spawnOrderMarker(markerX, markerZ, 0xffd27a);
+    Game.pushMessage('Facing set.', 1.2);
+    if (Game.Audio) {
+        const anyTank = chosen.some(unit => Game.isTank(unit.kind));
+        Game.Audio.voice(anyTank ? 'f_tank_move' : 'f_sold_move');
+    }
+    Game._clearFormationPreview();
+};
+
 Game.orderFace = (x, z) => {
     const chosen = Game.selectedPlayerUnits();
     if (!chosen.length) return;
     chosen.forEach(u => {
+        if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
         Game.cancelTruckManeuver(u);
+        Game.clearArrivalFacing(u);
         u._faceAngle = Game.angleTo(u.x, u.z, x, z);
         u._faceUntil = Game.gameClock + 4;     // hold the manual facing while it turns
         u.path = [];
@@ -692,7 +921,9 @@ Game.orderFace = (x, z) => {
 
 Game.haltSelection = () => {
     Game.selectedPlayerUnits().forEach(u => {
+        if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
         Game.cancelTruckManeuver(u);
+        Game.clearArrivalFacing(u);
         u.path = [];
         u.targetX = u.x;
         u.targetZ = u.z;
@@ -778,13 +1009,32 @@ Game.handleMouseSelection = () => {
         }
         Game.selectedFighter = null;
 
+        // An empty horse is a persistent world prop, never a selectable unit. A
+        // compatible dismounted reserve rider uses the same early click-to-enter
+        // interception as buildings/transports and walks over to remount.
+        const selectedUnits = Game.selectedPlayerUnits();
+        const directlyPickedUnit = Game.unitAtScreen
+            ? Game.unitAtScreen(mouse.dragCurrentX, mouse.dragCurrentY) : null;
+        const horseGround = Game.screenToGround(mouse.dragCurrentX, mouse.dragCurrentY);
+        const onHorse = (Game.horseAtScreen
+            && Game.horseAtScreen(mouse.dragCurrentX, mouse.dragCurrentY))
+            || (!directlyPickedUnit && horseGround && Game.horseAtWorld
+                && Game.horseAtWorld(horseGround.x, horseGround.z));
+        const mountRider = onHorse && Game.canMountHorse
+            ? selectedUnits.find(u => Game.canMountHorse(u, onHorse))
+            : null;
+        if (mountRider && Game.orderMountHorse) {
+            Game.orderMountHorse(onHorse);
+            return;
+        }
+
         // Enter-building: if infantry are selected and the click lands on a
         // building (and not on a friendly unit you meant to select instead),
         // send the selected infantry in rather than changing the selection.
-        const enterInf = Game.selectedPlayerUnits().filter(u => u.alive && Game.isFootInfantry(u)
+        const enterInf = selectedUnits.filter(u => u.alive && Game.isFootInfantry(u)
             && !u._garrisoned && u._inVehicle == null);
         if (enterInf.length) {
-            const picked0 = Game.unitAtScreen && Game.unitAtScreen(mouse.dragCurrentX, mouse.dragCurrentY);
+            const picked0 = directlyPickedUnit;
             // Once every selected soldier is already queued for this truck, a
             // further left-click means "select the truck", not "enter" again.
             // This lets the player move it while the pending passengers retain
@@ -925,6 +1175,62 @@ Game.handleMouseSelection = () => {
     if (Game.selection.size === 0 && Game._clearFormationPreview) Game._clearFormationPreview();
 };
 
+Game.RIGHT_ORDER_DRAG_PIXELS = 8;
+Game.RIGHT_ORDER_DRAG_WORLD = 0.35;
+
+// Only ordinary open-terrain orders are deferred for drag detection. Armed
+// abilities and contextual enemy/building/transport/horse clicks retain their
+// existing immediate right-click behavior.
+Game._canDeferTerrainRightOrder = (screenX, screenY, ground, modifiers = {}) => {
+    if (!ground || Game._commandMode || Game.selectedFighter || Game.selectedBuilding) return false;
+    const selectedUnits = Game.selectedPlayerUnits();
+    if (!selectedUnits.length) return false;
+    if (modifiers.shiftKey || modifiers.ctrlKey || modifiers.metaKey) return true;
+
+    const picked = Game.unitAtScreen(screenX, screenY);
+    const clickedEnemy = picked && picked.team !== Game.playerTeam ? picked : null;
+    const onHorse = (Game.horseAtScreen && Game.horseAtScreen(screenX, screenY))
+        || (!picked && Game.horseAtWorld && Game.horseAtWorld(ground.x, ground.z));
+    const mountRider = onHorse && Game.canMountHorse
+        ? selectedUnits.find(unit => Game.canMountHorse(unit, onHorse)) : null;
+    const nearbyEnemy = !clickedEnemy && !mountRider
+        ? Game.enemyAtWorld(ground.x, ground.z) : null;
+    const onTransport = picked && picked.team === Game.playerTeam
+        && picked.supportType === 'transport'
+        && selectedUnits.some(Game.isFootInfantry);
+    const onBuilding = (Game.buildingAtScreen && Game.buildingAtScreen(screenX, screenY))
+        || (Game.buildingAt && Game.buildingAt(ground.x, ground.z));
+    return !clickedEnemy && !mountRider && !nearbyEnemy && !onTransport
+        && !(onBuilding && !onBuilding.collapsed);
+};
+
+Game._completeTerrainRightClick = (drag) => {
+    const units = drag.unitIds.map(Game.getUnitById)
+        .filter(unit => unit && unit.alive && unit.team === Game.playerTeam);
+    if (!units.length) return;
+    const now = performance.now();
+    const dbl = Game._lastRC && (now - Game._lastRC.t) < 400
+        && Math.abs(drag.startX - Game._lastRC.x) < 24
+        && Math.abs(drag.startY - Game._lastRC.y) < 24;
+    Game._lastRC = { t: now, x: drag.startX, y: drag.startY };
+    if (dbl && !drag.shiftKey) {
+        Game.orderRetreat(drag.origin.x, drag.origin.z);
+    } else if (drag.shiftKey) {
+        Game.issueCommand(drag.origin.x, drag.origin.z, 'move', units, true);
+    } else if (drag.ctrlKey || drag.metaKey) {
+        Game.issueCommand(drag.origin.x, drag.origin.z, 'move', units, false, true);
+    } else {
+        Game.issueCommand(drag.origin.x, drag.origin.z,
+            drag.stance === 'attack' ? 'attack' : 'move', units);
+    }
+};
+
+Game._cancelRightOrderDrag = () => {
+    Game._rightOrderDrag = null;
+    Game._clearRightOrderArrow();
+    Game._clearFormationPreview();
+};
+
 Game.handleInputEvents = () => {
     const container = document.getElementById('viewport');
 
@@ -947,6 +1253,24 @@ Game.handleInputEvents = () => {
             Game.mouse.dragStartY = Game.mouse.dragCurrentY = e.clientY;
         } else if (e.button === 2) {
             const ground = Game.screenToGround(e.clientX, e.clientY);
+            if (ground && Game._canDeferTerrainRightOrder(e.clientX, e.clientY, ground, e)) {
+                Game._rightOrderDrag = {
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    currentX: e.clientX,
+                    currentY: e.clientY,
+                    origin: { x: ground.x, z: ground.z },
+                    tip: { x: ground.x, z: ground.z },
+                    active: false,
+                    shiftKey: !!e.shiftKey,
+                    ctrlKey: !!e.ctrlKey,
+                    metaKey: !!e.metaKey,
+                    stance: Game.orderStance,
+                    unitIds: Game.selectedPlayerUnits().map(unit => unit.id),
+                };
+                e.preventDefault();
+                return;
+            }
             if (ground) {
                 // Selected fighter: right-click re-tasks its patrol circle —
                 // the plane banks over and orbits the new area.
@@ -1056,28 +1380,42 @@ Game.handleInputEvents = () => {
                         // Pick by the actual mesh first (parallax-proof), then fall back
                         // to a world-radius search around the ground hit.
                         const picked = Game.unitAtScreen(e.clientX, e.clientY);
-                        const enemyUnit = (picked && picked.team !== Game.playerTeam)
-                            ? picked
-                            : Game.enemyAtWorld(ground.x, ground.z);
+                        const clickedEnemy = picked && picked.team !== Game.playerTeam
+                            ? picked : null;
+                        // A direct enemy-mesh click keeps attack priority. Otherwise
+                        // a compatible empty horse wins over radius-based enemy,
+                        // transport, building and terrain fallbacks.
+                        const onHorse = (Game.horseAtScreen && Game.horseAtScreen(e.clientX, e.clientY))
+                            || (!picked && Game.horseAtWorld && Game.horseAtWorld(ground.x, ground.z));
+                        const selectedUnits = Game.selectedPlayerUnits();
+                        const mountRider = onHorse && Game.canMountHorse
+                            ? selectedUnits.find(u => Game.canMountHorse(u, onHorse))
+                            : null;
+                        const nearbyEnemy = !clickedEnemy && !mountRider
+                            ? Game.enemyAtWorld(ground.x, ground.z) : null;
                         const onTransport = picked && picked.team === Game.playerTeam
                             && picked.supportType === 'transport' ? picked : null;
                         // Building under the cursor (click the house itself, not the
                         // ground behind it) or at the ground hit.
                         const onBuilding = (Game.buildingAtScreen && Game.buildingAtScreen(e.clientX, e.clientY))
                             || (Game.buildingAt && Game.buildingAt(ground.x, ground.z));
-                        const haveArmed = Game.selectedPlayerUnits().some(u => {
+                        const haveArmed = selectedUnits.some(u => {
                             const w = Game.WEAPONS[u.weaponKey];
                             return w && w.fireType !== 'none' && (w.gameRange || 0) > 0;
                         });
-                        if (enemyUnit) {
-                            Game.orderAttackTarget(enemyUnit);
-                        } else if (onTransport && Game.selectedPlayerUnits().some(Game.isFootInfantry)) {
+                        if (clickedEnemy) {
+                            Game.orderAttackTarget(clickedEnemy);
+                        } else if (mountRider && Game.orderMountHorse) {
+                            Game.orderMountHorse(onHorse);
+                        } else if (nearbyEnemy) {
+                            Game.orderAttackTarget(nearbyEnemy);
+                        } else if (onTransport && selectedUnits.some(Game.isFootInfantry)) {
                             Game.orderEnterCarrier(onTransport);
                         } else if (onBuilding && !onBuilding.collapsed) {
                             // Right-click a building: selected infantry move in and
                             // garrison it; otherwise armed vehicles/AT shell it.
                             // NEVER silent — if neither applies, say why.
-                            const inf = Game.selectedPlayerUnits().filter(u => u.alive
+                            const inf = selectedUnits.filter(u => u.alive
                                 && Game.isFootInfantry(u) && !u._garrisoned);
                             if (inf.length) Game.orderEnterBuilding(onBuilding);
                             else if (haveArmed) Game.orderAttackGround(onBuilding.cx, onBuilding.cz);
@@ -1109,13 +1447,49 @@ Game.handleInputEvents = () => {
             // Formation preview markers (throttled)
             const now = performance.now();
             const overHud = e.clientY > window.innerHeight - 110;
-            if (Game.selection.size > 0 && !overHud && (!Game._lastPreviewTime || now - Game._lastPreviewTime > 150)) {
+            const rightDrag = Game._rightOrderDrag;
+            if (rightDrag) {
+                rightDrag.currentX = e.clientX;
+                rightDrag.currentY = e.clientY;
+                rightDrag.tip = { x: ground.x, z: ground.z };
+                const screenDistance = Math.hypot(
+                    e.clientX - rightDrag.startX, e.clientY - rightDrag.startY);
+                const worldDistance = Game.dist(
+                    rightDrag.origin.x, rightDrag.origin.z, ground.x, ground.z);
+                rightDrag.active = screenDistance >= Game.RIGHT_ORDER_DRAG_PIXELS
+                    && worldDistance >= Game.RIGHT_ORDER_DRAG_WORLD;
+                if (rightDrag.active) {
+                    const previewStance = rightDrag.shiftKey
+                        || rightDrag.ctrlKey || rightDrag.metaKey ? 'move' : rightDrag.stance;
+                    const angle = Game.angleTo(
+                        rightDrag.origin.x, rightDrag.origin.z, ground.x, ground.z);
+                    Game._showRightOrderArrow(rightDrag.origin, ground, previewStance);
+                    if (!Game._lastRightDragPreviewTime
+                        || now - Game._lastRightDragPreviewTime > 80) {
+                        Game._lastRightDragPreviewTime = now;
+                        const units = rightDrag.unitIds.map(Game.getUnitById)
+                            .filter(unit => unit && unit.alive && unit.team === Game.playerTeam);
+                        const rotateOnly = !rightDrag.shiftKey
+                            && !rightDrag.ctrlKey && !rightDrag.metaKey
+                            && Game.directionalOrderNearby(units,
+                                rightDrag.origin.x, rightDrag.origin.z);
+                        Game._showFormationPreview(
+                            rightDrag.origin.x, rightDrag.origin.z, angle, units,
+                            rightDrag.ctrlKey || rightDrag.metaKey, previewStance,
+                            rotateOnly);
+                    }
+                } else {
+                    Game._clearRightOrderArrow();
+                    Game._clearFormationPreview();
+                }
+            } else if (Game.selection.size > 0 && !overHud
+                && (!Game._lastPreviewTime || now - Game._lastPreviewTime > 150)) {
                 Game._lastPreviewTime = now;
                 Game._showFormationPreview(ground.x, ground.z);
             } else if (Game.selection.size === 0) {
                 Game._clearFormationPreview();
             }
-        } else {
+        } else if (!Game._rightOrderDrag) {
             Game._clearFormationPreview();
         }
     });
@@ -1124,8 +1498,41 @@ Game.handleInputEvents = () => {
         if (e.button === 0 && Game.mouse.down) {
             Game.mouse.down = false;
             Game.handleMouseSelection();
+        } else if (e.button === 2 && Game._rightOrderDrag) {
+            const drag = Game._rightOrderDrag;
+            const releaseGround = Game.screenToGround(e.clientX, e.clientY);
+            if (releaseGround) {
+                drag.tip = { x: releaseGround.x, z: releaseGround.z };
+                const screenDistance = Math.hypot(
+                    e.clientX - drag.startX, e.clientY - drag.startY);
+                const worldDistance = Game.dist(
+                    drag.origin.x, drag.origin.z, releaseGround.x, releaseGround.z);
+                drag.active = screenDistance >= Game.RIGHT_ORDER_DRAG_PIXELS
+                    && worldDistance >= Game.RIGHT_ORDER_DRAG_WORLD;
+            }
+            Game._rightOrderDrag = null;
+            Game._clearRightOrderArrow();
+            Game._clearFormationPreview();
+            if (drag.active && drag.tip) {
+                // A completed drag is never one half of a retreat double-click.
+                Game._lastRC = null;
+                const units = drag.unitIds.map(Game.getUnitById)
+                    .filter(unit => unit && unit.alive && unit.team === Game.playerTeam);
+                Game.issueDirectionalCommand(
+                    drag.origin.x, drag.origin.z, drag.tip.x, drag.tip.z, {
+                        units,
+                        queue: drag.shiftKey,
+                        gather: drag.ctrlKey || drag.metaKey,
+                        mode: drag.stance,
+                    });
+            } else {
+                Game._completeTerrainRightClick(drag);
+            }
+            e.preventDefault();
         }
     });
+
+    window.addEventListener('blur', Game._cancelRightOrderDrag);
 
     // Mouse wheel does NOT zoom — use the +/- keys. Swallow the event so the
     // page/trackpad never scrolls the canvas. While an air strike is armed, the
@@ -1336,7 +1743,9 @@ Game.handleInputEvents = () => {
                 sel.forEach(u => {
                     u.orderMode = on ? 'hold' : 'aggressive';
                     if (on) {
+                        if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
                         Game.cancelTruckManeuver(u);
+                        Game.clearArrivalFacing(u);
                         u.path = []; u.moving = false;
                     }
                 });
@@ -1375,7 +1784,9 @@ Game.handleInputEvents = () => {
         if (e.code === 'KeyV') {
             const stoppedUnits = Game.selectedPlayerUnits();
             stoppedUnits.forEach(u => {
+                if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
                 Game.cancelTruckManeuver(u);
+                Game.clearArrivalFacing(u);
                 u.path = [];
                 u.moving = false;
                 u.orderMode = 'hold';

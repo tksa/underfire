@@ -107,6 +107,9 @@ Game.syncUnitMeshes = (dt) => {
         // Drive skeletal animation only for visible units. Off-map reinforcements
         // and fog-hidden enemies otherwise consumed mixer/bone work every frame.
         Game._updateModelAnimation(unit, dt);
+        if (unit.kind === 'fieldgun75' && Game.updateFieldGunCrew) {
+            Game.updateFieldGunCrew(unit, dt);
+        }
 
         // Position
         unit.mesh.position.set(unit.x, unit.y || 0, unit.z);
@@ -1802,6 +1805,33 @@ Game.updateHUD = () => {
         pauseBanner.style.display = Game._paused ? 'block' : 'none';
     }
 
+    // Mokra opens with a player-controlled deployment interval. Keep its
+    // approach warning visible until combat begins, then remove it immediately.
+    const approachCountdown = Game.hud.mokraApproachCountdown;
+    if (approachCountdown) {
+        const ms = Game.missionState || {};
+        const rawRemaining = Number(ms.deploymentRemaining);
+        const remaining = Number.isFinite(rawRemaining)
+            ? Math.max(0, Math.ceil(rawRemaining)) : 0;
+        const showApproach = Game.currentScenario === 'mokra'
+            && ms.deploymentStarted === true
+            && ms.combatStarted !== true
+            && remaining > 0;
+        approachCountdown.hidden = !showApproach;
+        if (showApproach) {
+            const minutes = Math.floor(remaining / 60);
+            const seconds = remaining % 60;
+            const parts = [];
+            if (minutes) {
+                parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+                parts.push(`${seconds} second${seconds === 1 ? '' : 's'}`);
+            } else {
+                parts.push(`${seconds} second${seconds === 1 ? '' : 's'}`);
+            }
+            approachCountdown.textContent = `German forces approaching: ${parts.join(' ')}`;
+        }
+    }
+
     // Crawl button reflects prone state of selected infantry
     const proneBtn = document.getElementById('cmdProne');
     if (proneBtn) {
@@ -1810,22 +1840,27 @@ Game.updateHUD = () => {
         proneBtn.classList.toggle('active', proneActive);
     }
 
-    // Mounted reserves retain their horse when dismounted, so the same selected
-    // unit can change state without losing health, ammo, experience or its group.
+    // A mounted reserve leaves its horse behind when dismounted. The same unit
+    // retains health/ammo/experience, but remounting is now an entry order back
+    // to that persistent horse rather than an anywhere/on-the-spot model swap.
     const cavalryBtn = document.getElementById('cmdCavalry');
     if (cavalryBtn) {
         const cavalry = Game.selectedPlayerUnits().filter(u => u._cavalryCanMount);
-        const busy = cavalry.some(u => u._cavalryTransition || u._cavalryAwaitingModel);
+        const changing = cavalry.some(u => u._cavalryTransition || u._cavalryAwaitingModel);
+        const approaching = cavalry.some(u => u._enterHorseId != null);
         const allMounted = cavalry.length > 0 && cavalry.every(u => u._cavalryMounted);
         const allUnmounted = cavalry.length > 0 && cavalry.every(u => !u._cavalryMounted);
         cavalryBtn.style.display = cavalry.length ? 'flex' : 'none';
-        cavalryBtn.classList.toggle('disabled', busy);
+        cavalryBtn.classList.toggle('disabled', changing);
         cavalryBtn.classList.toggle('active', allMounted);
         const label = cavalryBtn.querySelector('.cmd-label');
-        if (label) label.textContent = busy ? 'Changing' : (allMounted ? 'Dismount' : 'Mount');
-        cavalryBtn.title = busy
+        if (label) label.textContent = changing
+            ? 'Changing' : (approaching ? 'To horse' : (allUnmounted ? 'Mount' : 'Dismount'));
+        cavalryBtn.title = changing
             ? 'Cavalry is changing state'
-            : (allUnmounted ? 'Mount cavalry' : 'Dismount cavalry');
+            : (approaching
+                ? 'Cavalry is moving to its horse'
+                : (allUnmounted ? 'Return to the horse and mount' : 'Dismount cavalry'));
     }
 
     // Hold button lights up while the selection is holding fire
@@ -1889,11 +1924,17 @@ Game.updateHUD = () => {
 
     // Status pill
     if (Game.hud.statusPill) {
+        const deployment = Game.currentScenario === 'mokra'
+            && !Game.missionState.combatStarted;
+        const deploymentTime = Game.formatTime(Math.ceil(
+            Game.missionState.deploymentRemaining || 0));
         Game.hud.statusPill.textContent = Game.missionState.won
             ? 'Mission accomplished'
             : (Game.missionState.lost
                 ? 'Mission failed'
-                : `Elapsed ${Game.formatTime(Game.missionState.timer)} • ${Game.selectedPlayerUnits().length} selected`);
+                : (deployment
+                    ? `Deployment ${deploymentTime} • ${Game.selectedPlayerUnits().length} selected`
+                    : `Elapsed ${Game.formatTime(Game.missionState.timer)} • ${Game.selectedPlayerUnits().length} selected`));
     }
 
     // Mission panel
@@ -1903,6 +1944,8 @@ Game.updateHUD = () => {
         const asFrench = Game.playerTeam === Game.TEAM.FRENCH;
         const isMokra = Game.currentScenario === 'mokra';
         const ms = Game.missionState || {};
+        const deployment = isMokra && !ms.combatStarted;
+        const deploymentTime = Game.formatTime(Math.ceil(ms.deploymentRemaining || 0));
         let status = isMokra
             ? (ms.tacticalHint || 'Use cover, conceal the guns, and preserve the brigade.')
             : (asFrench
@@ -1916,7 +1959,9 @@ Game.updateHUD = () => {
       <div class="hud-text">Primary: ${ms.primaryObjective || 'Hold the central railway crossing.'}</div>
       ${ms.secondaryObjective ? `<div class="hud-text">Secondary: ${ms.secondaryObjective}</div>` : ''}
       <div class="hud-text">Phase ${ms.phase || 1}: ${ms.phaseName || 'Defence'} • Polish: ${ownAlive} • Enemy: ${enemyAlive}</div>
-      <div class="hud-text">Enemy losses: ${ms.enemyLosses || 0} • ${Game.formatTime(ms.timer)}</div>
+      ${deployment
+        ? `<div class="hud-text"><strong>German attack in ${deploymentTime}</strong></div>`
+        : `<div class="hud-text">Enemy losses: ${ms.enemyLosses || 0} • ${Game.formatTime(ms.timer)}</div>`}
       <div class="hud-status">${status}</div>
     ` : `
       <div class="hud-title">Mission</div>

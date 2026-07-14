@@ -751,8 +751,9 @@ Game.recordMoveFrame = () => {
             mv: u.moving ? 1 : 0, st: u.stance || '',
             ai: u._ai || u.aiState || '',
             clip: (u.mesh && u.mesh.userData && u.mesh.userData._activeClip) || '',
-            // Last player movement order. click* is the raw mouse position;
-            // goal* is this unit's formation slot; order* is its pose on click.
+            // Last player movement order. click* is the raw destination;
+            // goal* is this unit's formation slot; face* is the optional
+            // right-drag endpoint/heading; order* is its pose when ordered.
             orderId: order ? order.id : null,
             orderT: order ? +((order.t - Game._moveRecT0).toFixed(3)) : null,
             orderMode: order ? order.mode : '', orderQueue: order ? order.queue : 0,
@@ -763,6 +764,9 @@ Game.recordMoveFrame = () => {
             orderA: order ? +order.startA.toFixed(3) : null,
             goalX: order ? +order.goalX.toFixed(3) : null,
             goalZ: order ? +order.goalZ.toFixed(3) : null,
+            faceX: order && Number.isFinite(order.faceX) ? +order.faceX.toFixed(3) : null,
+            faceZ: order && Number.isFinite(order.faceZ) ? +order.faceZ.toFixed(3) : null,
+            faceA: order && Number.isFinite(order.faceA) ? +order.faceA.toFixed(3) : null,
             waypointX: waypoint ? +waypoint.x.toFixed(3) : null,
             waypointZ: waypoint ? +waypoint.z.toFixed(3) : null,
             finalX: finalWaypoint ? +finalWaypoint.x.toFixed(3) : null,
@@ -2150,6 +2154,7 @@ Game.entrenchUnit = (unit) => {
     } else {
         unit.entrenched = true;
         unit.coverBonus = 0.5;
+        if (Game.clearArrivalFacing) Game.clearArrivalFacing(unit);
         unit.path = [];
         unit.moving = false;
         Game.pushMessage(`${unit.label} entrenched!`, 1.5);
@@ -2320,6 +2325,7 @@ Game.towUnit = (tower, target) => {
     if (!Game.isTowableAT(target)) { Game.pushMessage('Only anti-tank guns can be towed.', 1.5); return; }
     if (Game.towedBy(tower)) { Game.pushMessage(`${tower.label} is already towing a gun.`, 1.5); return; }
     if (target._towed) return;
+    if (Game.clearArrivalFacing) Game.clearArrivalFacing(target);
     target._towed = true;
     target._towedBy = tower.id;
     tower._towedUnitId = target.id;
@@ -2404,8 +2410,10 @@ Game.findCarrierEntryPath = (inf, tx, tz) => {
 Game.loadUnit = (inf, carrier) => {
     if (!inf.alive || !carrier.alive || inf === carrier) return false;
     if (!Game.isFootInfantry(inf) || inf.deployable) return false; // foot troops only
+    if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(inf);
     carrier._passengers = carrier._passengers || [];
     if (carrier._passengers.length >= Game.carrierCapacity(carrier)) { Game.pushMessage(`${carrier.label} is full.`, 1.5); return false; }
+    if (Game.clearArrivalFacing) Game.clearArrivalFacing(inf);
     carrier._passengers.push(inf.id);
     if (carrier._boardingQueue) {
         const qi = carrier._boardingQueue.indexOf(inf.id);
@@ -2444,6 +2452,8 @@ Game.orderEnterCarrier = (carrier) => {
         return;
     }
     inf.forEach((u, i) => {
+        if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
+        if (Game.clearArrivalFacing) Game.clearArrivalFacing(u);
         carrier._boardingQueue.push(u.id);
         u._enterCarrierId = carrier.id;
         u._enterCarrierRepath = 0;
@@ -4172,7 +4182,8 @@ Game.NEURAL_BAKE_PPU = 21.6;   // px per world unit ~= training pixel density
             }
             if (rec.bake || rec._bakeUrl) {
                 const img = new Image();
-                const url = rec.bake ? URL.createObjectURL(rec.bake) : rec._bakeUrl;
+                const url = rec.bake ? URL.createObjectURL(rec.bake) : Game.assetUrl(rec._bakeUrl);
+                if (!rec.bake) img.crossOrigin = 'anonymous';
                 img.src = url;
                 await img.decode();
                 if (rec.bake) URL.revokeObjectURL(url);
@@ -4928,6 +4939,7 @@ Game.tick = (now) => {
         if (Game.updateFires) Game.updateFires(dt);
         if (Game.updateBuildings) Game.updateBuildings(dt);
         if (Game.updateBuildingEntry) Game.updateBuildingEntry(dt);
+        if (Game.updateCavalryHorseEntry) Game.updateCavalryHorseEntry(dt);
         if (Game.updateSmoke3D) Game.updateSmoke3D(dt);
         if (Game.updateScorch3D) Game.updateScorch3D(dt);
         if (Game.updateFoliageKnockdown) Game.updateFoliageKnockdown(dt);
@@ -5002,14 +5014,19 @@ Game.tick = (now) => {
 //  BOOT SEQUENCE (async for heightmap loading)
 // ═══════════════════════════════════════════════════════
 
-Game.boot = async () => {
-    // HUD refs
+Game.setupHUD = () => {
     Game.hud.statusPill = document.getElementById('statusPill');
     Game.hud.missionPanel = document.getElementById('missionPanel');
     Game.hud.selectedPanel = document.getElementById('selectedPanel');
     Game.hud.messages = document.getElementById('gameMessages');
     Game.hud.selectionBox = document.getElementById('selectionBox');
     Game.hud.minimapCanvas = document.getElementById('minimapCanvas');
+    Game.hud.mokraApproachCountdown = document.getElementById('mokraApproachCountdown');
+};
+
+Game.boot = async () => {
+    // HUD refs
+    Game.setupHUD();
 
     // Minimap click-to-navigate
     if (Game.hud.minimapCanvas) {
@@ -5031,7 +5048,14 @@ Game.boot = async () => {
         cmdAttackGround: () => { Game._commandMode = 'attackground'; Game.pushMessage('Attack ground — right-click a spot to suppress.', 2.0); },
         cmdStop: () => {
             const stoppedUnits = Game.selectedPlayerUnits();
-            stoppedUnits.forEach(u => { if (Game.cancelTruckManeuver) Game.cancelTruckManeuver(u); u.path = []; u.moving = false; u.orderMode = 'hold'; u.forcedTargetId = null; u.bombardX = null; u.bombardZ = null; u._bombarding = false; });
+            stoppedUnits.forEach(u => {
+                if (Game.cancelTruckManeuver) Game.cancelTruckManeuver(u);
+                if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
+                if (Game.clearArrivalFacing) Game.clearArrivalFacing(u);
+                u.path = []; u.moving = false; u.orderMode = 'hold';
+                u.forcedTargetId = null; u.bombardX = null; u.bombardZ = null;
+                u._bombarding = false;
+            });
             if (stoppedUnits.some(u => Game.isTank(u.kind)) && Game.Audio) Game.Audio.voice('f_tank_stop');
             Game.pushMessage('Units stopped.', 1.0);
         },
@@ -5268,6 +5292,7 @@ Game.startFromMenu = () => {
     }
 
     Game.pushMessage(`Mission: ${mission.toUpperCase()} | Side: ${side.toUpperCase()}`, 5.0);
+    if (mission === 'mokra' && Game.startMokraDeployment) Game.startMokraDeployment();
 };
 
 // Save/Load was removed for the single-session public build. A persistent
@@ -5278,10 +5303,17 @@ const wireMenuButtons = () => {
     document.getElementById('btnStartMission')?.addEventListener('click', () => Game.startFromMenu());
 };
 
+const bootPage = async () => {
+    // Confirm GLB CORS before any heavyweight asset request. A failed probe
+    // switches the resolver back to underfire.io for this page load.
+    await Game.prepareAssetCdn();
+    wireMenuButtons();
+    await Game.boot();
+};
+
 // Wait for DOM, then boot (game starts paused behind menu)
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => { wireMenuButtons(); Game.boot(); });
+    document.addEventListener('DOMContentLoaded', () => { bootPage(); });
 } else {
-    wireMenuButtons();
-    Game.boot();
+    bootPage();
 }

@@ -44,6 +44,9 @@ const snapshot = () => page.evaluate(() => {
     polish: alive.filter(u => u.team === 'polish').length,
     french: alive.filter(u => u.team === 'french').length,
     german: alive.filter(u => u.team === 'german').length,
+    deploymentRemaining: Game.missionState.deploymentRemaining,
+    combatStarted: Game.missionState.combatStarted,
+    phaseName: Game.missionState.phaseName,
     railway: tiles.railway || 0,
     water: tiles.water || 0,
     storedMission: localStorage.getItem('uf_mission'),
@@ -95,7 +98,10 @@ expect(dyleDefault.previewRightGap != null && dyleDefault.previewRightGap >= 0
 expect(mokra.scenario === 'mokra' && mokra.selectedCard === 'mokra', 'Mokra selection did not reload the Mokra world');
 expect(mokra.storedMission === 'mokra', 'selecting Mokra did not persist an explicit uf_mission=mokra');
 expect(mokra.playerTeam === 'polish' && mokra.selectedSide === 'polish', 'Mokra is not Polish-first');
-expect(mokra.polish > 0 && mokra.french === 0 && mokra.german > 0, 'Mokra retained old Dyle forces');
+expect(mokra.polish > 0 && mokra.french === 0 && mokra.german === 0,
+  'Mokra does not begin with the Polish-only deployment force');
+expect(mokra.deploymentRemaining === 180 && !mokra.combatStarted && mokra.phaseName === 'Deployment',
+  'Mokra is not waiting at its three-minute deployment phase in the mission menu');
 expect(mokra.railway > 150 && mokra.water === 0, 'Mokra retained the Dyle map/bake');
 expect(mokra.visibleSides.join('|') === 'polish', 'Mokra exposes the wrong side choices');
 expect(mokra.welcomeHidden, 'battle reload returned to the welcome gate instead of the mission menu');

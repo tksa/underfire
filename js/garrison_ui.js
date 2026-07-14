@@ -34,10 +34,9 @@ Game.updateGarrisonUI = () => {
     const c = Game._ensureGarrisonContainer();
 
     // Does the current selection contain infantry that could still enter?
-    const selInf = Game.selectedPlayerUnits
-        ? Game.selectedPlayerUnits().filter(u => u.alive && Game.isFootInfantry(u)
-            && !u._garrisoned && u._inVehicle == null)
-        : [];
+    const selected = Game.selectedPlayerUnits ? Game.selectedPlayerUnits() : [];
+    const selInf = selected.filter(u => u.alive && Game.isFootInfantry(u)
+        && !u._garrisoned && u._inVehicle == null);
     const canEnter = selInf.length > 0;
 
     // Building under the cursor (only relevant when we have infantry to send in).
@@ -54,13 +53,25 @@ Game.updateGarrisonUI = () => {
         && hoverUnit.supportType === 'transport' ? hoverUnit : null;
     Game.hoverTransport = hoverTransport;
 
+    // Empty horses are world props rather than selectable units. Only advertise
+    // entry when this exact horse can accept a selected dismounted reserve rider.
+    const hoverHorse = Game.mouse
+        ? ((Game.horseAtScreen && Game.horseAtScreen(Game.mouse.screenX, Game.mouse.screenY))
+            || (!hoverUnit && Game.horseAtWorld
+                && Game.horseAtWorld(Game.mouse.worldX, Game.mouse.worldZ)))
+        : null;
+    const canEnterHorse = !!hoverHorse && !!Game.canMountHorse
+        && selected.some(u => Game.canMountHorse(u, hoverHorse));
+    Game.hoverHorse = hoverHorse;
+
     // Cursor affordance: a door+chevron over an enterable building (with room)
     // while infantry are selected — but not while an attack/command mode owns the
     // cursor. This is what signals "click to enter"; empty buildings get no label.
     const inCmd = !!Game._commandMode || Game.orderStance === 'attack';
     const canEnterBuilding = !!hover && Game.buildingHasRoom(hover);
     const canEnterTransport = !!hoverTransport && Game.transportHasRoom(hoverTransport);
-    const wantEnter = canEnter && !inCmd && (canEnterBuilding || canEnterTransport);
+    const wantEnter = !inCmd
+        && ((canEnter && (canEnterBuilding || canEnterTransport)) || canEnterHorse);
     const vp = document.getElementById('viewport');
     if (vp) vp.classList.toggle('cmd-enter', wantEnter);
 

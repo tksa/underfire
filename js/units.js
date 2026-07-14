@@ -700,7 +700,7 @@ Game.unitsForYear = (year, team) => {
 
 Game.loadUnitsCSV = async () => {
     try {
-        const res = await fetch('data/units.csv?v=' + Date.now());
+        const res = await fetch('data/units.csv?v=' + encodeURIComponent(Game.assetVersion || 'dev'));
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const n = Game.applyUnitsCSV(await res.text());
         console.log('[units] applied ' + n + ' unit defs from data/units.csv');
@@ -1139,7 +1139,11 @@ Game._loadUnitModel = (unit, mesh) => {
     // fallback — the procedural mesh looks better than a wrong model. Probe once.
     const teamKind = `${unit.team}_${unit.kind}`;
     Game._modelLoadFailed = Game._modelLoadFailed || new Set();
-    if (Game._modelLoadFailed.has(teamKind)) return;
+    if (Game._modelLoadFailed.has(teamKind)) {
+        if (unit._cavalryCanMount && unit._cavalryAwaitingModel
+            && Game.onCavalryModelLoadFailed) Game.onCavalryModelLoadFailed(unit);
+        return;
+    }
     let paths = [`models/${teamKind}.glb`, `models/${unit.kind}.glb`];
     // Foot infantry share one skinned soldier model (per-faction skin + named
     // sub-clips split from its baked animation). A team/kind-specific GLB still
@@ -1174,6 +1178,10 @@ Game._loadUnitModel = (unit, mesh) => {
     //    survives a model reload, and shows up in the copy-config.
     Game.MODEL_YAW = Game.MODEL_YAW || {
         french_s35: Math.PI, french_fuel: Math.PI, french_supply: Math.PI, french_transport: Math.PI,
+        // The Armata is authored muzzle-first along local -X. The generic
+        // long-axis normalizer assumes +X, so turn its normalized -Z bore to
+        // the engine's +Z-forward convention.
+        polish_fieldgun75: Math.PI,
         // The authored cavalry faces local -X. The generic long-axis detector
         // aligns +X, so this half-turn preserves the documented forward bearing.
         polish_mounted_ulan: Math.PI,
@@ -1189,9 +1197,10 @@ Game._loadUnitModel = (unit, mesh) => {
         french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35,
         french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1,
         german_panzer3: 1.35,
-        // Mounted units are intentionally compact at the isometric game camera:
-        // the previous 0.95 still dominated nearby infantry silhouettes.
-        polish_mounted_ulan: 0.72,
+        polish_fieldgun75: 1.0,
+        // The mounted asset is 15% smaller than its earlier tuning
+        // (0.72 × 0.85 = 0.612); its parked clone keeps this exact horse scale.
+        polish_mounted_ulan: 0.612,
     };
     const MODEL_YAW = Game.MODEL_YAW, MODEL_Y_TRIM = Game.MODEL_Y_TRIM, MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT, MODEL_SCALE = Game.MODEL_SCALE;
     // Fused-mesh tanks (turret modelled into the hull, no separate node): aim by
@@ -1253,6 +1262,8 @@ Game._loadUnitModel = (unit, mesh) => {
     const tryLoad = (idx) => {
         if (idx >= paths.length) {
             Game._modelLoadFailed.add(teamKind); // keep placeholder, don't re-probe
+            if (unit._cavalryCanMount && unit._cavalryAwaitingModel
+                && Game.onCavalryModelLoadFailed) Game.onCavalryModelLoadFailed(unit);
             return;
         }
         Game.loadModel(paths[idx]).then(model => {
@@ -1597,7 +1608,7 @@ Game._loadUnitModel = (unit, mesh) => {
                             if (!Game._borrowTexCache) Game._borrowTexCache = {};
                             let tex = Game._borrowTexCache[recolor.texture];
                             if (!tex) {
-                                tex = new THREE.TextureLoader().load(recolor.texture);
+                                tex = new THREE.TextureLoader().load(Game.assetUrl(recolor.texture));
                                 tex.flipY = false;
                                 tex.colorSpace = THREE.SRGBColorSpace;
                                 Game._borrowTexCache[recolor.texture] = tex;
@@ -1668,6 +1679,9 @@ Game._loadUnitModel = (unit, mesh) => {
             // ── 10. Add wrapper to unit mesh group ──
             mesh.add(modelWrapper);
             mesh.userData.modelWrapper = modelWrapper;
+            if (unit.kind === 'fieldgun75' && Game.attachFieldGunCrew) {
+                Game.attachFieldGunCrew(unit, mesh);
+            }
             // Soldier model: tag + remember its base orientation/height so the
             // debug tuning panel (Game._soldierControlDefs) can offset them live.
             if (Game.isSoldierPath && Game.isSoldierPath(paths[idx])) {
@@ -1850,6 +1864,11 @@ Game.makeUnit = (team, kind, x, z, opts = {}) => {
         _cavalryCanMount: Game.isMountedCavalry(base.kind || kind),
         _cavalryMounted: Game.isMountedCavalry(base.kind || kind),
         _cavalryAwaitingModel: Game.isMountedCavalry(base.kind || kind),
+        _cavalryHorseId: null,
+        _enterHorseId: null,
+        _enterHorseAttempt: null,
+        _mountingHorseId: null,
+        _cavalryParkPose: null,
         mesh: null,
     };
 
@@ -1964,6 +1983,9 @@ Game.formationOffsets = (count, spacing = 2.0, type) => {
 //    wins over ground-snap + trim, persists, survives reload, shows in copy-config.
 Game.MODEL_YAW = Game.MODEL_YAW || {
     french_s35: Math.PI, french_fuel: Math.PI, french_supply: Math.PI, french_transport: Math.PI,
+    // Authored muzzle points local -X; after automatic X-axis normalization,
+    // this half-turn makes the bore face the engine's local +Z forward.
+    polish_fieldgun75: Math.PI,
     polish_mounted_ulan: Math.PI,
 };
 Game.MODEL_Y_TRIM = Game.MODEL_Y_TRIM || {};
@@ -1972,7 +1994,7 @@ Game.MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT || {};
 Game.MODEL_SCALE = Game.MODEL_SCALE || {
     french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35,
     french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1,
-    polish_mounted_ulan: 0.72,
+    polish_mounted_ulan: 0.612, // 0.72 × 0.85: mounted pair is 15% smaller
 };
 
 // Rebuild the loaded model for every live unit of a teamKind, re-reading the
@@ -1984,6 +2006,9 @@ Game.reloadModelFor = (teamKind) => {
     Game.units.forEach(u => {
         if (!u.alive || !u.mesh) return;
         if (`${u.team}_${u.kind}` !== teamKind) return;
+        if (u.kind === 'fieldgun75' && Game.detachFieldGunCrew) {
+            Game.detachFieldGunCrew(u.mesh);
+        }
         const w = u.mesh.userData.modelWrapper;
         if (w) { u.mesh.remove(w); u.mesh.userData.modelWrapper = null; }
         if (Game._loadUnitModel) Game._loadUnitModel(u, u.mesh);

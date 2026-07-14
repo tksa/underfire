@@ -388,7 +388,12 @@ Game.uMod.engage = (unit, ctx) => {
     // way to the red circle after they've cleared resistance on the way.
     if (unit.orderMode === 'assault' && unit._assaultGoal && !enemy
         && (unit.stopTimer || 0) <= 0 && (!unit.path || !unit.path.length)) {
-        if (Game.dist(unit.x, unit.z, unit._assaultGoal.x, unit._assaultGoal.z) > 2.2) {
+        const pendingFacing = unit._arrivalFacing
+            && unit._lastMoveOrder?.id === unit._arrivalFacing.orderId;
+        const assaultArrival = pendingFacing && Game.arrivalFacingRadius
+            ? Game.arrivalFacingRadius(unit) : 2.2;
+        if (Game.dist(unit.x, unit.z, unit._assaultGoal.x, unit._assaultGoal.z)
+            > assaultArrival) {
             unit.path = Game.findPath(unit, unit.x, unit.z, unit._assaultGoal.x, unit._assaultGoal.z);
             unit.moving = true;
         } else {
@@ -1285,6 +1290,12 @@ Game.uMod.move = (unit, ctx) => {
             unit._reversing = false;
         }
 
+        // A right-drag movement order stores its heading until the matching
+        // destination is actually reached. Replans and attack-move pauses may
+        // empty a path temporarily, so the helper also verifies order id and
+        // distance before converting the intent into the normal rotate state.
+        if (Game.tryActivateArrivalFacing) Game.tryActivateArrivalFacing(unit);
+
         // Manual "Rotate" order: turn in place toward the ordered bearing. Tanks
         // swing hull (and turret); infantry/guns pivot. Cleared once aligned.
         if (unit._faceAngle != null) {
@@ -1720,6 +1731,18 @@ Game.updateUnit = (unit, dt) => {
         return;
     }
 
+    // A dismounted reserve rider ordered back to a parked horse treats it like
+    // an entry destination: follow the assigned approach path without peeling
+    // off to acquire targets or seek cover. updateCavalryHorseEntry validates,
+    // re-paths and begins the mount transition on arrival.
+    if (unit._enterHorseId) {
+        unit.fireTargetId = null;
+        unit._engageId = null;
+        unit.forcedTargetId = null;
+        M.move(unit, ctx);
+        return;
+    }
+
     // Ordered into a building: follow the order — march to it and do NOT peel off
     // to engage enemies on the way (no acquisition, no firing). They fight once
     // inside. updateBuildingEntry garrisons them on arrival.
@@ -1744,6 +1767,14 @@ Game.updateUnit = (unit, dt) => {
         }
         M.move(unit, ctx);
         return;
+    }
+
+    // Claim a completed ordinary move's final heading before autonomous cover
+    // or target logic can replace the now-empty route. Attack-move still waits
+    // for M.engage below to certify `_assaultGoal` completion, then activates in
+    // M.move through the same guarded helper.
+    if ((!unit.path || !unit.path.length) && Game.tryActivateArrivalFacing) {
+        Game.tryActivateArrivalFacing(unit);
     }
 
     M.supply(unit, ctx);

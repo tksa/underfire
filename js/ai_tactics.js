@@ -263,6 +263,8 @@ Game.AI.setGuard = (x, z, r) => {
     if (!sel.length) { Game.pushMessage('Select troops to set a guard.', 1.5); return; }
     const rad = r || Game.AI.ambientCfg.guardRadius;
     sel.forEach(u => {
+        if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
+        if (Game.clearArrivalFacing) Game.clearArrivalFacing(u);
         u._postureOrder = 'guard';
         u._guardArea = { x, z, r: rad };
         u._guardDwell = 0;                // start patrolling immediately

@@ -16,7 +16,10 @@ Game.updateCamera = (dt) => {
 
     // Edge-pan (screen pixel coordinates) — disabled when mouse is over HUD
     const overHUD = Game.mouse.screenY > Game.viewH - 160;
-    if (!overHUD) {
+    // Keep the world point under a directional right-drag stable. If edge-pan
+    // moved the camera mid-gesture, the arrow endpoint would drift beneath the
+    // cursor and produce a different heading from the one the player drew.
+    if (!overHUD && !Game._rightOrderDrag) {
         if (Game.mouse.screenX < edge) dx -= 1;
         if (Game.mouse.screenX > Game.viewW - edge) dx += 1;
         if (Game.mouse.screenY < edge) dz -= 1;

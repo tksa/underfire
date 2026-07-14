@@ -28,6 +28,7 @@ await page.waitForFunction(() => window.Game && Game.units && Game.units.length 
 
 await page.evaluate(profileRender => {
   Game.Audio?.init?.();
+  Game.startMokraDeployment?.();
   Game._paused = false;
   // SwiftShader can consume several CPU cores and drown out simulation timing.
   // Rendering is opt-in for this sampler; the default profiles game-loop CPU.
@@ -96,7 +97,12 @@ const sample = async (label, timer = null) => {
     perf.frames.length = 0;
     perf.longTasks.length = 0;
     perf.lastFrame = null;
-    if (value != null) Game.missionState.timer = value;
+    if (value != null) {
+      if (!Game.missionState.combatStarted) {
+        Game.updateMokraMission(Game.missionState.deploymentRemaining || 180);
+      }
+      Game.missionState.timer = value;
+    }
   }, timer);
   const metricsBefore = await client.send('Performance.getMetrics');
   const beforeByName = Object.fromEntries(

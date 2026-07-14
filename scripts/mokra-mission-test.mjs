@@ -48,6 +48,21 @@ try {
   cavalryModelWaitOk = false;
 }
 
+// The authored railway is loaded after terrain construction. Wait for the
+// data contract only; this test never samples or inspects the rendered canvas.
+let railwayModelWaitOk = true;
+try {
+  await page.waitForFunction(() => {
+    const railway = Game.terrainGroup?.getObjectByName('mokra-railway-model');
+    const track = railway?.getObjectByName('mokra-railway-track');
+    return railway?.userData?.modelReady === true
+      && track?.isInstancedMesh === true
+      && track.userData.moduleCount >= 37;
+  }, null, { timeout: 120_000, polling: 250 });
+} catch (error) {
+  railwayModelWaitOk = false;
+}
+
 const state = await page.evaluate(async requiredCavalryClips => {
   const units = Game.units.filter(u => u.alive);
   const polish = units.filter(u => u.team === Game.TEAM.POLISH);
@@ -58,11 +73,6 @@ const state = await page.evaluate(async requiredCavalryClips => {
   }, {});
   const tileCounts = {};
   Game.terrain.flat().forEach(t => { tileCounts[t.type] = (tileCounts[t.type] || 0) + 1; });
-
-  const testPanzer = german.find(u => u.kind === 'panzer1' || u.kind === 'panzer2');
-  const crossingPath = testPanzer
-    ? Game.findPath(testPanzer, testPanzer.x, testPanzer.z, 76 * Game.TILE, 50 * Game.TILE)
-    : [];
 
   // Verify the Polish pools without playing or listening to the recordings.
   // Any unpopulated Polish semantic category must remain silent rather than
@@ -112,6 +122,23 @@ const state = await page.evaluate(async requiredCavalryClips => {
   const deployment = Game.mokraDeployment || { gunLine: [], infantryLine: [] };
   const gunLine = [...deployment.gunLine].sort((a, b) => a.y - b.y);
   const infantryLine = [...deployment.infantryLine].sort((a, b) => a.y - b.y);
+  const attentionUnitIds = deployment.attentionUnitIds || [];
+  const attentionUnits = attentionUnitIds.map(id => Game.getUnitById(id)).filter(Boolean);
+  const expectedAttentionUnits = polish.filter(unit => unit.group === 'pl_reserve'
+    || /^pl_line_\d+$/.test(unit.group));
+  const attentionIdsTracked = attentionUnitIds.length === expectedAttentionUnits.length
+    && attentionUnits.length === attentionUnitIds.length
+    && expectedAttentionUnits.every(unit => attentionUnitIds.includes(unit.id));
+  const angleDelta = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+  const attentionStandingWest = attentionUnits.length > 0 && attentionUnits.every(unit =>
+    unit.team === Game.TEAM.POLISH
+    && Game.isFootInfantry(unit)
+    && unit.stance === 'stand'
+    && !unit.moving
+    && unit.currentSpeed === 0
+    && (!unit.path || unit.path.length === 0)
+    && Game.dist(unit.x, unit.z, unit.targetX, unit.targetZ) <= 0.001
+    && Math.abs(angleDelta(unit.angle, Math.PI)) <= 0.001);
   const deploymentInterleaved = infantryLine.length === gunLine.length - 1
     && infantryLine.every((position, index) => position.y > gunLine[index].y
       && position.y < gunLine[index + 1].y);
@@ -173,18 +200,93 @@ const state = await page.evaluate(async requiredCavalryClips => {
       && Game.isMountedCavalry(unit) && !Game.isFootInfantry(unit)
       && !unit._cavalryTransition && !unit._cavalryAwaitingModel);
 
-  // Advance the mission clock in one deterministic step while still paused;
-  // the hold objective must resolve independently of a destroy-all condition.
+  // Exercise deployment while still paused. The dormant siren API is stubbed
+  // to prove the current preview does not invoke it; this remains a data-only
+  // contract check and the visible three-minute countdown stays active.
+  const sirenCues = [];
+  const originalSiren = Game.Audio.airRaidSiren;
+  Game.Audio.airRaidSiren = () => { sirenCues.push('airRaidSiren'); return true; };
+  const deploymentStarted = Game.startMokraDeployment();
+  const duplicateDeploymentRejected = !Game.startMokraDeployment();
+  const deploymentDuration = Game.missionState.deploymentDuration;
+  Game.updateMokraMission(90);
+  const germansAtHalfway = Game.getTeamUnits(Game.TEAM.GERMAN).length;
+  const countdownAtHalfway = Math.ceil(Game.missionState.deploymentRemaining);
+  Game.updateHUD();
+  const approachCountdown = document.getElementById('mokraApproachCountdown');
+  const approachStyle = approachCountdown ? getComputedStyle(approachCountdown) : null;
+  const approachRect = approachCountdown ? approachCountdown.getBoundingClientRect() : null;
+  const approachCountdownAtHalfway = {
+    text: approachCountdown?.textContent || '',
+    hidden: approachCountdown?.hidden ?? true,
+    color: approachStyle?.color || '',
+    position: approachStyle?.position || '',
+    top: approachRect?.top ?? Infinity,
+    centerOffset: approachRect
+      ? Math.abs(approachRect.left + approachRect.width / 2 - window.innerWidth / 2)
+      : Infinity,
+  };
+  Game.updateMokraMission(89);
+  const germansBeforeAttack = Game.getTeamUnits(Game.TEAM.GERMAN).length;
+  const countdownAtOneSecond = Math.ceil(Game.missionState.deploymentRemaining);
+  Game.updateMokraMission(1);
+  Game.updateHUD();
+  const approachCountdownHiddenAfterCombat = approachCountdown?.hidden ?? false;
+  Game.Audio.airRaidSiren = originalSiren;
+
+  const initialGermans = Game.getTeamUnits(Game.TEAM.GERMAN);
+  const combatStartedAtThreeMinutes = Game.missionState.combatStarted
+    && Game.missionState.timer === 0;
+  const initialEntryAtWestEdge = initialGermans.length > 0
+    && initialGermans.every(unit => unit._mokraEntrySpawn
+      && unit._mokraEntrySpawn.x >= Game.mokraZones.germanEntry.x0
+      && unit._mokraEntrySpawn.x <= Game.mokraZones.germanEntry.x1);
+  const testPanzer = initialGermans.find(u => u.kind === 'panzer1' || u.kind === 'panzer2');
+  const crossingPath = testPanzer
+    ? Game.findPath(testPanzer, testPanzer.x, testPanzer.z, 76 * Game.TILE, 50 * Game.TILE)
+    : [];
+
+  // Walk every absolute mission-time threshold without running the simulation:
+  // vanguard 3:00, later echelons 3:55/5:05/6:25, victory 8:00. The combat
+  // cadence remains 0/55/125/205 seconds followed by a 300-second hold.
   const eventVoices = [];
   const originalEventVoice = Game.Audio.eventVoice;
   Game.Audio.eventVoice = semantic => {
     eventVoices.push(semantic);
     return originalEventVoice(semantic);
   };
-  Game.updateMokraMission(301);
+  const totalTimeline = [];
+  const recordTimeline = totalElapsed => totalTimeline.push({
+    totalElapsed,
+    combatElapsed: Game.missionState.timer,
+    waves: Game.mokraGermanEntryHistory.map(entry => entry.wave),
+    won: Game.missionState.won,
+  });
+  recordTimeline(180);
+  Game.updateMokraMission(54); recordTimeline(234);
+  Game.updateMokraMission(1); recordTimeline(235);
+  Game.updateMokraMission(69); recordTimeline(304);
+  Game.updateMokraMission(1); recordTimeline(305);
+  Game.updateMokraMission(79); recordTimeline(384);
+  Game.updateMokraMission(1); recordTimeline(385);
+  Game.updateMokraMission(94); recordTimeline(479);
+  Game.updateMokraMission(1); recordTimeline(480);
   Game.Audio.eventVoice = originalEventVoice;
   const holdVictory = Game.missionState.won && Game.missionState.phaseName === 'Timetable disrupted';
   const postWaveGermanKinds = [...new Set(Game.getTeamUnits(Game.TEAM.GERMAN).map(u => u.kind))].sort();
+  const allGermanEntriesAtWestEdge = Game.mokraGermanEntryHistory.length === 4
+    && Game.mokraGermanEntryHistory.every(entry => entry.units.length > 0
+      && entry.units.every(unit => unit.x >= Game.mokraZones.germanEntry.x0
+        && unit.x <= Game.mokraZones.germanEntry.x1));
+
+  const railwayModel = Game.terrainGroup.getObjectByName('mokra-railway-model');
+  const railwayTrack = railwayModel?.getObjectByName('mokra-railway-track');
+  const railTerrainStats = { ...(Game._mokraRailTerrainStats || {}) };
+  const centralCrossing = Game.railway?.crossings?.find(crossing => crossing.ty === 50)
+    || Game.railway?.crossings?.[0];
+  const railCrossingDetail = centralCrossing
+    ? Game.getGroundDetailHeight(Game.railway.centerX, (centralCrossing.ty + 0.5) * Game.TILE)
+    : Infinity;
 
   return {
     scenario: Game.currentScenario,
@@ -192,15 +294,35 @@ const state = await page.evaluate(async requiredCavalryClips => {
     playerTeam: Game.playerTeam,
     enemyTeam: Game.enemyTeam(),
     polish: polish.length,
-    german: german.length,
+    german: initialGermans.length,
+    preDeploymentGerman: german.length,
+    deploymentStarted,
+    duplicateDeploymentRejected,
+    deploymentDuration,
+    germansAtHalfway,
+    countdownAtHalfway,
+    approachCountdownAtHalfway,
+    approachCountdownHiddenAfterCombat,
+    germansBeforeAttack,
+    countdownAtOneSecond,
+    combatStartedAtThreeMinutes,
+    totalTimeline,
+    sirenCues,
+    initialEntryAtWestEdge,
+    allGermanEntriesAtWestEdge,
+    germanEntryWaves: Game.mokraGermanEntryHistory.map(entry => entry.wave),
     french: units.filter(u => u.team === Game.TEAM.FRENCH).length,
     polishKinds: [...new Set(polish.map(u => u.kind))].sort(),
     polishKindCounts,
-    germanKinds: [...new Set(german.map(u => u.kind))].sort(),
+    germanKinds: [...new Set(initialGermans.map(u => u.kind))].sort(),
     postWaveGermanKinds,
     allWavesCommitted: Game.missionState.nextWave === 4 && Game.missionState.reinforcementTriggered,
     polishDefendersAtCrossing,
     deploymentInterleaved,
+    attentionUnitIds,
+    attentionUnitCount: attentionUnits.length,
+    attentionIdsTracked,
+    attentionStandingWest,
     gunLinePattern: gunLine.map(position => position.kind),
     gunLineUnits,
     infantryLineUnits,
@@ -228,7 +350,12 @@ const state = await page.evaluate(async requiredCavalryClips => {
     waterTiles: tileCounts.water || 0,
     crossings: Game.railway && Game.railway.crossings ? Game.railway.crossings.length : 0,
     villages: (Game.mokraVillages || []).map(v => v.name),
-    railMeshes: Game.terrainGroup.children.filter(o => /^mokra-railway-/.test(o.name)).length,
+    railMeshes: railwayModel ? railwayModel.children.filter(o => /^mokra-railway-/.test(o.name)).length : 0,
+    railModelReady: railwayModel?.userData?.modelReady === true,
+    railModelSource: railwayModel?.userData?.sourceModel || null,
+    railModuleCount: railwayTrack?.userData?.moduleCount || 0,
+    railTerrainStats,
+    railCrossingDetail,
     crossingPath: crossingPath.length,
     fighters: Game.fighterTotalAvailable ? Game.fighterTotalAvailable() : -1,
     airStrikes: Game.airStrikesAvailable,
@@ -245,7 +372,9 @@ const state = await page.evaluate(async requiredCavalryClips => {
     dossierOk: dossier.includes('Poland 1939 RTS Battle Design Dossier') && dossier.includes('Battle of Mokra'),
     missionDocOk: missionDoc.includes('## Preview implementation status')
       && missionDoc.includes('Polish voice assets')
-      && missionDoc.includes('Dyle remains the first/default battle'),
+      && missionDoc.includes('Dyle remains the first/default battle')
+      && missionDoc.includes('three-minute countdown')
+      && missionDoc.includes('western map edge'),
     holdVictory,
     menuMission: document.querySelector('.mission-card.selected')?.dataset.mission,
     menuSide: document.querySelector('.side-btn.selected')?.dataset.side,
@@ -260,7 +389,39 @@ const fail = [];
 const expect = (condition, message) => { if (!condition) fail.push(message); };
 expect(state.scenario === 'mokra' && state.selectedMission === 'mokra', 'Mokra is not the active scenario');
 expect(state.playerTeam === 'polish' && state.enemyTeam === 'german', 'scenario teams are not Poland vs Germany');
-expect(state.polish > 0 && state.german > 0 && state.french === 0, 'incorrect opening force teams');
+expect(state.polish > 0 && state.preDeploymentGerman === 0 && state.german > 0 && state.french === 0,
+  'deployment does not begin with Poland alone before the German vanguard enters');
+expect(state.deploymentStarted && state.duplicateDeploymentRejected
+  && state.deploymentDuration === 180
+  && state.germansAtHalfway === 0 && state.countdownAtHalfway === 90
+  && state.germansBeforeAttack === 0 && state.countdownAtOneSecond === 1
+  && state.combatStartedAtThreeMinutes,
+  'the three-minute German attack delay is incomplete or can be started twice');
+expect(state.approachCountdownAtHalfway.text
+    === 'German forces approaching: 1 minute 30 seconds'
+  && !state.approachCountdownAtHalfway.hidden
+  && state.approachCountdownAtHalfway.color === 'rgb(255, 255, 255)'
+  && state.approachCountdownAtHalfway.position === 'fixed'
+  && state.approachCountdownAtHalfway.top <= 30
+  && state.approachCountdownAtHalfway.centerOffset <= 1
+  && state.approachCountdownHiddenAfterCombat,
+  'the Mokra countdown is not white, top-centred, correctly worded, or hidden after arrival');
+expect(JSON.stringify(state.totalTimeline) === JSON.stringify([
+  { totalElapsed: 180, combatElapsed: 0, waves: [0], won: false },
+  { totalElapsed: 234, combatElapsed: 54, waves: [0], won: false },
+  { totalElapsed: 235, combatElapsed: 55, waves: [0, 1], won: false },
+  { totalElapsed: 304, combatElapsed: 124, waves: [0, 1], won: false },
+  { totalElapsed: 305, combatElapsed: 125, waves: [0, 1, 2], won: false },
+  { totalElapsed: 384, combatElapsed: 204, waves: [0, 1, 2], won: false },
+  { totalElapsed: 385, combatElapsed: 205, waves: [0, 1, 2, 3], won: false },
+  { totalElapsed: 479, combatElapsed: 299, waves: [0, 1, 2, 3], won: false },
+  { totalElapsed: 480, combatElapsed: 300, waves: [0, 1, 2, 3], won: true },
+]), 'Mokra absolute timeline is not vanguard 3:00, waves 3:55/5:05/6:25, victory 8:00');
+expect(state.sirenCues.length === 0,
+  'the temporarily disabled Mokra deployment siren was triggered');
+expect(state.initialEntryAtWestEdge && state.allGermanEntriesAtWestEdge
+  && state.germanEntryWaves.join('|') === '0|1|2|3',
+  'one or more German echelons does not enter through the western map edge');
 expect(state.allPolishDescribed, 'one or more Polish units lacks an in-game description');
 for (const required of ['ulan', 'mounted_ulan', 'rkm_wz28', 'at_rifle_wz35', 'hmg', 'mortar46', 'mortar81',
   'bofors37', 'fieldgun75', 'tks', 'wz34', 'officer', 'sapper', 'medic']) {
@@ -273,8 +434,20 @@ for (const required of ['mp38', 'mortar50', 'mortar81', 'panzer1', 'panzer2', 'p
 }
 expect(!state.postWaveGermanKinds.includes('smg'), 'generic 1940 Sturmtrupp is fielded at Mokra');
 expect(!state.polishKinds.some(k => /7tp|20mm|tks20/i.test(k)), 'anachronistic Polish armour variant fielded');
-expect(state.railwayTiles > 150 && state.crossings === 3 && state.railMeshes >= 2,
-  'railway/crossing contract is incomplete');
+expect(state.railwayTiles > 150 && state.crossings === 3,
+  'railway/crossing gameplay contract is incomplete');
+expect(railwayModelWaitOk && state.railModelReady && state.railMeshes === 1
+  && state.railModelSource === 'models/railway/train_track_straight.glb'
+  && state.railModuleCount >= 37,
+  'the modular Mokra railway model is not loaded and instanced across the map');
+expect(state.railTerrainStats.applied === true
+  && state.railTerrainStats.scenario === 'mokra'
+  && state.railTerrainStats.coreSamples > 0
+  && state.railTerrainStats.affectedSamples > state.railTerrainStats.coreSamples
+  && state.railTerrainStats.maxObservedGrade
+    <= state.railTerrainStats.maxConfiguredGrade + 0.0001
+  && state.railCrossingDetail === 0,
+  'the Mokra railway bed is not flattened, grade-limited, or free of crossing micro-relief');
 expect(state.waterTiles === 0, 'Mokra must not contain a broad river/lake tile');
 expect(state.villages.join('|') === 'Mokra I|Mokra II|Mokra III', 'Mokra I–III strips are missing');
 expect(state.polishDefendersAtCrossing > 0, 'the central crossing starts outside Polish control');
@@ -289,6 +462,9 @@ expect(state.gunLinePattern.join('|')
   'Mokra gun line does not alternate Bofors and 75 mm artillery');
 expect(state.deploymentInterleaved && state.gunLineUnits === 6 && state.infantryLineUnits === 25,
   'infantry sections are not interleaved between every artillery position');
+expect(state.attentionIdsTracked && state.attentionUnitCount === 33
+  && state.attentionStandingWest,
+  'the opening Polish line/reserve infantry are not tracked, standing still, and facing west');
 expect(state.initialBofors === 3, 'secondary-objective Bofors tracking is incomplete');
 expect(state.initialPolishStrength === 59, 'reinforced Polish opening strength is wrong');
 expect(state.mountedUhlans === 4 && state.mountedReserve === 4,

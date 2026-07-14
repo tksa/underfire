@@ -25,6 +25,8 @@ Movement records contain one row per unit per frame. Important fields:
 - `orderX`, `orderZ`, `orderA`: the unit pose when its latest movement order was issued.
 - `clickX`, `clickZ`: the raw map position clicked by the player.
 - `goalX`, `goalZ`: this unit's assigned formation slot for that click.
+- `faceX`, `faceZ`, `faceA`: the optional right-drag arrow endpoint and requested
+  final heading; these remain `null` for ordinary click-only movement.
 - `waypointX`, `waypointZ`, `finalX`, `finalZ`: current next waypoint and retained
   final destination; `orderId` changes whenever a new move command is issued.
 
@@ -37,6 +39,13 @@ Common signatures:
 - Repeating `stop=0.2`: separation/yield is continuously hard-stopping the vehicle.
 
 ## Automated tests
+
+The directional-facing contract is a pure Node check and does not start the game
+or require a server:
+
+```bash
+node scripts/directional-facing-test.mjs
+```
 
 The server must already be running on port 8741.
 

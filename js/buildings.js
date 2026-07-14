@@ -565,6 +565,8 @@ Game.garrisonUnit = (unit, rec) => {
     if (!unit || !unit.alive || !Game.isFootInfantry(unit) || !rec || rec.collapsed) return false;
     if (rec.occupants.indexOf(unit.id) >= 0) return true;          // already inside
     if (rec.occupants.length >= rec.capacity) return false;        // full
+    if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(unit);
+    if (Game.clearArrivalFacing) Game.clearArrivalFacing(unit);
     rec.occupants.push(unit.id);
     unit._garrisoned = true;
     unit._garrisonRec = rec;
@@ -696,6 +698,8 @@ Game.orderEnterBuilding = (rec) => {
     }
     const nDoors = ranked ? Math.min(2, ranked.length) : 0;   // split across the 2 nearest
     inf.forEach((u, i) => {
+        if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
+        if (Game.clearArrivalFacing) Game.clearArrivalFacing(u);
         u.forcedTargetId = null;
         u.bombardX = null; u.bombardZ = null; u._bombarding = false;
         u._faceAngle = null; u._faceUntil = 0;

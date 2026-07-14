@@ -28,6 +28,9 @@ Game.Audio = (() => {
         engine: 'sounds/rwm/diesel_move.ogg',
         fighter: 'sounds/rwm/fly_small.ogg',
     };
+    const MISSION_FILES = {
+        airRaidSiren: 'sounds/rwm/e_airraid_siren.ogg',
+    };
     // Unit voice barks (French = f_/player, German = d_/enemy) + ricochet, pooled by file
     // Voice barks: every recorded TAKE of each phrase is listed, and voicePick
     // chooses one at random — one pooled take per phrase made every order sound
@@ -176,7 +179,7 @@ Game.Audio = (() => {
         pools[src] = [];
         cursor[src] = 0;
         for (let i = 0; i < size; i++) {
-            const a = new Audio(src);
+            const a = new Audio(Game.assetUrl(src));
             a.preload = 'auto';
             pools[src].push(a);
         }
@@ -187,7 +190,7 @@ Game.Audio = (() => {
         for (const cat in FILES) FILES[cat].forEach(src => mkPool(src));
         UTILITY.forEach(src => mkPool(src));
         for (const key in LOOP_FILES) {
-            const a = new Audio(LOOP_FILES[key]);
+            const a = new Audio(Game.assetUrl(LOOP_FILES[key]));
             a.loop = true;
             a.preload = 'auto';
             a.volume = 0;
@@ -387,6 +390,26 @@ Game.Audio = (() => {
         } catch (e) { /* ignore */ }
     };
 
+    // Mission cues are global, one-shot sounds. Keep the siren lazy so Dyle
+    // and the main menu do not allocate an audio element they never use.
+    const airRaidSiren = () => {
+        if (!enabled) return false;
+        const src = MISSION_FILES.airRaidSiren;
+        const pool = mkPool(src, 1);
+        const a = pool[0];
+        try {
+            a.loop = false;
+            a.currentTime = 0;
+            a.playbackRate = 1;
+            a.volume = Game.clamp(master * 0.95, 0, 1);
+            const p = a.play();
+            if (p && p.catch) p.catch(() => { });
+            return true;
+        } catch (e) {
+            return false;
+        }
+    };
+
     // Playing as Germany: the f_* command acknowledgements translate to their
     // German (d_*) counterparts here, so every call site stays side-agnostic.
     const VOICE_DE = {
@@ -455,6 +478,7 @@ Game.Audio = (() => {
         // Heavy-bomber flyby for the air strike — the real RWM sample.
         heavyPlane: () => playFile('fly_heavy', 0.75, 0, 0, false),
         fighterDrone,
+        airRaidSiren,
         voice,
         eventVoice,
         voiceSlots: { polish: VOICE_PL },
