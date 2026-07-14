@@ -20,7 +20,7 @@
 
 ## Checklist
 - [ ] I ran the game locally and saw no new console errors
-- [ ] Any new art/audio is **CC0 / public-domain** and added to `CREDITS.md`
+- [ ] New third-party assets use a compatible license and `CREDITS.md` records creator, source, license, files, and modifications
 - [ ] Balance/realism changes cite a source
-- [ ] No build step introduced; Three.js still loads from the pinned CDN
-- [ ] I agree my contribution is released under the project `LICENSE.md`
+- [ ] No build step introduced; vendored Three.js/import-map loading still works
+- [ ] I agree my contribution is released under the project `LICENSE.md`, excluding clearly identified third-party material under its own license

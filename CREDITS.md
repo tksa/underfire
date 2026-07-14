@@ -42,6 +42,14 @@ Source: https://sketchfab.com/3d-models/char-b1-bis-e8a1fbe0981940b1b4ddcc1a4271
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). (Its placeholder
 textures were replaced in-engine with a weathered French-green repaint.)
 
+"Train Track - Modular Pack" (`models/railway/train_track_*.glb`) is by
+**Digital Goblin** ([source](https://sketchfab.com/3d-models/train-track-modular-pack-e662a834e5fb4b65ad4f8194f8af515b)),
+used under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Modified
+for Under Fire by splitting the fused source mesh into five centred, grounded
+modules, converting its legacy specular-glossiness material to standard PBR,
+and externalising its shared diffuse and normal maps. Digital Goblin does not endorse Under
+Fire. See `models/railway/ATTRIBUTION.md` for the per-file notice.
+
 "French Panhard 178" (`models/french_panhard.glb`) is by **42manako**
 (https://skfb.ly/pw9AX), used under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
@@ -161,7 +169,7 @@ holds 64-byte name records, each followed by a variation count + global clip
 indices into the pool. Decoded with the parser in `tools/` and ffmpeg.
 
 The game currently uses a curated subset (rifle, MG/SMG bursts, cannon/AT,
-explosions, plus wind/birds ambience and a diesel engine bed); the rest of the
+explosions, the Mokra air-raid siren, plus wind/birds ambience and a diesel engine bed); the rest of the
 library is available for reuse.
 
 ## Game logic reference (RWM, RWM-Zero public-domain dedication)

@@ -49,6 +49,13 @@ You may not publish a Derivative as a separate, competing, rebranded, or indepen
 ### 8. Contributions
 Unless you state otherwise in writing, any contribution you intentionally submit for inclusion in the Work is licensed to the project and the community under this same license, and you confirm you have the right to submit it.
 
+### Third-party material
+Material identified in `CREDITS.md` as owned by someone else and distributed
+under its own license is excluded from "the Work" for the purposes of this
+license. It is not relicensed under the Under Fire Community License and keeps
+the rights, conditions, attribution requirements, and modification notices
+stated in `CREDITS.md` and any accompanying attribution file.
+
 ### 9. Maintainer reservation
 The original author and the project maintainers retain the right to relicense the Work, grant written exceptions (including commercial exceptions), and steward the project's direction. Nothing in this license transfers ownership away from the authors.
 
@@ -66,4 +73,4 @@ Any breach of these conditions automatically terminates the rights granted to yo
 
 ---
 
-> Note on terminology: Under Fire is *open and community-built*, and its source is fully available. Because of the non-commercial and no-derivative-product conditions above, this is a **source-available** license, not an OSI-approved "open source" license. Third-party assets bundled with the project keep their own licenses (CC0 / public domain — see CREDITS.md).
+> Note on terminology: Under Fire is *open and community-built*, and its source is fully available. Because of the non-commercial and no-derivative-product conditions above, this is a **source-available** license, not an OSI-approved "open source" license. Third-party assets bundled with the project keep their own licenses (including CC0, public domain, and attribution licenses — see `CREDITS.md`).

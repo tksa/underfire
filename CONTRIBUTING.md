@@ -80,8 +80,8 @@ When in doubt, search the repo for a string you can see on screen and work backw
 
 Under Fire ships only assets that are safe for everyone to use and redistribute.
 
-- **CC0 / public-domain only** for art, audio, models, fonts. No ripped game assets, no "found on Google", no AI-generated art trained on a specific artist's work.
-- Add every asset to [CREDITS.md](CREDITS.md) with its source and license.
+- **CC0 / public domain is preferred** for art, audio, models, and fonts. Compatible attribution-licensed assets such as CC BY 4.0 may be accepted when their license permits the intended use. No ripped game assets, no "found on Google", and no AI-generated art trained on a specific artist's work.
+- Add every asset to [CREDITS.md](CREDITS.md) with its creator, exact source, license, affected files, and any modifications. Keep third-party material clearly excluded from the contribution's Under Fire Community License grant.
 - If you are unsure whether something is allowed, assume it is not and ask in your PR.
 
 This protects the project and every contributor. A great-looking asset we cannot legally ship is worthless to us.

@@ -1252,6 +1252,166 @@ Game._addRiverWashStones = () => {
     Game.terrainGroup.add(inst);
 };
 
+// A railway module is a rigid chord, whereas the generated terrain is a curved
+// surface. Keep Mokra's bed broad and calm enough that a module cannot disappear
+// into a short hill between its sampled endpoints. Values are in tiles (except
+// maxGrade) so this remains stable if map or heightmap resolution changes.
+Game.MOKRA_RAIL_TERRAIN = Object.freeze({
+    coreHalfWidthTiles: 0.60,
+    shoulderWidthTiles: 0.80,
+    detailFadeTiles: 0.30,
+    longitudinalRadiusCells: 6,
+    longitudinalPasses: 5,
+    maxGrade: 0.022,
+    moduleLengthTiles: 2.76,
+});
+
+Game._shapeMokraRailwayBed = () => {
+    const config = Game.MOKRA_RAIL_TERRAIN;
+    const centerX = Game.railway?.centerX;
+    const applicable = Game.currentScenario === 'mokra'
+        && Number.isFinite(centerX)
+        && centerX >= 0 && centerX <= Game.WORLD_W
+        && Game.heightData && Game.heightW > 1 && Game.heightH > 1;
+    if (!applicable) {
+        Game._mokraRailTerrainStats = {
+            applied: false,
+            scenario: Game.currentScenario || null,
+            reason: Game.currentScenario === 'mokra' ? 'railway-or-heightmap-unavailable' : 'different-scenario',
+        };
+        return false;
+    }
+
+    const data = Game.heightData;
+    const w = Game.heightW, h = Game.heightH;
+    const xStep = Game.WORLD_W / (w - 1);
+    const zStep = Game.WORLD_H / (h - 1);
+    const heightScale = Math.max(0.001, Game.HEIGHT_SCALE || 1);
+    const coreHalfWidth = config.coreHalfWidthTiles * Game.TILE;
+    const shoulderWidth = config.shoulderWidthTiles * Game.TILE;
+    const outerHalfWidth = coreHalfWidth + shoulderWidth;
+
+    // Average a narrow lateral strip first. This prevents one unusually high
+    // heightmap vertex on either rail from defining the whole longitudinal bed.
+    let profile = new Float32Array(h);
+    for (let py = 0; py < h; py++) {
+        let weightedHeight = 0, weightTotal = 0;
+        for (let px = 0; px < w; px++) {
+            const wx = px * xStep;
+            const distance = Math.abs(wx - centerX);
+            if (distance > outerHalfWidth) continue;
+            const q = distance / Math.max(0.001, coreHalfWidth);
+            const weight = Math.exp(-q * q * 0.85);
+            weightedHeight += data[py * w + px] * weight;
+            weightTotal += weight;
+        }
+        if (weightTotal > 0) {
+            profile[py] = weightedHeight / weightTotal;
+        } else {
+            const sampleX = Game.clamp(Math.round(centerX / xStep), 0, w - 1);
+            profile[py] = data[py * w + sampleX];
+        }
+    }
+
+    // Repeated raised-cosine filtering removes wavelengths shorter than the
+    // authored straight module without reducing the whole railway to one flat
+    // plane. Edge samples are clamped so the line meets the map boundary cleanly.
+    const radius = Math.max(1, Math.round(config.longitudinalRadiusCells));
+    const passes = Math.max(1, Math.round(config.longitudinalPasses));
+    let filtered = new Float32Array(h);
+    for (let pass = 0; pass < passes; pass++) {
+        for (let py = 0; py < h; py++) {
+            let sum = 0, weightTotal = 0;
+            for (let offset = -radius; offset <= radius; offset++) {
+                const sampleY = Game.clamp(py + offset, 0, h - 1);
+                const weight = 0.5 + 0.5 * Math.cos(Math.PI * offset / (radius + 1));
+                sum += profile[sampleY] * weight;
+                weightTotal += weight;
+            }
+            filtered[py] = sum / weightTotal;
+        }
+        const swap = profile;
+        profile = filtered;
+        // Reuse the previous input buffer as the next output instead of
+        // allocating a fresh heightmap-sized array on every reshape.
+        filtered = swap;
+    }
+
+    // Railways tolerate only a gentle grade. Alternating forward/backward
+    // constraints avoid making either map edge the privileged anchor.
+    const maxDelta = config.maxGrade * zStep / heightScale;
+    for (let iteration = 0; iteration < 3; iteration++) {
+        for (let py = 1; py < h; py++) {
+            profile[py] = Game.clamp(profile[py], profile[py - 1] - maxDelta, profile[py - 1] + maxDelta);
+        }
+        for (let py = h - 2; py >= 0; py--) {
+            profile[py] = Game.clamp(profile[py], profile[py + 1] - maxDelta, profile[py + 1] + maxDelta);
+        }
+    }
+
+    let affectedSamples = 0, coreSamples = 0;
+    let maxHeightAdjustment = 0;
+    for (let py = 0; py < h; py++) {
+        for (let px = 0; px < w; px++) {
+            const distance = Math.abs(px * xStep - centerX);
+            if (distance >= outerHalfWidth) continue;
+            let strength = 1;
+            if (distance > coreHalfWidth) {
+                const t = Game.clamp((distance - coreHalfWidth) / shoulderWidth, 0, 1);
+                const smooth = t * t * (3 - 2 * t);
+                strength = 1 - smooth;
+            } else {
+                coreSamples++;
+            }
+            const index = py * w + px;
+            const before = data[index];
+            data[index] = Game.lerp(before, profile[py], strength);
+            maxHeightAdjustment = Math.max(maxHeightAdjustment, Math.abs(data[index] - before) * heightScale);
+            affectedSamples++;
+        }
+    }
+
+    let maxObservedGrade = 0;
+    for (let py = 1; py < h; py++) {
+        maxObservedGrade = Math.max(maxObservedGrade,
+            Math.abs(profile[py] - profile[py - 1]) * heightScale / zStep);
+    }
+
+    // Estimate the worst ground bulge above/below one rendered module's chord.
+    // This is lightweight diagnostic metadata for static/headless regressions;
+    // it has no effect on rendering or pathfinding.
+    const moduleSpanCells = Math.max(2, Math.round(config.moduleLengthTiles * Game.TILE / zStep));
+    let maxModuleChordDeviation = 0;
+    for (let start = 0; start + moduleSpanCells < h; start++) {
+        const end = start + moduleSpanCells;
+        for (let py = start + 1; py < end; py++) {
+            const t = (py - start) / moduleSpanCells;
+            const chord = Game.lerp(profile[start], profile[end], t);
+            maxModuleChordDeviation = Math.max(maxModuleChordDeviation,
+                Math.abs(profile[py] - chord) * heightScale);
+        }
+    }
+
+    Game._mokraRailTerrainStats = {
+        applied: true,
+        scenario: 'mokra',
+        centerX,
+        coreHalfWidth,
+        shoulderWidth,
+        affectedSamples,
+        coreSamples,
+        longitudinalSamples: h,
+        longitudinalRadiusCells: radius,
+        longitudinalPasses: passes,
+        maxConfiguredGrade: config.maxGrade,
+        maxObservedGrade,
+        estimatedModuleSpanCells: moduleSpanCells,
+        maxModuleChordDeviation,
+        maxHeightAdjustment,
+    };
+    return true;
+};
+
 /**
  * Shape the existing heightmap to the tile map: carve the river channel,
  * flatten roads / yards / buildings, and raise the bridge deck. Safe to call
@@ -1305,6 +1465,11 @@ Game.shapeHeightmap = () => {
             }
         }
     }
+
+    // 5. Mokra's rigid modular track needs a broad, low-curvature bed. Do this
+    // after generic road/building smoothing but before the water baseline is
+    // captured, so any later bed rebuild preserves the railway preparation.
+    Game._shapeMokraRailwayBed();
 
     Game.WATER_LEVEL = 0.55;
     if (Game._captureWaterBedBaseHeightmap) Game._captureWaterBedBaseHeightmap();
@@ -1500,6 +1665,20 @@ Game._fbm2 = (x, z) => {
 Game.getGroundDetailHeight = (wx, wz) => {
     const tile = Game.getTileAtWorld(wx, wz);
     if (!tile) return 0;
+    let railDetailFactor = 1;
+    if (Game.currentScenario === 'mokra' && Number.isFinite(Game.railway?.centerX)) {
+        const railConfig = Game.MOKRA_RAIL_TERRAIN;
+        const coreHalfWidth = railConfig.coreHalfWidthTiles * Game.TILE;
+        const detailFadeWidth = Math.max(0.001, railConfig.detailFadeTiles * Game.TILE);
+        const distance = Math.abs(wx - Game.railway.centerX);
+        // Position, rather than tile type, is authoritative here: Mokra's three
+        // crossings are road tiles but still carry the same physical rails.
+        if (distance <= coreHalfWidth) return 0;
+        if (distance < coreHalfWidth + detailFadeWidth) {
+            const t = Game.clamp((distance - coreHalfWidth) / detailFadeWidth, 0, 1);
+            railDetailFactor = t * t * (3 - 2 * t);
+        }
+    }
     const { tx, ty } = Game.tileAtWorld(wx, wz);
     const lx = (wx / Game.TILE) - tx;
     const lz = (wz / Game.TILE) - ty;
@@ -1531,7 +1710,7 @@ Game.getGroundDetailHeight = (wx, wz) => {
         h -= 0.05;
     }
 
-    return Game.clamp(h, -0.14, 0.14);
+    return Game.clamp(h, -0.14, 0.14) * railDetailFactor;
 };
 
 Game._attachFoliageWind = (material, options = {}) => {
@@ -2390,6 +2569,7 @@ Game.buildTerrainTexture = () => {
         if (!Game._roadGravelImg && !Game._roadGravelLoading) {
             Game._roadGravelLoading = true;
             const gimg = new Image();
+            gimg.crossOrigin = 'anonymous';
             gimg.onload = () => {
                 Game._roadGravelImg = Game._prepareRoadGravel ? Game._prepareRoadGravel(gimg) : gimg;
                 Game._roadGravelLoading = false;
@@ -2397,7 +2577,7 @@ Game.buildTerrainTexture = () => {
                 console.log('road gravel photo applied (seamless)');
             };
             gimg.onerror = () => { Game._roadGravelLoading = false; };
-            gimg.src = 'textures/dirt_gravel_road.jpg?v=3';
+            gimg.src = Game.assetUrl('textures/dirt_gravel_road.jpg');
         }
     }
 
@@ -2846,7 +3026,7 @@ Game._addFieldDividers = () => {
     const place = (url, list, variant, kind) => {
         const mine = list.filter(p => p.variant === variant);
         if (!mine.length) return;
-        Game.gltfLoader.load(url, (gltf) => {
+        Game.gltfLoader.load(Game.assetUrl(url), (gltf) => {
             let src = null;
             gltf.scene.traverse(o => { if (!src && o.isMesh) src = o; });
             if (!src) return;
@@ -3259,34 +3439,28 @@ Game.buildTerrainMeshes = () => {
     const terrainMasks = Game.buildTerrainMaterialMaps();
 
     const texLoader = new THREE.TextureLoader();
-    // Cache-bust asset URLs. Cloudflare can negatively-cache a 404 at an edge POP
-    // during the brief window between a code deploy and its assets landing; bump
-    // ASSET_V whenever a bundled texture is added/changed so the edge re-fetches.
-    const ASSET_V = '7';
-    const _texLoad = texLoader.load.bind(texLoader);
-    texLoader.load = (url, ...rest) =>
-        _texLoad(url + (url.indexOf('?') >= 0 ? '&' : '?') + 'v=' + ASSET_V, ...rest);
-    const terrainDetailColor = texLoader.load('textures/oga/ground_detail_color.jpg');
+    // Game.assetUrl applies the single release cache key and production CDN.
+    const terrainDetailColor = texLoader.load(Game.assetUrl('textures/oga/ground_detail_color.jpg'));
     terrainDetailColor.wrapS = terrainDetailColor.wrapT = THREE.RepeatWrapping;
     terrainDetailColor.colorSpace = THREE.SRGBColorSpace;
     terrainDetailColor.anisotropy = Math.min(4, Game.renderer.capabilities.getMaxAnisotropy());
 
     // CC0 seamless ground detail normal (OpenGameArt — DirtyGrassSeamless)
-    const terrainNormal = texLoader.load('textures/oga/ground_detail_nrm.jpg');
+    const terrainNormal = texLoader.load(Game.assetUrl('textures/oga/ground_detail_nrm.jpg'));
     terrainNormal.wrapS = THREE.RepeatWrapping;
     terrainNormal.wrapT = THREE.RepeatWrapping;
     terrainNormal.repeat.set(42, 42);
     terrainNormal.minFilter = THREE.LinearMipmapLinearFilter;
     terrainNormal.anisotropy = Math.min(4, Game.renderer.capabilities.getMaxAnisotropy());
 
-    const terrainRough = texLoader.load('textures/terrain_roughness.jpg');
+    const terrainRough = texLoader.load(Game.assetUrl('textures/terrain_roughness.jpg'));
     terrainRough.wrapS = THREE.RepeatWrapping;
     terrainRough.wrapT = THREE.RepeatWrapping;
     terrainRough.repeat.set(42, 42);
     terrainRough.minFilter = THREE.LinearMipmapLinearFilter;
 
     // CC0 ground ambient-occlusion detail, subtly multiplied into the painted color
-    const terrainAO = texLoader.load('textures/oga/ground_detail_ao.jpg');
+    const terrainAO = texLoader.load(Game.assetUrl('textures/oga/ground_detail_ao.jpg'));
     terrainAO.wrapS = THREE.RepeatWrapping;
     terrainAO.wrapT = THREE.RepeatWrapping;
     terrainAO.repeat.set(42, 42);
@@ -3350,8 +3524,8 @@ Game.buildTerrainMeshes = () => {
     Game._addTerrainSurfaceDetails();
 
     // ── Shared structure textures (wall PBR set in repo + procedural roof tiles) ──
-    const wallColorBase = texLoader.load('textures/wall_color.jpg');
-    const wallNormalBase = texLoader.load('textures/wall_normal.jpg');
+    const wallColorBase = texLoader.load(Game.assetUrl('textures/wall_color.jpg'));
+    const wallNormalBase = texLoader.load(Game.assetUrl('textures/wall_normal.jpg'));
     [wallColorBase, wallNormalBase].forEach(t => {
         t.wrapS = t.wrapT = THREE.RepeatWrapping;
         t.minFilter = THREE.LinearMipmapLinearFilter;
@@ -3360,7 +3534,7 @@ Game.buildTerrainMeshes = () => {
     const roofTexBase = Game._makeRoofTexture();
     Game._sharedTextures = Game._sharedTextures || {};
     const leavesTex = Game._sharedTextures.leaves || (() => {
-        const tex = texLoader.load('textures/leaves.png');
+        const tex = texLoader.load(Game.assetUrl('textures/leaves.png'));
         tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
         tex.repeat.set(1, 1);
         tex.colorSpace = THREE.SRGBColorSpace;
@@ -3375,7 +3549,7 @@ Game.buildTerrainMeshes = () => {
         Game._sharedTextures.grassBlade = tex;
         return tex;
     })();
-    const craterTex = texLoader.load('textures/crater.png');
+    const craterTex = texLoader.load(Game.assetUrl('textures/crater.png'));
     craterTex.wrapS = craterTex.wrapT = THREE.ClampToEdgeWrapping;
     craterTex.colorSpace = THREE.SRGBColorSpace;
 
@@ -3433,11 +3607,11 @@ Game.buildTerrainMeshes = () => {
     // ── Shared CC0 bark + EZ-Tree foliage helpers (trees and hedge shrubs) ──
     // Trees/bushes use EZ-Tree (MIT) GEOMETRY only, rendered with CC0 textures
     // (Poly Haven oak bark + our leaf card) so we stay within the CC0 asset rule.
-    const barkColor = texLoader.load('textures/bark_color.jpg');
+    const barkColor = texLoader.load(Game.assetUrl('textures/bark_color.jpg'));
     barkColor.wrapS = barkColor.wrapT = THREE.RepeatWrapping;
     barkColor.colorSpace = THREE.SRGBColorSpace;
     barkColor.anisotropy = Math.min(4, Game.renderer.capabilities.getMaxAnisotropy());
-    const barkNormal = texLoader.load('textures/bark_normal.jpg');
+    const barkNormal = texLoader.load(Game.assetUrl('textures/bark_normal.jpg'));
     barkNormal.wrapS = barkNormal.wrapT = THREE.RepeatWrapping;
     // Shared CC0 bark, tinted per species (oak neutral, pine reddish, birch pale).
     // VALOR: soft-blend the trunk/branches too, so the whole tree model melds
@@ -4339,7 +4513,7 @@ Game.buildTerrainMeshes = () => {
         });
 
         if (Game.gltfLoader) {
-            Game.gltfLoader.load('models/bridge_stone.glb', (gltf) => {
+            Game.gltfLoader.load(Game.assetUrl('models/bridge_stone.glb'), (gltf) => {
                 let src = null;
                 gltf.scene.traverse(o => { if (!src && o.isMesh) src = o; });
                 if (!src) return;

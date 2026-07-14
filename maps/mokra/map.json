@@ -15,8 +15,9 @@
     "three limited vehicle crossings",
     "Mokra I, Mokra II and Mokra III settlement strips",
     "open cultivated western approaches",
+    "western-edge German entry strip",
     "irregular woodland ambush areas",
     "no broad river or lake"
   ],
-  "notes": "Terrain, structures, crossing rules, deployment zones and objective coordinates are authored by js/scenarios/mokra.js. This metadata file documents the runtime map contract; no baked French-map texture is applied."
+  "notes": "Terrain, structures, crossing rules, deployment zones and objective coordinates are authored by js/scenarios/mokra.js. A three-minute Polish deployment countdown completes before the German vanguard enters from the westernmost five-tile strip at 3:00 total elapsed time; later echelons enter at 3:55, 5:05 and 6:25, and the five-combat-minute hold ends at 8:00. This metadata file documents the runtime map contract; no baked French-map texture is applied."
 }
