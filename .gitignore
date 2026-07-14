@@ -37,3 +37,7 @@ tools/blender_mcp_addon.py
 
 # Temp asset staging (model optimization/preview; never commit)
 .asset-tmp/
+
+# Local TTS voice workspace (engines, model weights, takes; ~12 GB — the
+# curated .ogg results are copied into sounds/ and committed from there)
+voice-generator/
