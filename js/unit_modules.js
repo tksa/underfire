@@ -241,7 +241,15 @@ Game.uMod.scan = (unit, ctx) => {
         const scanDue = cachedInvalid || now >= unit._nextTargetScanAt;
         if (scanDue) {
             unit._nextTargetScanAt = now + Game._targetScanInterval(unit);
-            const cand = Game.nearestEnemy(unit);
+            let cand = Game.nearestEnemy(unit);
+            // A weapon that cannot penetrate never auto-targets armor: rifles
+            // and MGs must not plink at tanks. Remember the vehicle as a
+            // threat so the take-cover reaction still responds to it.
+            if (cand && Game.unitCanHurt && !Game.unitCanHurt(unit, cand)) {
+                unit._armorThreat = cand;
+                unit._armorThreatTime = now;
+                cand = null;
+            }
             // Target hysteresis: keep the current target through small distance
             // shuffles so the unit doesn't twitch back and forth between two roughly
             // equidistant enemies. Only switch when the current target is gone/unseen,
@@ -258,7 +266,8 @@ Game.uMod.scan = (unit, ctx) => {
             const curVisible = cur && cand && cand.id === cur.id
                 ? true
                 : !!(cur && cur.alive && cur.team !== unit.team && Game.unitCanSee(unit, cur));
-            const curValid = curVisible && curDistSq <= (unit.sight * 1.1) ** 2;
+            const curValid = curVisible && curDistSq <= (unit.sight * 1.1) ** 2
+                && (!Game.unitCanHurt || Game.unitCanHurt(unit, cur));
             if (curValid && cand && cand.id !== cur.id) {
                 const dCand = Game.distSq(unit.x, unit.z, cand.x, cand.z);
                 const dwellOk = (now - (unit._targetSince || 0)) > 0.8;
@@ -324,6 +333,60 @@ Game.uMod.engage = (unit, ctx) => {
     const enemy = ctx.enemy;
     const weaponDef0 = ctx.weaponDef0;
     const dt = ctx.dt;
+
+    // CLOSE ASSAULT (double right-click on armor): run at the vehicle and lob
+    // AT grenade bundles from short range instead of taking a rifle stand-off.
+    if (unit._grenadeChargeId != null) {
+        const target = enemy && enemy.id === unit._grenadeChargeId
+            && unit.forcedTargetId === unit._grenadeChargeId ? enemy : null;
+        if (!target) {
+            unit._grenadeChargeId = null;   // target destroyed or countermanded
+        } else {
+            const dct = Game.dist(unit.x, unit.z, target.x, target.z);
+            const THROW_RANGE = 6.0;
+            if (dct > THROW_RANGE) {
+                unit._pursueTimer = (unit._pursueTimer || 0) - dt;
+                const targetMoved = !unit._pursueAnchor
+                    || Game.distSq(unit._pursueAnchor.x, unit._pursueAnchor.z, target.x, target.z) > 9;
+                if (!unit.moving || unit._pursueTimer <= 0 || targetMoved) {
+                    unit._pursueTimer = 1.0;
+                    unit._pursueAnchor = { x: target.x, z: target.z };
+                    unit.path = Game.findPath(unit, unit.x, unit.z, target.x, target.z);
+                    unit.moving = true;
+                    unit.stopTimer = 0;
+                }
+            } else {
+                unit.path = [];
+                unit.moving = false;
+                unit.stopTimer = Math.max(unit.stopTimer || 0, 0.15);
+                const want = Game.angleTo(unit.x, unit.z, target.x, target.z);
+                unit.angle = Game.rotateTo(unit.angle, want, 6 * dt);
+                unit.turretAngle = unit.angle;
+                unit._atGrenades = unit._atGrenades ?? 2;
+                if (Math.abs(Game.angleDiff(unit.angle, want)) < 0.3
+                    && (unit._atNext == null || Game.gameClock >= unit._atNext)
+                    && Game.unitCanSee(unit, target) && Game.spawnThrownGrenade) {
+                    unit._atGrenades--;
+                    unit._atNext = Game.gameClock + Game.rand(2.5, 4.5);
+                    Game.spawnThrownGrenade(unit.x, unit.z,
+                        target.x + Game.rand(-0.6, 0.6), target.z + Game.rand(-0.6, 0.6),
+                        { type: 'at', dmg: 45, blastR: 2.2, supp: 18, arc: 1.4 });
+                    if (unit.team === Game.playerTeam) {
+                        Game.pushMessage(`${unit.label} hurls a grenade bundle at ${target.label}!`, 1.6);
+                    }
+                    if (unit._atGrenades <= 0) {
+                        // Pockets empty: break off; the cover reaction takes over.
+                        unit._grenadeChargeId = null;
+                        unit.forcedTargetId = null;
+                        if (unit.team === Game.playerTeam) {
+                            Game.pushMessage(`${unit.label} is out of grenade bundles!`, 1.8);
+                        }
+                    }
+                }
+            }
+            return;
+        }
+    }
 
     if (enemy && unit.forcedTargetId === enemy.id
         && weaponDef0 && weaponDef0.fireType !== 'indirect') {
@@ -415,7 +478,16 @@ Game.uMod.takeCover = (unit, ctx) => {
     if (unit.forcedTargetId != null || unit.orderMode === 'retreat' || unit.retreating
         || unit.orderMode === 'hold') return;
     if (unit.path && unit.path.length) return;             // busy moving (order or dash)
-    const engaged = !!ctx.enemy || (unit.underFire || 0) > 0 || (unit.suppressionValue || 0) > 20;
+    // A tank the rifleman cannot hurt never becomes ctx.enemy (scan filters
+    // it out), but it is still a mortal threat: react as if under fire.
+    let armorThreat = unit._armorThreat;
+    if (!armorThreat || !armorThreat.alive || armorThreat.team === unit.team
+        || (Game.gameClock - (unit._armorThreatTime || 0)) > 2.5
+        || Game.distSq(unit.x, unit.z, armorThreat.x, armorThreat.z) > 20 * 20) {
+        armorThreat = null;
+    }
+    const engaged = !!ctx.enemy || !!armorThreat
+        || (unit.underFire || 0) > 0 || (unit.suppressionValue || 0) > 20;
     if (!engaged) return;
     // Already behind something decent: just keep low. (0.22 matches the minimum
     // cover findCoverPosition will pick, so an arrived man never re-dashes.)
@@ -425,13 +497,22 @@ Game.uMod.takeCover = (unit, ctx) => {
     }
     if ((unit._coverCd || 0) > Game.gameClock) return;     // don't re-plan every frame
     unit._coverCd = Game.gameClock + 3.0;
-    const threat = ctx.enemy || unit._lastThreat;
+    const threat = ctx.enemy || armorThreat || unit._lastThreat;
     if (!threat) return;
     const cov = Game.findCoverPosition(unit, threat.x, threat.z);
     if (cov && Game.dist(unit.x, unit.z, cov.x, cov.z) > 1.2) {
         unit.path = Game.findPath(unit, unit.x, unit.z, cov.x, cov.z);
         unit.moving = unit.path.length > 0;
         if (unit.stance !== 'prone') { unit.stance = 'crouch'; unit._autoStance = true; }
+    } else if (armorThreat
+        && Game.dist(unit.x, unit.z, armorThreat.x, armorThreat.z) < 10) {
+        // No cover and the armor keeps closing: give ground straight away
+        // from it instead of kneeling in its path.
+        const away = Game.angleTo(armorThreat.x, armorThreat.z, unit.x, unit.z);
+        const fx = Game.clamp(unit.x + Math.cos(away) * 9, 1, Game.WORLD_W - 1);
+        const fz = Game.clamp(unit.z + Math.sin(away) * 9, 1, Game.WORLD_H - 1);
+        unit.path = Game.findPath(unit, unit.x, unit.z, fx, fz);
+        unit.moving = unit.path.length > 0;
     } else if (unit.stance === 'stand') {
         // Nothing nearby — at least get low where he stands.
         unit.stance = 'crouch'; unit._autoStance = true;
@@ -444,7 +525,11 @@ Game.uMod.fire = (unit, ctx) => {
     const enemy = ctx.enemy;
     const dt = ctx.dt;
     const isVeh = ctx.isVeh;
-    const canFire = !unit.holdFire && !(Game.isTank(unit.kind) && unit.turretDamaged);
+    const canFire = !unit.holdFire && !(Game.isTank(unit.kind) && unit.turretDamaged)
+        // Never squeeze off rounds the target's armor shrugs off (rifle vs
+        // tank). Forced or not, the man holds fire; grenade charges and the
+        // take-cover reaction handle armor instead.
+        && (!enemy || !Game.unitCanHurt || Game.unitCanHurt(unit, enemy));
     const hasTurret = isVeh && unit.hasTurret;
     const aimAngleToEnemy = enemy ? Game.angleTo(unit.x, unit.z, enemy.x, enemy.z) : null;
     ctx.hasTurret = hasTurret;

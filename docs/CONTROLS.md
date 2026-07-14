@@ -65,7 +65,8 @@ applicable in a browser or to this game's design).
 | Hover/click a riderless horse with its linked Ułan selected | — | Shows the green enter cursor; left- or right-click sends the Ułan to the horse's mounting side. The horse itself cannot be selected or controlled. |
 | Select building → unload occupants | ✅ | Select a garrisoned building (click it with nothing else selected): right-click terrain = **all** file out and move there; right-click the building itself = **one** soldier steps out |
 | Cursor edge scrolling | ✅ | Same (+ WASD/arrow keys, wheel zoom) |
-| Double right-click | — | Retreat order (Under Fire extra) |
+| Double right-click ground | — | Retreat order (Under Fire extra) |
+| Double right-click enemy armor | — | Selected foot infantry close assault: they charge the vehicle and throw AT grenade bundles from short range (2 per man). Single right-click with rifle infantry refuses instead: small arms cannot hurt real armor, and riflemen automatically seek cover, kneel, or give ground when a tank approaches. |
 
 ## Garrison display (SS2 §III.D "Unit Status")
 

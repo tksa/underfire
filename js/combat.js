@@ -26,6 +26,26 @@ Game.nearestEnemy = (unit) => {
     return best;
 };
 
+// Can this unit's weapon meaningfully damage the target? Small arms (pen 0)
+// bounce off even the weakest plate of real armor, so rifles and MGs must
+// never waste rounds on tanks. Soft targets (men, trucks, towed guns, supply
+// and fuel vehicles) are always valid.
+Game.unitCanHurt = (unit, target) => {
+    const stats = Game.UNIT_STATS[target.statKey] || {};
+    const armor = stats.armor;
+    if (!armor) return true;
+    const weakest = typeof armor === 'number'
+        ? armor : Math.min(armor.front || 0, armor.side || 0, armor.rear || 0);
+    if (weakest <= 0) return true;
+    const weapon = Game.WEAPONS[unit.weaponKey] || {};
+    const pen = Game.getWeaponPenetration
+        ? Game.getWeaponPenetration(weapon, Game.RANGE_BAND ? Game.RANGE_BAND.CLOSE : 5)
+        : (weapon.penetration ?? unit.penetration ?? 0);
+    // Reaching the partial-penetration band on the weakest plate is the
+    // minimum bar for a shot to be worth taking at all.
+    return pen >= weakest - 10;
+};
+
 Game.applyShot = (shooter, target) => {
     if (!shooter.alive || !target.alive) return;
 
@@ -315,6 +335,30 @@ Game.applyShot = (shooter, target) => {
             target.suppressionValue + (weapon.suppression || shooter.suppression) * 0.55,
             0, 100
         );
+
+        // Rounds punching into a loaded transport find the men aboard: each
+        // landed hit has a chance to wound or kill a passenger inside.
+        if (target._passengers && target._passengers.length && damage > 1) {
+            const throughChance = (weapon.heBlast || 0) > 0 ? 0.5 : 0.22;
+            if (Math.random() < throughChance) {
+                const pid = target._passengers[Math.floor(Math.random() * target._passengers.length)];
+                const inf = Game.getUnitById(pid);
+                if (inf && inf.alive) {
+                    inf.hp -= Game.rand(8, 20);
+                    inf.suppressionValue = Game.clamp((inf.suppressionValue || 0) + 30, 0, 100);
+                    if (inf.hp <= 0) {
+                        inf.hp = 0;
+                        inf.alive = false;
+                        inf._inVehicle = null;
+                        target._passengers = target._passengers.filter(id => id !== pid);
+                        if (inf.mesh) inf.mesh.visible = false;
+                        if (inf.team === Game.playerTeam) {
+                            Game.pushMessage(`${inf.label} was hit inside ${target.label}!`, 2.0);
+                        }
+                    }
+                }
+            }
+        }
 
         // Track last attack position
         Game.lastAttackPos = { x: target.x, z: target.z };

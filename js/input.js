@@ -640,9 +640,19 @@ Game.orderAttackTarget = (target) => {
     const chosen = Game.selectedPlayerUnits();
     if (!chosen.length || !target) return;
     let any = false;
+    let futile = 0;
     chosen.forEach(u => {
         const w = Game.WEAPONS[u.weaponKey];
         if (!w || w.fireType === 'none' || (w.gameRange || 0) <= 0) return; // unarmed
+        // Rifles cannot stop armor: foot infantry refuse a plain attack order
+        // on a target their small arms cannot hurt. The deliberate close
+        // assault is the double right-click order instead.
+        if (w.fireType !== 'indirect'
+            && Game.isFootInfantry && Game.isFootInfantry(u)
+            && Game.unitCanHurt && !Game.unitCanHurt(u, target)) {
+            futile++;
+            return;
+        }
         any = true;
         if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
         Game.clearArrivalFacing(u);
@@ -682,7 +692,59 @@ Game.orderAttackTarget = (target) => {
             Game.Audio.voice(anyTank ? 'f_tank_attack' : 'f_sold_attack');
         }
     }
+    if (futile) {
+        Game.pushMessage('Small arms cannot stop armor. Double right-click it to close assault with grenade bundles.', 2.6);
+    }
     Game._clearFormationPreview();
+};
+
+// Double right-click on an armored vehicle: foot infantry charge it and lob
+// AT grenade bundles from short range (the engage module runs the assault).
+// Returns false when nothing armored/no infantry, so the caller falls back to
+// the ordinary attack order.
+Game.orderGrenadeCharge = (target) => {
+    if (!target || !target.alive) return false;
+    const stats = Game.UNIT_STATS[target.statKey] || {};
+    if (!stats.armor) return false;   // soft target: a normal attack works
+    const chargers = Game.selectedPlayerUnits().filter(u =>
+        Game.isFootInfantry(u) && !u._garrisoned && u._inVehicle == null);
+    if (!chargers.length) return false;
+    chargers.forEach(u => {
+        if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
+        Game.clearArrivalFacing(u);
+        u._enterRec = null;
+        u._enterCarrierId = null;
+        if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
+        u.forcedTargetId = target.id;
+        u._grenadeChargeId = target.id;
+        u._atGrenades = u._atGrenades ?? 2;
+        u.bombardX = null; u.bombardZ = null;
+        u.orderMode = 'aggressive';
+        u.holdFire = false;
+        u._combatReady = true;
+        u.path = Game.findPath(u, u.x, u.z, target.x, target.z);
+        u.moving = true;
+        u.orderDelay = Game.commandDelay(u);
+        u.stopTimer = 0;
+        u._pursueAnchor = { x: target.x, z: target.z };
+        u._pursueTimer = 1.0;
+    });
+    Game.spawnOrderMarker(target.x, target.z, 0xff5544);
+    Game.pushMessage(`Close assault! ${chargers.length} soldier${chargers.length === 1 ? '' : 's'} charging the armor with grenade bundles.`, 2.4);
+    if (Game.Audio) Game.Audio.voice('f_sold_attack');
+    Game._clearFormationPreview();
+    return true;
+};
+
+// Right-clicking an enemy: a quick second click on the SAME armored target
+// upgrades the order to a grenade close assault for the selected infantry.
+Game._attackOrCharge = (target) => {
+    const now = performance.now();
+    const dbl = Game._lastAtkRC && Game._lastAtkRC.id === target.id
+        && (now - Game._lastAtkRC.t) < 400;
+    Game._lastAtkRC = { id: target.id, t: now };
+    if (dbl && Game.orderGrenadeCharge && Game.orderGrenadeCharge(target)) return;
+    Game.orderAttackTarget(target);
 };
 
 // ── Order Destination Markers (pulse where troops will move to) ──
@@ -1404,11 +1466,11 @@ Game.handleInputEvents = () => {
                             return w && w.fireType !== 'none' && (w.gameRange || 0) > 0;
                         });
                         if (clickedEnemy) {
-                            Game.orderAttackTarget(clickedEnemy);
+                            Game._attackOrCharge(clickedEnemy);
                         } else if (mountRider && Game.orderMountHorse) {
                             Game.orderMountHorse(onHorse);
                         } else if (nearbyEnemy) {
-                            Game.orderAttackTarget(nearbyEnemy);
+                            Game._attackOrCharge(nearbyEnemy);
                         } else if (onTransport && selectedUnits.some(Game.isFootInfantry)) {
                             Game.orderEnterCarrier(onTransport);
                         } else if (onBuilding && !onBuilding.collapsed) {
