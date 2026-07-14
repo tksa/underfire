@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Germany, 1935 to 1945">
+  <defs>
+    <clipPath id="rounded-flag">
+      <rect x="1" y="4" width="30" height="24" rx="4"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#rounded-flag)">
+    <!-- Uniform 0.04 scale of the 1000x600 source; only red side margin is clipped. -->
+    <rect x="-4" y="4" width="40" height="24" fill="#d00"/>
+    <circle cx="14" cy="16" r="9" fill="#fff"/>
+    <path d="M20,11.2H14V20.8H8M9.2,10V16H18.8V22" transform="rotate(45 14 16)" fill="none" stroke="#000" stroke-width="2.4"/>
+  </g>
+  <rect x="1" y="4" width="30" height="24" rx="4" fill="none" stroke="#000" stroke-opacity=".2"/>
+  <path d="M27,5H5c-1.657,0-3,1.343-3,3v1c0-1.657,1.343-3,3-3h22c1.657,0,3,1.343,3,3V8c0-1.657-1.343-3-3-3Z" fill="#fff" opacity=".2" clip-path="url(#rounded-flag)"/>
+</svg>

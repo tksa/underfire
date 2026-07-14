@@ -101,6 +101,46 @@
       font-display: swap;
     }
 
+    @font-face {
+      font-family: 'Barlow';
+      src: url("fonts/barlow/Barlow-Regular.ttf") format("truetype");
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: 'Barlow';
+      src: url("fonts/barlow/Barlow-SemiBold.ttf") format("truetype");
+      font-style: normal;
+      font-weight: 600;
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: 'Barlow';
+      src: url("fonts/barlow/Barlow-Bold.ttf") format("truetype");
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: 'Barlow Condensed';
+      src: url("fonts/barlow/BarlowCondensed-SemiBold.ttf") format("truetype");
+      font-style: normal;
+      font-weight: 600;
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: 'Barlow Condensed';
+      src: url("fonts/barlow/BarlowCondensed-Bold.ttf") format("truetype");
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+    }
+
     :root {
       --bg: #161a1e;
       --panel: rgba(14, 18, 22, 0.88);
@@ -108,6 +148,13 @@
       --text: #d7dde6;
       --muted: #9fb0c0;
       --accent: #c9a45d;
+      --panel-strong: rgba(17, 21, 26, 0.965);
+      --panel-soft: rgba(31, 36, 43, 0.72);
+      --line: rgba(140, 151, 164, 0.25);
+      --accent-soft: rgba(201, 164, 93, 0.12);
+      --font-ui: 'Barlow', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-heading: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+      --font-display: 'Germanica', 'Times New Roman', serif;
     }
 
     * {
@@ -120,7 +167,7 @@
     body {
       background: #0a0e12;
       color: var(--text);
-      font-family: Inter, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-family: var(--font-ui);
       overflow: hidden;
       user-select: none;
       height: 100%;
@@ -161,11 +208,17 @@
       inset: 0;
       z-index: 10000;
       background: #0a0e12;
-      overflow: hidden;
+      overflow: auto;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: Inter, system-ui, sans-serif;
+      padding:
+        max(16px, env(safe-area-inset-top))
+        max(16px, env(safe-area-inset-right))
+        max(16px, env(safe-area-inset-bottom))
+        max(16px, env(safe-area-inset-left));
+      font-family: var(--font-ui);
+      -webkit-overflow-scrolling: touch;
     }
 
     #menuBgVideo {
@@ -197,70 +250,63 @@
       background:
         linear-gradient(rgba(8, 10, 13, 0.55), rgba(8, 10, 13, 0.8)),
         var(--uf-splash-image, url("splash.png")) center / cover no-repeat, #0a0e12;
-      display: flex; align-items: center; justify-content: center;
-      font-family: Inter, system-ui, sans-serif;
+      display: flex; align-items: flex-start; justify-content: center;
+      overflow-y: auto;
+      padding:
+        max(16px, env(safe-area-inset-top))
+        max(16px, env(safe-area-inset-right))
+        max(16px, env(safe-area-inset-bottom))
+        max(16px, env(safe-area-inset-left));
+      font-family: var(--font-ui);
       transition: opacity 0.4s ease;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
     }
     #welcomeGate.hidden { opacity: 0; pointer-events: none; display: none; }
     .welcome-panel {
-      width: 640px; max-width: 92vw; max-height: 92vh; overflow-y: auto;
-      background: rgba(20, 23, 28, 0.94);
-      border: 1px solid rgba(106, 114, 126, 0.4); border-radius: 5px;
-      padding: 38px 44px; box-shadow: 0 14px 48px rgba(0, 0, 0, 0.65);
-      text-align: center;
-    }
-
-    /* Homepage layout: main panel + development-path sidebar */
-    .welcome-layout {
-      display: flex; gap: 16px; align-items: flex-start;
-      justify-content: center; flex-wrap: wrap; max-width: 96vw;
-    }
-    .welcome-sidebar {
-      width: 256px; max-width: 92vw; max-height: 92vh; overflow-y: auto;
-      background: rgba(20, 23, 28, 0.94);
-      border: 1px solid rgba(106, 114, 126, 0.4); border-radius: 5px;
-      padding: 26px 22px; box-shadow: 0 14px 48px rgba(0, 0, 0, 0.65);
+      position: relative;
+      flex: 0 0 auto;
+      width: min(1080px, 100%);
+      margin: auto;
+      overflow: hidden;
+      background:
+        linear-gradient(135deg, rgba(30, 35, 42, 0.97), rgba(14, 18, 22, 0.97)),
+        var(--panel-strong);
+      border: 1px solid rgba(134, 146, 159, 0.42);
+      border-radius: 7px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.68);
       text-align: left;
+      backdrop-filter: blur(16px);
     }
-    .ws-title {
-      font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
-      color: #c9a45d; margin-bottom: 16px;
+    .welcome-panel::before,
+    .menu-panel::before {
+      content: '';
+      position: absolute;
+      inset: 0 0 auto;
+      height: 3px;
+      z-index: 3;
+      background: linear-gradient(90deg, transparent 0%, #9b7b3f 16%, #e1c574 50%, #9b7b3f 84%, transparent 100%);
+      pointer-events: none;
     }
-    /* "now" root node (filled) that forks into possible directions */
-    .ws-root { position: relative; padding-left: 24px; margin-bottom: 8px; }
-    .ws-root::before {
-      content: ''; position: absolute; left: 4px; top: 3px;
-      width: 12px; height: 12px; border-radius: 50%;
-      background: #c9a45d; box-shadow: 0 0 0 3px rgba(201, 164, 93, 0.18);
+    .welcome-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+      gap: clamp(28px, 5vw, 64px);
+      align-items: end;
+      padding: clamp(30px, 4vw, 46px) clamp(26px, 5vw, 52px) clamp(26px, 3.5vw, 36px);
+      border-bottom: 1px solid var(--line);
+      background:
+        linear-gradient(90deg, rgba(201, 164, 93, 0.075), transparent 48%),
+        rgba(7, 10, 13, 0.24);
     }
-    .ws-branches { list-style: none; margin: 0 0 0 10px; padding: 0; position: relative; }
-    .ws-branches::before { /* the trunk */
-      content: ''; position: absolute; left: 0; top: -10px; bottom: 16px;
-      width: 1px; background: rgba(201, 164, 93, 0.45);
+    .welcome-brand { min-width: 0; }
+    .welcome-content {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.7fr);
+      gap: clamp(24px, 4vw, 42px);
+      padding: clamp(26px, 4vw, 38px) clamp(26px, 5vw, 52px);
     }
-    .ws-branches li { position: relative; padding-left: 24px; margin-bottom: 14px; }
-    .ws-branches li:last-child { margin-bottom: 0; }
-    .ws-branches li::before { /* elbow connector */
-      content: ''; position: absolute; left: 0; top: 8px; width: 14px; height: 1px;
-      background: rgba(201, 164, 93, 0.45);
-    }
-    .ws-branches li::after { /* open branch node */
-      content: ''; position: absolute; left: 9px; top: 4px;
-      width: 9px; height: 9px; border-radius: 50%;
-      background: #181b20; border: 1px solid rgba(201, 164, 93, 0.65);
-    }
-    .ws-name { display: block; font-size: 13px; font-weight: 600; color: #e6ebf0; }
-    .ws-det { display: block; font-size: 11.5px; line-height: 1.45; color: #9aa6b4; margin-top: 2px; }
-    /* Neural renderer = the ideal destination branch */
-    .ws-branches li.ws-ideal::after {
-      background: #c9a45d; border-color: #c9a45d; box-shadow: 0 0 0 3px rgba(201, 164, 93, 0.18);
-    }
-    .ws-ideal .ws-name { display: inline; color: #e8c97a; }
-    .ws-badge {
-      display: inline-block; font-size: 9px; text-transform: uppercase; letter-spacing: 1px;
-      color: #c9a45d; border: 1px solid rgba(201, 164, 93, 0.5); border-radius: 10px;
-      padding: 1px 6px; margin-left: 4px; vertical-align: middle;
-    }
+    .welcome-overview { min-width: 0; }
     /* Language selector (top-right) — hidden at launch; English is the default. */
     #langBar {
       position: fixed;
@@ -301,7 +347,7 @@
       padding: 7px 14px; font-size: 12px; font-weight: 600; letter-spacing: 1px;
       color: #d7dde6; background: rgba(16, 18, 22, 0.7);
       border: 1px solid rgba(106, 114, 126, 0.45); border-radius: 4px; cursor: pointer;
-      font-family: Inter, system-ui, sans-serif;
+      font-family: var(--font-ui);
     }
     .ingame-menu-btn:hover { background: rgba(40, 44, 52, 0.92); border-color: rgba(126, 134, 146, 0.6); }
 
@@ -310,7 +356,7 @@
     .overlay-toggles {
       pointer-events: auto;
       display: flex; gap: 4px; align-items: center; justify-content: center;
-      width: 180px; font-family: Inter, system-ui, sans-serif;
+      width: 180px; font-family: var(--font-ui);
     }
     .ov-label { font-size: 9px; color: #7e8794; letter-spacing: 1px; text-transform: uppercase; margin-right: 1px; }
     /* Default look = OFF (dim, not drawn). .active = ON (gold). */
@@ -328,8 +374,9 @@
     }
 
     #welcomeGate .menu-title {
-      font-size: 88px;
-      margin-bottom: 6px;
+      font-size: clamp(68px, 9vw, 104px);
+      margin-bottom: 8px;
+      text-align: left;
     }
 
     #menuLogo {
@@ -337,12 +384,26 @@
       transition: filter 0.15s;
     }
     #menuLogo:hover { filter: brightness(1.18); }
-    /* Pair the tag directly under the "World War II" subtitle */
-    #welcomeGate .menu-subtitle { margin-bottom: 4px; }
+    #welcomeGate .menu-subtitle {
+      margin-bottom: 12px;
+      text-align: left;
+      font-size: 13px;
+    }
 
     .welcome-tag {
-      font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
-      color: #c9a45d; margin-bottom: 22px;
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 5px 11px;
+      border: 1px solid rgba(201, 164, 93, 0.34);
+      border-radius: 2px;
+      background: var(--accent-soft);
+      font-family: var(--font-heading);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+      color: #d8ba7b;
     }
     .welcome-lead {
       font-size: 20px; line-height: 1.45; color: #d2d8e0;
@@ -354,52 +415,121 @@
       margin: 0 auto; max-width: 520px;
     }
     .welcome-points {
-      list-style: none; padding: 0; margin: 6px 0 4px;
-      text-align: left;
+      counter-reset: welcome-feature;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      list-style: none;
+      padding: 0;
+      margin: 0;
     }
     .welcome-points li {
-      position: relative; padding-left: 24px; margin-bottom: 15px;
-      font-size: 17px; line-height: 1.45; color: #d2d8e0;
+      counter-increment: welcome-feature;
+      position: relative;
+      min-height: 150px;
+      padding: 44px 17px 17px;
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: linear-gradient(145deg, rgba(47, 53, 62, 0.62), rgba(25, 29, 35, 0.72));
+      font-size: 15px;
+      line-height: 1.45;
+      color: #b8c0ca;
     }
-    .welcome-points li:last-child { margin-bottom: 0; }
     .welcome-points li::before {
-      content: '▸'; position: absolute; left: 0; top: 0; color: #c9a45d;
+      content: '0' counter(welcome-feature);
+      position: absolute;
+      left: 17px;
+      top: 14px;
+      color: #c9a45d;
+      font-family: var(--font-heading);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1.6px;
     }
-    .welcome-points strong { color: #f0f3f7; }
+    .welcome-points strong {
+      display: block;
+      margin-bottom: 5px;
+      color: #f0f3f7;
+      font-family: var(--font-heading);
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.25px;
+    }
     .welcome-areas {
-      display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
-      margin: 20px 0 4px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      justify-content: flex-start;
+      margin: 9px 0 0;
+    }
+    .welcome-areas-label {
+      margin-top: 18px;
+      padding-top: 17px;
+      border-top: 1px solid var(--line);
+      color: #d8ba7b;
+      font-family: var(--font-heading);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
     }
     .welcome-chip {
-      font-size: 11px; color: #aeb6c2; padding: 5px 12px;
-      border: 1px solid rgba(106, 114, 126, 0.4); border-radius: 20px;
-      background: rgba(30, 33, 39, 0.6);
+      padding: 5px 9px;
+      border: 1px solid rgba(106, 114, 126, 0.4);
+      border-radius: 2px;
+      background: rgba(19, 23, 28, 0.72);
+      color: #9ea8b4;
+      font-family: var(--font-heading);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.65px;
+      text-transform: uppercase;
     }
     .welcome-actions {
-      display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 26px;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+      margin: 0;
     }
     .welcome-actions-row {
-      display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
     }
     .welcome-enter {
-      padding: 14px 40px; font-size: 16px; font-weight: 700;
+      width: 100%; min-height: 58px; padding: 14px 28px; font: inherit; font-size: 17px; font-weight: 750;
       text-transform: uppercase; letter-spacing: 2px; color: #0a0e12;
       background: linear-gradient(to bottom, #d4b060, #a88a3a);
-      border: none; border-radius: 3px; cursor: pointer; transition: all 0.15s;
+      border: 1px solid #ddbe70; border-radius: 3px; cursor: pointer; transition: all 0.15s;
+      touch-action: manipulation;
     }
     .welcome-enter:hover { background: linear-gradient(to bottom, #e0c070, #b8994a); }
     .welcome-link {
-      padding: 13px 22px; font-size: 13px; font-weight: 600; letter-spacing: 1px;
+      min-height: 46px; padding: 11px 14px; font-size: 13px; font-weight: 650; letter-spacing: 0.6px;
       color: #d7dde6; text-decoration: none;
       background: rgba(40, 44, 52, 0.8); border: 1px solid rgba(106, 114, 126, 0.45);
-      border-radius: 3px; transition: all 0.15s;
-      display: inline-flex; align-items: center; gap: 7px;
+      border-radius: 4px; transition: all 0.15s;
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      touch-action: manipulation;
     }
     .welcome-link:hover { background: rgba(58, 63, 72, 0.9); border-color: rgba(126, 134, 146, 0.6); }
     .welcome-link.discord:hover { background: rgba(88, 101, 242, 0.22); border-color: rgba(88, 101, 242, 0.8); color: #c7ccff; }
+    .welcome-enter:focus-visible,
+    .welcome-link:focus-visible,
+    .menu-start:focus-visible {
+      outline: 2px solid #e0c070;
+      outline-offset: 3px;
+    }
     .welcome-foot {
-      margin: 24px -22px 0; font-size: 12px; line-height: 1.75;
+      margin: 0;
+      padding: 14px clamp(26px, 5vw, 52px) 16px;
+      border-top: 1px solid var(--line);
+      background: rgba(7, 10, 13, 0.28);
+      font-size: 11px; line-height: 1.75;
       color: #7e8794;
+      text-align: center;
     }
     .welcome-foot a { color: #9aa6b4; }
     .welcome-foot strong { color: #b6bdc8; }
@@ -410,21 +540,28 @@
 
     /* ── Welcome gate: "Build it with Claude" box ── */
     .welcome-claude {
-      margin: 22px 0 0; text-align: left;
-      border: 1px solid rgba(106, 114, 126, 0.4); border-radius: 4px;
-      background: rgba(30, 33, 39, 0.55); padding: 14px 18px;
+      align-self: stretch;
+      margin: 0;
+      padding: 20px 20px 18px;
+      border: 1px solid rgba(201, 164, 93, 0.25);
+      border-radius: 4px;
+      background:
+        linear-gradient(180deg, rgba(201, 164, 93, 0.09), transparent 46%),
+        rgba(19, 23, 28, 0.75);
+      text-align: left;
     }
     .wc-title {
-      font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
-      color: #c9a45d; margin-bottom: 9px;
+      font-family: var(--font-heading);
+      font-size: 15px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase;
+      color: #d8ba7b; margin-bottom: 13px;
     }
-    .wc-steps { margin: 0; padding-left: 20px; }
-    .wc-steps li { font-size: 13.5px; line-height: 1.55; color: #b6bdc8; margin-bottom: 6px; }
+    .wc-steps { margin: 0; padding-left: 18px; }
+    .wc-steps li { padding-left: 4px; font-size: 13.5px; line-height: 1.55; color: #b6bdc8; margin-bottom: 10px; }
     .wc-steps li:last-child { margin-bottom: 0; }
     .wc-steps strong { color: #e6ebf0; }
 
     /* ── Start-mission menu: "Latest Updates" panel ── */
-    .menu-updates { max-height: 120px; overflow-y: auto; padding-right: 4px; }
+    .menu-updates { max-height: 170px; overflow-y: auto; padding-right: 8px; }
     .update-entry { margin-bottom: 9px; }
     .update-entry:last-child { margin-bottom: 0; }
     .update-ver { font-size: 11px; font-weight: 600; color: #c9a45d; }
@@ -435,19 +572,92 @@
     .menu-panel {
       position: relative;
       z-index: 2;
-      width: 580px;
-      max-height: 90vh;
+      flex: 0 0 auto;
+      width: min(1060px, 100%);
+      max-height: calc(100vh - 32px);
+      max-height: calc(100dvh - 32px);
       overflow-y: auto;
-      background: rgba(22, 25, 30, 0.96);
-      border: 1px solid rgba(106, 114, 126, 0.4);
-      border-radius: 4px;
-      padding: 32px 36px;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+      background:
+        linear-gradient(135deg, rgba(30, 35, 42, 0.98), rgba(14, 18, 22, 0.98)),
+        var(--panel-strong);
+      border: 1px solid rgba(134, 146, 159, 0.42);
+      border-radius: 7px;
+      padding: 0;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.68);
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      backdrop-filter: blur(16px);
+    }
+
+    .menu-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 28px;
+      padding: 28px 36px 23px;
+      border-bottom: 1px solid var(--line);
+      background:
+        linear-gradient(90deg, rgba(201, 164, 93, 0.075), transparent 46%),
+        rgba(7, 10, 13, 0.24);
+    }
+
+    .menu-brand { min-width: 0; }
+
+    .menu-header .menu-title {
+      font-size: clamp(54px, 6vw, 68px);
+      margin-bottom: 3px;
+    }
+
+    .menu-header-mark {
+      flex: 0 0 190px;
+      height: 1px;
+      margin-bottom: 12px;
+      background: linear-gradient(90deg, rgba(201, 164, 93, 0.78), transparent);
+    }
+
+    .menu-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.72fr);
+    }
+
+    .menu-primary {
+      min-width: 0;
+      padding: 31px 34px 32px;
+      border-right: 1px solid var(--line);
+    }
+
+    .menu-sidebar {
+      min-width: 0;
+      padding: 31px 30px 30px;
+      background: rgba(7, 10, 13, 0.2);
+    }
+
+    .menu-footer {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(270px, 320px);
+      gap: 30px;
+      align-items: center;
+      padding: 17px 30px;
+      border-top: 1px solid var(--line);
+      background: rgba(7, 10, 13, 0.34);
+    }
+
+    .menu-meta { min-width: 0; }
+
+    .menu-meta .menu-version {
+      margin: 0;
+      text-align: left;
+    }
+
+    .mission-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
     }
 
     .menu-title {
-      font-family: 'Germanica', 'Times New Roman', serif;
-      font-size: 56px;
+      font-family: var(--font-display);
+      font-size: clamp(46px, 8vw, 56px);
       font-weight: 400;
       white-space: nowrap;
       color: #b9c0c8;
@@ -458,7 +668,7 @@
       text-transform: none;
       letter-spacing: 2px;
       line-height: 1.05;
-      text-align: center;
+      text-align: left;
       margin-bottom: 2px;
       filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.7));
     }
@@ -466,35 +676,44 @@
     .menu-subtitle {
       font-size: 12px;
       color: #888f9c;
-      text-align: center;
+      text-align: left;
       text-transform: uppercase;
       letter-spacing: 2px;
-      margin-bottom: 24px;
+      margin-bottom: 0;
     }
 
     .menu-section {
-      margin-bottom: 20px;
+      margin-bottom: 24px;
     }
 
+    .menu-primary .menu-section,
+    .menu-sidebar .menu-section:last-of-type { margin-bottom: 0; }
+
     .menu-section-title {
-      font-size: 11px;
-      font-weight: 600;
-      color: #a0a8b4;
+      font-family: var(--font-heading);
+      font-size: 14px;
+      font-weight: 700;
+      color: #bcc5cf;
       text-transform: uppercase;
-      letter-spacing: 1.5px;
-      margin-bottom: 8px;
+      letter-spacing: 1.8px;
+      margin-bottom: 12px;
       border-bottom: 1px solid rgba(106, 114, 126, 0.3);
-      padding-bottom: 4px;
+      padding-bottom: 8px;
     }
 
     .mission-card {
-      padding: 10px 14px;
-      margin-bottom: 6px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      min-height: 174px;
+      padding: 20px 19px 18px;
+      margin: 0;
+      overflow: hidden;
       border: 1px solid rgba(102, 108, 120, 0.3);
-      border-radius: 3px;
+      border-radius: 4px;
       cursor: pointer;
       transition: all 0.15s;
-      background: rgba(30, 33, 39, 0.6);
+      background: linear-gradient(145deg, rgba(47, 53, 62, 0.58), rgba(25, 29, 35, 0.74));
     }
 
     .mission-card:hover {
@@ -503,15 +722,28 @@
     }
 
     .mission-card.selected {
-      background: rgba(58, 63, 72, 0.7);
+      background:
+        linear-gradient(145deg, rgba(70, 65, 51, 0.54), rgba(29, 31, 34, 0.82));
       border-color: #c9a45d;
-      box-shadow: 0 0 8px rgba(201, 164, 93, 0.15);
+      box-shadow: 0 0 18px rgba(201, 164, 93, 0.12);
+    }
+
+    .mission-card.selected::before {
+      content: '';
+      position: absolute;
+      inset: 0 0 auto;
+      height: 3px;
+      background: #c9a45d;
     }
 
     .mission-card .mc-name {
-      font-size: 14px;
-      font-weight: 600;
-      color: #d7dde6;
+      font-family: var(--font-heading);
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: 0.25px;
+      color: #e5eaf0;
+      min-width: 0;
     }
 
     .mission-card .mc-heading {
@@ -525,9 +757,11 @@
       flex: none;
       padding: 2px 7px;
       border: 1px solid rgba(201, 164, 93, 0.58);
-      border-radius: 10px;
+      border-radius: 2px;
       color: #d8ba7b;
-      font-size: 9px;
+      background: rgba(201, 164, 93, 0.08);
+      font-family: var(--font-heading);
+      font-size: 10px;
       font-weight: 700;
       letter-spacing: 1px;
       line-height: 1.3;
@@ -535,28 +769,45 @@
     }
 
     .mission-card .mc-desc {
-      font-size: 11px;
-      color: #8e96a2;
-      margin-top: 2px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #aab3be;
+      margin-top: 12px;
     }
 
     .side-row {
-      display: flex;
-      gap: 10px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .country-flag {
+      display: block;
+      flex: 0 0 32px;
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
     }
 
     .side-btn {
-      flex: 1;
-      padding: 10px;
+      padding: 9px 10px;
+      min-height: 52px;
       text-align: center;
       border: 1px solid rgba(102, 108, 120, 0.3);
-      border-radius: 3px;
+      border-radius: 4px;
       cursor: pointer;
       background: rgba(30, 33, 39, 0.6);
       color: #d7dde6;
-      font-size: 13px;
+      font-family: var(--font-heading);
+      font-size: 15px;
       font-weight: 600;
+      letter-spacing: 0.35px;
       transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      touch-action: manipulation;
     }
 
     .side-btn:hover {
@@ -584,8 +835,10 @@
 
     .menu-start {
       width: 100%;
-      padding: 14px;
-      margin-top: 16px;
+      min-height: 50px;
+      padding: 13px;
+      margin: 0;
+      font-family: var(--font-ui);
       font-size: 16px;
       font-weight: 700;
       text-transform: uppercase;
@@ -593,9 +846,11 @@
       color: #0a0e12;
       background: linear-gradient(to bottom, #d4b060, #a88a3a);
       border: none;
+      border: 1px solid #ddbe70;
       border-radius: 3px;
       cursor: pointer;
       transition: all 0.15s;
+      touch-action: manipulation;
     }
 
     .menu-start:hover {
@@ -625,6 +880,246 @@
     .menu-save-btn:hover {
       background: rgba(52, 56, 64, 0.6);
       color: #d7dde6;
+    }
+
+    .menu-notice {
+      max-width: none;
+      margin: 22px 0 0;
+      padding: 12px 13px;
+      border: 1px solid rgba(216, 186, 123, 0.25);
+      border-radius: 4px;
+      background: rgba(20, 24, 28, 0.55);
+      color: #aeb8c2;
+      font-size: 11.5px;
+      line-height: 1.5;
+      text-align: left;
+    }
+
+    .menu-notice strong {
+      color: #d8ba7b;
+      font-weight: 700;
+    }
+
+    /* Both entry screens share the same dossier structure. Tablets stack the
+       columns; phones then tighten the same hierarchy without changing it. */
+    @media (max-width: 820px) {
+      #welcomeGate,
+      #mainMenu {
+        padding:
+          max(10px, env(safe-area-inset-top))
+          max(10px, env(safe-area-inset-right))
+          max(10px, env(safe-area-inset-bottom))
+          max(10px, env(safe-area-inset-left));
+      }
+
+      .welcome-panel {
+        width: 100%;
+        border-radius: 5px;
+      }
+
+      .welcome-header {
+        grid-template-columns: 1fr;
+        gap: 22px;
+        padding: 31px 28px 27px;
+      }
+
+      .welcome-actions {
+        max-width: 560px;
+      }
+
+      .welcome-content {
+        grid-template-columns: 1fr;
+        gap: 20px;
+        padding: 27px 28px;
+      }
+
+      .welcome-foot {
+        padding-right: 28px;
+        padding-left: 28px;
+      }
+
+      #welcomeGate .menu-title {
+        font-size: clamp(66px, 14vw, 88px);
+      }
+
+      .menu-panel {
+        width: 100%;
+        max-height: calc(100vh - 20px);
+        max-height: calc(100dvh - 20px);
+        border-radius: 5px;
+      }
+
+      .menu-header {
+        padding: 25px 27px 21px;
+      }
+
+      .menu-body {
+        grid-template-columns: 1fr;
+      }
+
+      .menu-primary {
+        padding: 27px 27px 28px;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .menu-sidebar {
+        padding: 27px;
+      }
+
+      .menu-footer {
+        padding: 16px 27px;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .welcome-header {
+        padding: 27px 18px 23px;
+      }
+
+      .welcome-content {
+        gap: 16px;
+        padding: 22px 18px;
+      }
+
+      .welcome-foot {
+        padding-right: 18px;
+        padding-left: 18px;
+      }
+
+      #welcomeGate .menu-title {
+        font-size: clamp(58px, 19vw, 76px);
+        margin-bottom: 6px;
+      }
+
+      #welcomeGate .menu-subtitle {
+        font-size: 10px;
+        letter-spacing: 1.45px;
+      }
+
+      .welcome-points {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .welcome-points li {
+        min-height: 0;
+        padding: 17px 16px 17px 53px;
+        font-size: 14px;
+      }
+
+      .welcome-points li::before {
+        left: 16px;
+        top: 18px;
+      }
+
+      .welcome-points strong {
+        font-size: 16px;
+      }
+
+      .welcome-areas {
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .welcome-areas-label {
+        margin-top: 14px;
+        padding-top: 14px;
+      }
+
+      .welcome-chip {
+        padding: 4px 7px;
+        font-size: 10px;
+      }
+
+      .welcome-actions-row {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .welcome-claude {
+        padding: 17px 16px;
+      }
+
+      .wc-steps li { font-size: 13px; }
+
+      .menu-header {
+        padding: 22px 18px 18px;
+      }
+
+      .menu-header .menu-title {
+        font-size: clamp(48px, 16vw, 58px);
+      }
+
+      .menu-header-mark { display: none; }
+
+      .menu-primary,
+      .menu-sidebar {
+        padding: 22px 18px;
+      }
+
+      .mission-grid {
+        grid-template-columns: 1fr;
+        gap: 9px;
+      }
+
+      .mission-card {
+        min-height: 132px;
+        padding: 17px 16px 15px;
+      }
+
+      .mission-card .mc-heading {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 7px 10px;
+      }
+
+      .mission-card .mc-name {
+        font-size: 20px;
+      }
+
+      .mission-card .mc-desc {
+        margin-top: 8px;
+        font-size: 13px;
+      }
+
+      .update-notes li {
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .menu-updates {
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
+      }
+
+      .menu-notice {
+        margin-top: 18px;
+      }
+
+      .menu-footer {
+        grid-template-columns: 1fr;
+        gap: 13px;
+        padding: 15px 18px 18px;
+      }
+
+      .menu-meta .menu-version {
+        text-align: center;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .welcome-actions-row {
+        grid-template-columns: 1fr;
+      }
+
+      .wc-steps {
+        padding-left: 18px;
+      }
+
+      .side-row {
+        grid-template-columns: 1fr;
+      }
     }
 
     /* ── Layout ────────────────────────────────── */
@@ -1270,7 +1765,7 @@
 
     .boot-loader__title {
       color: #eef1f4;
-      font-family: Georgia, 'Times New Roman', serif;
+      font-family: var(--font-ui);
       font-size: clamp(22px, 4.5vw, 31px);
       font-weight: 600;
       letter-spacing: 0.025em;
@@ -1938,72 +2433,67 @@
 
   <!-- ═══ WELCOME / INTRO GATE ═══ -->
   <div id="welcomeGate">
-    <div class="welcome-layout">
-    <div class="welcome-panel">
-      <div class="menu-title">Under Fire</div>
-      <div class="menu-subtitle" data-i18n="subtitle">World War II Real-Time Tactics Game</div>
-      <div class="welcome-tag" data-i18n="tag">Built by fans &amp; AI vibes</div>
-
-      <ul class="welcome-points">
-        <li data-i18n="b1"><strong>Free &amp; open:</strong> micro-management &amp; historical accuracy</li>
-        <li data-i18n="b2"><strong>Playable today,</strong> early and rough, with plenty still to do.</li>
-        <li data-i18n="b3"><strong>Help shape it:</strong> models, scenery, sound, mechanics, history.</li>
-      </ul>
-
-      <div class="welcome-areas">
-        <span class="welcome-chip" data-i18n="chip_models">Models</span>
-        <span class="welcome-chip" data-i18n="chip_scenery">Scenery</span>
-        <span class="welcome-chip" data-i18n="chip_textures">Textures</span>
-        <span class="welcome-chip" data-i18n="chip_effects">Effects</span>
-        <span class="welcome-chip" data-i18n="chip_sound">Sound</span>
-        <span class="welcome-chip" data-i18n="chip_mechanics">Mechanics</span>
-        <span class="welcome-chip" data-i18n="chip_history">Historical accuracy</span>
-      </div>
-
-      <div class="welcome-actions">
-        <button class="welcome-enter" id="btnEnterGame" data-i18n="enter">Enter &amp; Play ▸</button>
-        <div class="welcome-actions-row">
-        <a class="welcome-link" data-repo-link href="#" target="_blank" rel="noopener">
-          <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
-          <span data-i18n="build">Let's Build</span>
-        </a>
-        <a class="welcome-link discord" href="https://discord.gg/jmkh3RDkF" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.211.375-.444.864-.608 1.249a18.27 18.27 0 0 0-5.487 0 12.6 12.6 0 0 0-.617-1.25.077.077 0 0 0-.079-.036A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.2 14.2 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.331c-1.183 0-2.157-1.086-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.332-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.086-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.332-.946 2.418-2.157 2.418z"></path></svg>
-          <span data-i18n="discord">Join Discord</span>
-        </a>
+    <main class="welcome-panel" aria-labelledby="welcomeTitle">
+      <header class="welcome-header">
+        <div class="welcome-brand">
+          <h1 class="menu-title" id="welcomeTitle">Under Fire</h1>
+          <p class="menu-subtitle" data-i18n="subtitle">World War II Real-Time Tactics Game</p>
+          <p class="welcome-tag" data-i18n="tag">Built by fans</p>
         </div>
+
+        <div class="welcome-actions">
+          <button class="welcome-enter" id="btnEnterGame" data-i18n="enter">Enter &amp; Play ▸</button>
+          <div class="welcome-actions-row">
+            <a class="welcome-link" data-repo-link href="#" target="_blank" rel="noopener">
+              <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+              <span data-i18n="build">Let's Build</span>
+            </a>
+            <a class="welcome-link discord" href="https://discord.gg/jmkh3RDkF" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.211.375-.444.864-.608 1.249a18.27 18.27 0 0 0-5.487 0 12.6 12.6 0 0 0-.617-1.25.077.077 0 0 0-.079-.036A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.2 14.2 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.331c-1.183 0-2.157-1.086-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.332-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.086-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.332-.946 2.418-2.157 2.418z"></path></svg>
+              <span data-i18n="discord">Join Discord</span>
+            </a>
+          </div>
+        </div>
+      </header>
+
+      <div class="welcome-content">
+        <section class="welcome-overview" aria-label="Project overview">
+          <ul class="welcome-points">
+            <li data-i18n="b1"><strong>Free &amp; open:</strong> micro-management &amp; historical accuracy</li>
+            <li data-i18n="b2"><strong>Playable today,</strong> early and rough, with plenty still to do.</li>
+            <li data-i18n="b3"><strong>Help shape it:</strong> models, scenery, sound, mechanics, history.</li>
+          </ul>
+
+          <p class="welcome-areas-label" data-i18n="help_needed">We need help with these!</p>
+          <div class="welcome-areas">
+            <span class="welcome-chip" data-i18n="chip_models">Models</span>
+            <span class="welcome-chip" data-i18n="chip_animations">Animations</span>
+            <span class="welcome-chip" data-i18n="chip_scenery">Scenery</span>
+            <span class="welcome-chip" data-i18n="chip_textures">Textures</span>
+            <span class="welcome-chip" data-i18n="chip_effects">Effects</span>
+            <span class="welcome-chip" data-i18n="chip_sound">Sound</span>
+            <span class="welcome-chip" data-i18n="chip_mechanics">Mechanics</span>
+            <span class="welcome-chip" data-i18n="chip_history">Historical accuracy</span>
+          </div>
+        </section>
+
+        <aside class="welcome-claude">
+          <div class="wc-title" data-i18n="claude_title">Improve it with Claude</div>
+          <ol class="wc-steps">
+            <li data-i18n="claude_s1">Fork the repo and open it in <strong>Claude Code</strong>. It loads <strong>CLAUDE.md</strong> and the bundled skills as working context for the whole codebase.</li>
+            <li data-i18n="claude_s2">Tell it what you want to add or change. It knows the codebase, finds the right files, and builds it with you.</li>
+            <li data-i18n="claude_s3">Get it working, open a pull request, and we take it from there. Solid contributions get merged.</li>
+          </ol>
+        </aside>
       </div>
 
-      <div class="welcome-claude">
-        <div class="wc-title" data-i18n="claude_title">Improve it with Claude</div>
-        <ol class="wc-steps">
-          <li data-i18n="claude_s1">Fork the repo and open it in <strong>Claude Code</strong>. It loads <strong>CLAUDE.md</strong> and the bundled skills as working context for the whole codebase.</li>
-          <li data-i18n="claude_s2">Tell it what you want to add or change. It knows the codebase, finds the right files, and builds it with you.</li>
-          <li data-i18n="claude_s3">Get it working, open a pull request, and we take it from there. Solid contributions get merged.</li>
-        </ol>
-      </div>
-
-      <div class="welcome-foot">
-        <span data-i18n="foot_license">Free &amp; non-commercial. Credit <strong>Under Fire</strong>, no ads, no spin-offs.</span>
+      <footer class="welcome-foot">
+        <span data-i18n="foot_license">Free &amp; non-commercial. Credit <strong>Under Fire</strong>; no ads.</span>
         <a data-repo-doc="CONTRIBUTING.md" href="#" target="_blank" rel="noopener" data-i18n="foot_guide">Contributor guide</a>
         ·
         <a data-repo-doc="LICENSE.md" href="#" target="_blank" rel="noopener" data-i18n="foot_license_link">License</a>
-      </div>
-    </div>
-
-    <aside class="welcome-sidebar">
-      <div class="ws-title" data-i18n="dev_title">Development Paths</div>
-      <div class="ws-root">
-        <span class="ws-name" data-i18n="dev_1n">Three.js (now)</span>
-        <span class="ws-det" data-i18n="dev_1d">Runs in any browser, zero install. Where we are.</span>
-      </div>
-      <ul class="ws-branches">
-        <li><span class="ws-name" data-i18n="dev_2n">Existing engine</span><span class="ws-det" data-i18n="dev_2d">Port to Unity, Unreal or Godot for scale and tooling.</span></li>
-        <li><span class="ws-name" data-i18n="dev_3n">Custom engine</span><span class="ws-det" data-i18n="dev_3d">Bespoke C++/Rust + WebGPU for massive unit counts.</span></li>
-        <li class="ws-ideal"><span class="ws-name" data-i18n="dev_4n">Neural renderer</span> <span class="ws-badge" data-i18n="dev_ideal">ideal vision</span><span class="ws-det" data-i18n="dev_4d">AI image-to-image layer for photorealism on top.</span></li>
-      </ul>
-    </aside>
-    </div>
+      </footer>
+    </main>
   </div>
 
   <!-- ═══ MAIN MENU ═══ -->
@@ -2013,45 +2503,63 @@
     </video>
     <div class="menu-overlay"></div>
     <div class="menu-panel">
-      <div class="menu-title" id="menuLogo" title="Back to home">Under Fire</div>
-      <div class="menu-subtitle" data-i18n="menu_subtitle">World War Two RTS</div>
-
-      <div class="menu-section">
-        <div class="menu-section-title" data-i18n="m_briefing">Mission Briefing</div>
-        <div class="mission-card selected" data-mission="dyle">
-          <div class="mc-name" data-i18n="m_dyle_name">Advance to the Dyle Line</div>
-          <div class="mc-desc" data-i18n="m_dyle_desc">Western Front, May 1940. Lead French or German forces through the bocage and fight for the village crossroads.</div>
+      <header class="menu-header">
+        <div class="menu-brand">
+          <div class="menu-title" id="menuLogo" title="Back to home">Under Fire</div>
+          <div class="menu-subtitle" data-i18n="menu_subtitle">World War Two RTS</div>
         </div>
-        <div class="mission-card" data-mission="mokra">
-          <div class="mc-heading">
-            <div class="mc-name" data-i18n="m_mokra_name">Battle of Mokra: Hold the Railway</div>
-            <span class="mc-preview" data-i18n="preview">Preview</span>
+        <div class="menu-header-mark" aria-hidden="true"></div>
+      </header>
+
+      <div class="menu-body">
+        <section class="menu-primary">
+          <div class="menu-section">
+            <div class="menu-section-title" data-i18n="m_briefing">Mission Briefing</div>
+            <div class="mission-grid">
+              <div class="mission-card selected" data-mission="dyle">
+                <div class="mc-name" data-i18n="m_dyle_name">Advance to the Dyle Line</div>
+                <div class="mc-desc" data-i18n="m_dyle_desc">Western Front, May 1940. Lead French or German forces through the bocage and fight for the village crossroads.</div>
+              </div>
+              <div class="mission-card" data-mission="mokra">
+                <div class="mc-heading">
+                  <div class="mc-name" data-i18n="m_mokra_name">Battle of Mokra: Hold the Railway</div>
+                  <span class="mc-preview" data-i18n="preview">Preview</span>
+                </div>
+                <div class="mc-desc" data-i18n="m_mokra_desc">Poland, 1 September 1939. Command the reinforced Wołyńska Cavalry Brigade, conceal its Bofors guns, and delay the German 4th Panzer Division at the railway line.</div>
+              </div>
+            </div>
           </div>
-          <div class="mc-desc" data-i18n="m_mokra_desc">Poland, 1 September 1939. Command the reinforced Wołyńska Cavalry Brigade, conceal its Bofors guns, and delay the German 4th Panzer Division at the railway line.</div>
+        </section>
+
+        <aside class="menu-sidebar">
+          <div class="menu-section">
+            <div class="menu-section-title" data-i18n="m_side">Choose Side</div>
+            <div class="side-row">
+              <div class="side-btn" data-side="polish" hidden><img class="country-flag" src="icons/flags/poland.svg" alt=""><span data-i18n="side_pl">Polish</span></div>
+              <div class="side-btn selected" data-side="french"><img class="country-flag" src="icons/flags/france.svg" alt=""><span data-i18n="side_fr">French</span></div>
+              <div class="side-btn" data-side="german"><img class="country-flag" src="icons/flags/germany-1935-1945.svg" alt=""><span data-i18n="side_de">German</span></div>
+            </div>
+          </div>
+
+          <div class="menu-section">
+            <div class="menu-section-title" data-i18n="m_updates">Latest Updates</div>
+            <div class="menu-updates" id="menuUpdates"></div>
+          </div>
+
+          <div class="menu-notice">
+            <strong>Terrain rendering (work in progress):</strong> battle maps use authored and procedural
+            terrain, with an experimental neural renderer trained on the game's own maps. The model, dataset and
+            map-building tools are documented in the README.
+          </div>
+        </aside>
+      </div>
+
+      <footer class="menu-footer">
+        <div class="menu-meta">
+          <div class="menu-version" id="menuVersion"></div>
         </div>
-      </div>
-
-      <div class="menu-section">
-        <div class="menu-section-title" data-i18n="m_side">Choose Side</div>
-        <div class="side-row">
-          <div class="side-btn" data-side="polish" hidden>🇵🇱 <span data-i18n="side_pl">Polish</span></div>
-          <div class="side-btn selected" data-side="french">🇫🇷 <span data-i18n="side_fr">French</span></div>
-          <div class="side-btn" data-side="german">🇩🇪 <span data-i18n="side_de">German</span></div>
-        </div>
-      </div>
-
-      <div class="menu-section">
-        <div class="menu-section-title" data-i18n="m_updates">Latest Updates</div>
-        <div class="menu-updates" id="menuUpdates"></div>
-      </div>
-
-      <div style="max-width:430px;margin:10px auto 2px;padding:8px 12px;border:1px solid rgba(216,186,123,.25);background:rgba(20,24,28,.55);color:#b9c4cc;font-size:12px;line-height:1.45;text-align:left">
-        <b style="color:#d8ba7b">Terrain rendering (work in progress):</b> battle maps use authored and procedural
-        terrain, with an experimental neural renderer trained on the game's own maps. The model, dataset and
-        map-building tools are documented in the README.
-      </div>
-      <button class="menu-start" id="btnStartMission" data-i18n="start">Start Mission</button>
-      <div class="menu-version" id="menuVersion"></div>
+        <button class="menu-start" id="btnStartMission" data-i18n="start">Start Mission</button>
+      </footer>
     </div>
   </div>
 

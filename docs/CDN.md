@@ -5,7 +5,7 @@ Production keeps `index.html`, game JavaScript, CSV and JSON on `underfire.io` a
 - `models/`
 - `textures/`
 - `sounds/`
-- `icons/`
+- runtime-resolved gameplay assets under `icons/` (small menu flag selectors remain on the origin)
 - baked map images
 - `splash.png`, `uf_logo.png` and `under_vid.mp4`
 

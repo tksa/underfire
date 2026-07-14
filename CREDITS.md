@@ -21,6 +21,46 @@ The building-entry cursor uses the **Enter** icon (Thin) from
 used under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (recoloured
 + embedded as an inline SVG cursor in `index.html`).
 
+## Interface Typefaces
+
+The interface uses **Barlow** and **Barlow Condensed** by The Barlow Project
+Authors, distributed under the [SIL Open Font License 1.1](fonts/barlow/OFL.txt).
+The font files are sourced from the Google Fonts repositories for
+[Barlow](https://github.com/google/fonts/tree/main/ofl/barlow) and
+[Barlow Condensed](https://github.com/google/fonts/tree/main/ofl/barlowcondensed)
+and bundled locally so the menu typography remains consistent offline and in
+production. The Under Fire wordmark continues to use the bundled Germanica
+display face.
+
+## Country Flag UI Icons
+
+The rounded France and Poland selectors in `icons/flags/` use SVGs from
+[Nucleo SVG Flag Icons](https://nucleoapp.com/svg-flag-icons), under the
+[Nucleo Icons License](https://nucleoapp.com/license). Copyright © Nucleo,
+copyright-notice version 1.3 (3 January 2024). These icons are bundled for use
+inside Under Fire and are not separately sublicensed or offered as an icon
+collection. See [Nucleo's copyright notice](https://nucleoapp.com/copyright-notice).
+
+> Copyright © Nucleo
+>
+> Version 1.3, 3 January 2024
+>
+> Nucleo Icons — https://nucleoapp.com/
+>
+> Redistribution of icons is prohibited. Icons are restricted for use only
+> within the product they are bundled with.
+>
+> License details: https://nucleoapp.com/license
+
+`icons/flags/germany-1935-1945.svg` adapts the German government work
+[Flag of Germany (1935–1945)](https://commons.wikimedia.org/wiki/File:Flag_of_Germany_%281935%E2%80%931945%29.svg)
+from Wikimedia Commons. The source is marked **public domain**. Under Fire keeps
+the source emblem's proportions and geometry, scaling it uniformly into the
+same rounded 30×24 frame as the Nucleo selectors; only excess red side margin
+is clipped. A subtle border and highlight complete the matching presentation.
+Its inclusion is solely for accurate historical identification in the game's
+Second World War setting and does not imply endorsement of its ideology.
+
 ## 3D Models (Sketchfab, CC BY 4.0)
 The French **Char B1 bis** tank model (`models/french_b1.glb`) is by
 **MaximDeduytsche** ([Sketchfab profile](https://sketchfab.com/MaximDeduytsche)),
