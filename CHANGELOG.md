@@ -6,6 +6,13 @@ The start-mission screen's "Latest Updates" panel is generated from the git comm
 log (`scripts/gen-changelog.mjs` → `data/changelog.json`), so it stays current
 without hand-editing.
 
+## v0.17.0 — The 7TP Platoon and the Luftwaffe
+
+- **Polish armor arrives in force:** the Mokra reserve now fields the 7TP in all three variants — the single-turret jw with the 37mm Bofors, the twin-machine-gun dw (both turrets traverse independently about their own rings), and the dw refit carrying a gun turret beside an MG turret — plus the 20mm TKS rearmament, the only tankette that can hurt German armor. The MG tankette shares the same new model. All are sized against their real dimensions (a 7TP matches a Panzer II; a TKS is car-sized) and park in the fields facing the German approach.
+- **Luftwaffe over Mokra:** the second and final German echelons arrive under air raids — the air-raid siren wails, a Bf-110 flies its attack run across the battlefield, and a stick of bombs walks across positions near the Polish line. Every air strike now shows the bomber itself.
+- **Selection always releases:** a Shift keyup lost to a focus change could leave the selection permanently stuck; left-click on empty ground now always deselects, and double-click mass-select requires two clicks on the same soldier.
+- **Cleaner Mokra fields:** rock and twig scatter on the cultivated plots is reduced to a quarter of its old density; grass and wheat are untouched.
+
 ## v0.16.1 — The Freeze Fix
 
 - **Mass orders no longer freeze the game.** Ordering a large force with vehicles across the map used to hang the whole game for many seconds (profiled at 58 seconds for a 104-unit attack-move) while every vehicle's full-hull route computed synchronously. Vehicle routes now compute on a per-frame budget through a route queue: the click responds instantly and hulls start rolling as their routes land. Pathfinding itself is far cheaper (open-field checks skip the hull sweep entirely) and bounded (an unreachable destination costs bounded work instead of a full-map search). Stall recoveries, truck route rebuilds, and attack-move resumes go through the same queue with backoff, ending the re-plan churn that dragged the town-fight framerate down.

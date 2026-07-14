@@ -1,8 +1,28 @@
 {
- "version": "v0.16.1",
- "build": "c7009d6",
- "generated": "2026-07-14",
+ "version": "v0.17.0",
+ "build": "4cb96fb",
+ "generated": "2026-07-15",
  "commits": [
+  {
+   "hash": "4cb96fb",
+   "date": "2026-07-15",
+   "subject": "scale field clutter per scenario"
+  },
+  {
+   "hash": "ab3ca65",
+   "date": "2026-07-15",
+   "subject": "left-click deselect can no longer stick"
+  },
+  {
+   "hash": "4cf6572",
+   "date": "2026-07-15",
+   "subject": "7TP platoon, TKS 20mm, and Luftwaffe raids with the Bf-110"
+  },
+  {
+   "hash": "378a417",
+   "date": "2026-07-14",
+   "subject": "release v0.16.1"
+  },
   {
    "hash": "c7009d6",
    "date": "2026-07-14",
@@ -52,26 +72,6 @@
    "hash": "ab76821",
    "date": "2026-07-14",
    "subject": "redesign landing and mission selection"
-  },
-  {
-   "hash": "99f99cb",
-   "date": "2026-07-14",
-   "subject": "release v0.15.1"
-  },
-  {
-   "hash": "18dfbac",
-   "date": "2026-07-14",
-   "subject": "improve boot feedback and Mokra deployment"
-  },
-  {
-   "hash": "2b82a28",
-   "date": "2026-07-14",
-   "subject": "release v0.15.0"
-  },
-  {
-   "hash": "421c6ee",
-   "date": "2026-07-14",
-   "subject": "refresh Mokra, GDD and model-pipeline docs for the new slice"
   }
  ]
 }
