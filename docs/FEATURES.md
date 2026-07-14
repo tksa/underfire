@@ -62,11 +62,16 @@ Combined from SS3 + SS4 manuals + SS fan guide. ✅ = done, ⬜ = todo.
 - ✅ **Mokra: Hold the Railway** is the second selectable battle and is labelled **Preview**, with Poland as the intended player side and Germany as the opponent
 - ✅ Dedicated railway battlefield with constrained crossings, Mokra I–III settlement strips, woods, and cultivated western approaches
 - ✅ Period-appropriate Polish core roster and constrained German attack roster; no 7TP or routine Panzer III in the scenario
-- ✅ Compressed opening deployment: alternating six-position line with 3 Bofors and 3 75 mm guns, 25 infantry in five interleaved sections, an 8-man reserve squad, 2 HMGs, and one each 46/81 mm mortar
+- ✅ Compressed opening deployment: alternating six-position line with 3 Bofors and 3 75 mm guns, 25 infantry standing at attention with subtle deterministic spacing in five interleaved sections, an 8-man reserve squad, 2 HMGs, and one each 46/81 mm mortar
 - ✅ Four directly controlled `mounted_ulan` reserves deploy east of the railway; the existing `ulan` definition and opening defensive line remain dismounted
-- ✅ Eligible reserve cavalry can mount/dismount; mounted movement uses acceleration, braking, limited turning, and speed-synchronised walk/run playback from the supplied 17-clip rigged GLB
+- ✅ The 75 mm Armata uses its dedicated gun GLB plus no more than two visible, rifle-free operators cloned from the shared Polish infantry rig; their gait follows measured gun movement and degrades to lightweight fallback figures only if the soldier asset fails
+- ✅ Dismounting leaves a persistent riderless horse that cannot be selected or controlled; its linked foot Ułan receives the standard enter cursor and must walk back to the horse before remounting
+- ✅ The mounted asset is 15% smaller than its earlier tuning; the parked clone preserves the horse's exact mounted scale while the dismounted rider returns to normal infantry scale
+- ✅ The dismount clip plays at 1.7× authored speed and finishes with the rider close beside the horse rather than displaced well away from it
+- ✅ Mounted movement uses acceleration, braking, limited turning, and speed-synchronised walk/run playback from the supplied 17-clip rigged GLB
 - ✅ Mounted cavalry is a mobility and disengagement tool, with no anti-tank charge behavior
-- ✅ Defensive hold objective with phased German attacks
+- ✅ Three-minute Polish deployment phase with a persistent white, top-centre countdown; German forces remain off-map until it expires. Siren playback is temporarily disabled during testing, while its asset remains available for later re-enablement
+- ✅ Defensive hold objective with phased German attacks entering from the western map edge
 - ✅ **Advance to the Dyle** retained as the first/default selected scenario
 - ✅ Polish infantry command pools active: 16 selection, 30 movement, 6 core-attack, and 18 morale/patriotic takes
 - ✅ Polish tank command pools reuse vehicle-neutral supplied takes: 15 selection, 17 movement, 5 core-attack, 18 shared vehicle-safe morale/patriotic, and 8 stop; 75 unique voice assets are active overall

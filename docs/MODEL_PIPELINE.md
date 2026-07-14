@@ -100,10 +100,27 @@ merging the 17 cavalry clips into a single timeline.
 The mounted-cavalry controller selects the appropriate actions from the supplied
 set and synchronises walk/run playback to measured movement speed. Acceleration,
 braking, and turn limits are simulation behavior; animation should follow that
-speed rather than provide root motion. Mount/dismount is a unit-state transition
-between the dedicated `mounted_ulan` presentation and the existing dismounted
-`ulan` role. It is not a horse-limber or gun-hitch system, and no animation should
-imply an anti-tank cavalry charge.
+speed rather than provide root motion. The supplied base is one fused skinned
+horse-and-rider mesh, but its triangles have clean horse-only or rider-only bone
+influences. At dismount completion the runtime clones the already loaded wrapper,
+keeps triangles influenced by `Root`, the horse body/neck/head/tail, and the four
+horse-leg bones, removes the separate sabre and other rider geometry, and retains
+the complete armature so the riderless horse can idle in place without a second
+GLB download. The `mounted_ulan` asset is rendered at 85% of its earlier tuning.
+The riderless clone retains that exact wrapper transform, so the horse does not
+grow or shrink when the rider dismounts; only the foot `ulan` returns to normal
+infantry scale. Mount/dismount remains a state transition between those three
+presentations. It is not a horse-limber or gun-hitch system, and no animation
+should imply an anti-tank cavalry charge.
+
+The Polish 75 mm Armata is a static gun GLB paired at runtime with two
+SkeletonUtils clones of the shared soldier rig. Each clone receives the Polish
+infantry skin/tint, hides the complete rifle slot, and owns its own mixer so bone
+bindings cannot cross between duplicate skeleton names. The source soldier
+timeline is split once and the resulting idle/walk/crouch clips are shared; each
+crew member then uses the normal speed-synchronised procedural gait. The crew is
+guarded by the gun model's async generation and falls back to lightweight
+articulated figures if the shared soldier model cannot load.
 
 ## The steps
 

@@ -22,10 +22,12 @@ Dawn has brought war to the Mokra line. The German armoured division is approach
 
 - Date and place: Mokra near Kłobuck, 1 September 1939.
 - Player: Poland; the German side is the AI opponent in this preview mission flow.
-- Primary objective: hold the central railway crossing for five minutes.
+- Primary objective: after deployment, hold the central railway crossing for five combat minutes.
 - Secondary objective: preserve the command team and at least one 37 mm Bofors gun.
 - Defeat: lose the whole Polish force, or leave the central crossing under uncontested German control for 25 seconds.
-- Attack structure: a German vanguard followed by three timed echelons from the west.
+- Deployment: a persistent white, top-centre three-minute countdown opens the scenario. No Germans spawn or receive attack routes during this period, leaving time to move infantry into the woods and conceal guns. Siren playback is temporarily disabled during testing; its asset is retained for a later audio pass.
+- Attack structure: at 3:00 total elapsed time the German vanguard enters inside the westernmost five-tile strip, facing east. Later echelons enter from the same map edge at 3:55, 5:05, and 6:25; the unchanged combat-relative cadence is 0, 55, 125, and 205 seconds.
+- Mission length: the railway must be held for 300 combat seconds after the vanguard appears, so victory resolves at 8:00 total elapsed time.
 - Air support: none is player-callable. French fighters and generic bomber support are disabled for Mokra.
 - Voice behavior: Polish infantry use dedicated Polish command pools, while tank pools reuse vehicle-neutral takes from the same supplied recordings. Attack commands periodically draw from a shared vehicle-safe morale pool, and the final German echelon forces one Polish `nie-zlamia-nas` cue. Dedicated vehicle-crew recordings remain desirable, but tanks are not silent and never fall through to French or German speech. Combat effects, engines, ambience, and UI sounds remain enabled.
 
@@ -40,17 +42,17 @@ The 100 × 100 tile battlefield is deliberately compressed for the current engin
 - an eastern Polish reserve area;
 - no broad river or lake.
 
-Railway tiles slow infantry and block vehicles, forcing vehicles to use the road crossings. Procedural sleepers and steel rails make the feature visible independently of the terrain texture.
+Railway tiles slow infantry and block vehicles, forcing vehicles to use the road crossings. The rendered line uses the textured straight module from Digital Goblin's CC BY 4.0 "Train Track - Modular Pack", uniformly reduced by 20%, repeated as one instanced mesh, and pitched section-by-section over the terrain. The four curved pieces are also split into reusable assets for later map work. A Mokra-only terrain pass flattens the rail bed laterally, smooths and grade-limits it along the line, blends its shoulders into the fields, and suppresses micro-relief beneath the modules and crossings. Rendering does not add collision, so the existing tile data remains the sole authority for crossings and pathfinding. Full attribution and modification details are in [`CREDITS.md`](../../CREDITS.md) and the [asset attribution notice](../../models/railway/ATTRIBUTION.md).
 
 Runtime source: [`js/scenarios/mokra.js`](../../js/scenarios/mokra.js). Map metadata: [`maps/mokra/map.json`](../../maps/mokra/map.json).
 
 ## Opening defensive deployment
 
-The five-minute preview starts with a deliberately compressed defensive formation immediately west of the railway:
+The three-minute deployment phase and subsequent five-combat-minute defence start with a deliberately compressed formation immediately west of the railway:
 
 - six north–south gun positions alternating three 37 mm Bofors anti-tank guns and three 75 mm field guns;
-- 25 dismounted infantry in five five-man sections, one in each interval between adjacent gun positions;
-- one full eight-man reserve squad behind the line;
+- 25 dismounted infantry standing at attention in five five-man sections, one in each interval between adjacent gun positions; small deterministic offsets scatter them slightly without changing the line or blocking the guns;
+- one full eight-man dismounted reserve squad standing at attention behind the line, using the same subtle deterministic spacing;
 - four player-controlled `mounted_ulan` reserves east of the railway;
 - two Ckm wz. 30 HMGs, plus one 46 mm grenade launcher and one 81 mm mortar.
 
@@ -69,7 +71,7 @@ This allocation makes the line readable and playable at the current map and miss
 | Granatnik wz. 36 (46 mm) | Short-range company explosive support. |
 | Moździerz wz. 31 (81 mm) | Battalion high-explosive support against infantry, woods, and exposed crews. |
 | Armata ppanc. wz. 36 (37 mm Bofors) | The principal Polish tank killer at Mokra; best concealed and firing into flanks. |
-| Armata wz. 1902/26 (75 mm) | Horse-artillery field gun represented as a crew-served gun in the current engine. |
+| Armata wz. 1902/26 (75 mm) | Dedicated horse-artillery field-gun model with a maximum of two visible Polish-skinned operators; both walk with the carriage and crouch at the trails when deployed. |
 | TKS (7.92 mm) | MG-only reconnaissance tankette, explicitly not the rare 20 mm tank-hunter conversion. |
 | Samochód pancerny wz. 34 | Fast but thin-skinned wheeled reconnaissance car. |
 | Oficer, Saper, Sanitariusz, Mechanik | Command, engineering, medical, and repair support. |
@@ -79,9 +81,9 @@ The editable definitions and descriptions are in [`data/units.csv`](../../data/u
 
 ## Mounted reserve controls and movement
 
-The four eastern reserve units are directly player-controlled. Selecting an eligible reserve cavalry unit exposes the mount/dismount action. Dismounting changes it to the established foot-cavalry role; it can later remount, while the `ulan` soldiers that begin the scenario dismounted remain ordinary dismounted infantry rather than being silently converted into mounted units.
+The four eastern reserve units are directly player-controlled. Selecting a mounted reserve exposes the dismount action. The mounted asset is 15% smaller than its earlier tuning. The authored dismount plays at 1.7× speed; once it finishes, the same unit becomes the established foot-cavalry role at normal infantry scale and stands 0.82 world units from a persistent riderless horse that preserves its mounted position, heading, and size. The horse is not a combat unit: it cannot be selected, commanded, garrisoned, or loaded into a transport. Selecting the linked dismounted Ułan and hovering or clicking that horse shows the same green enter affordance used for buildings; the rider walks to the nearest clear, reachable mounting side and mounts only on arrival. The `ulan` soldiers that begin the scenario dismounted remain ordinary infantry and cannot claim reserve horses.
 
-Mounted movement is deliberately weightier than infantry movement: the horse accelerates and brakes progressively, cannot pivot through an unrestricted instant turn, and uses speed-synchronised walk/run playback so the 17-clip rigged horse-and-rider model follows actual movement speed. The mounted state is for reconnaissance, reserve movement, and disengagement. It does not provide an anti-tank charge, and cavalry should dismount before a sustained firefight.
+Mounted movement is deliberately weightier than infantry movement: the horse accelerates and brakes progressively, cannot pivot through an unrestricted instant turn, and uses speed-synchronised walk/run playback down through the final slowing stride so the 17-clip rigged horse-and-rider model follows actual movement speed. The mounted state is for reconnaissance, reserve movement, and disengagement. It does not provide an anti-tank charge, and cavalry should dismount before a sustained firefight.
 
 Horse-drawn artillery limbers are a separate system and remain planned. The implemented cavalry mount/dismount state does not imply that the 75 mm guns can yet be hitched to horses.
 
@@ -97,10 +99,10 @@ The current allowlist uses Kar98k/MG34 infantry with one limited-issue MP38 squa
 | Poland faction and player-relative AI/fog/selection | Implemented | Polish is the locked player side for this mission. |
 | Appropriate 1939 core roster | Implemented | Includes editable descriptions and model-safe procedural fallbacks. |
 | Railway, limited crossings, Mokra I–III, no major water | Implemented | Dedicated scenario generator; the legacy French river map is not used. |
-| Defensive hold objective and German attack waves | Implemented | Five-minute vertical slice with crossing-control defeat logic. |
+| Deployment countdown, defensive hold, and German attack waves | Implemented | Persistent white, top-centre three-minute preparation timer followed by five combat minutes; the vanguard enters at 3:00, later waves at 3:55/5:05/6:25, and victory resolves at 8:00 while crossing-control defeat logic remains active. Siren playback is temporarily disabled during testing, with the asset retained for later use. |
 | Polish voice assets | Implemented | 75 unique assets are active across infantry and tank pools. Only two context-specific clips remain reserved; tank pools reuse vehicle-neutral takes, with dedicated crew recordings still desirable. |
-| Dedicated Polish infantry/vehicle/gun models and PNG skins | Partial | Mounted Ułans use a dedicated supplied 17-clip rigged horse-and-rider GLB; foot infantry still share the khaki-tinted animated soldier, and most Polish vehicles/guns remain procedural. |
-| Mounted cavalry reserve | Implemented | Four player-controlled `mounted_ulan` units deploy east of the railway, can mount/dismount, and use acceleration, braking, limited turning, and speed-synchronised walk/run animation. |
+| Dedicated Polish infantry/vehicle/gun models and PNG skins | Partial | Mounted Ułans use a dedicated supplied 17-clip rigged horse-and-rider GLB. The 75 mm Armata now has a dedicated gun model and two rifle-free clones of the Polish-tinted infantry rig for its visible operators. Foot infantry still use tint rather than a painted Polish PNG, and most Polish vehicles/guns remain procedural. |
+| Mounted cavalry reserve | Implemented | Four player-controlled `mounted_ulan` units deploy east of the railway. Dismounting parks a persistent, unselectable riderless horse; its linked Ułan must return through an enter-style order before remounting. Mounted movement uses acceleration, braking, limited turning, and speed-synchronised walk/run animation. |
 | Horse artillery limbers | Planned | Horse teams, gun hitching, and limber/unlimber presentation are not part of the mounted-cavalry implementation. |
 | Armoured Train No. 53 “Śmiały” | Planned | Railway path exists; train entity, cars, weapons, timetable, and effects do not. |
 | Scripted Ju 87 phase | Planned | No player-callable air support is used as a substitute. |

@@ -81,6 +81,7 @@ These changes remove or bound the identified worst cases. They still require bro
 
 - Audio startup eagerly creates only the battlefield sounds, four utility sounds, and four loops. Command voice pools are created on first use and contain two elements instead of four.
 - Immediately after `Game.Audio.init()`, before any voice is heard, the current design has 17 pooled sources and 72 audio elements. Each newly heard unique voice adds one source and two elements. `Game.Audio.resourceStats` reports the live counts.
+- Mokra siren playback is temporarily disabled during testing, so starting the scenario does not allocate its lazy audio source. The siren asset and helper remain available for a later re-enable; Dyle never allocates that source.
 - The movement recorder samples at 15 Hz into a 240,000-record circular buffer, avoiding repeated front-of-array shifts. At 121 living units this is about 1,815 records/second and fills in about 132 seconds.
 - Recording remains intentionally expensive and should stay disabled during performance sampling.
 
@@ -106,7 +107,7 @@ SMOKE_URL=http://localhost:8741 node scripts/mokra-performance-profile.mjs
 PROFILE_RENDER=1 node scripts/mokra-performance-profile.mjs
 ```
 
-The default five-second samples disable `Game.renderScene` because headless Chromium normally uses SwiftShader, whose software-rendering load can drown out simulation timings. The script samples the opening and the three timed wave thresholds, and prints JSON containing:
+The default five-second samples disable `Game.renderScene` because headless Chromium normally uses SwiftShader, whose software-rendering load can drown out simulation timings. The script samples the opening deployment, then fast-forwards the remainder of the three-minute countdown before sampling the three combat-relative wave thresholds, and prints JSON containing:
 
 - JavaScript/console errors plus a count of optional missing-resource warnings;
 - wrapped-function call count, cumulative time, mean, and maximum;
