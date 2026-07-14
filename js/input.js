@@ -1097,8 +1097,13 @@ Game.toggleHoldFire = () => {
     if (Game.Audio) Game.Audio.voice('f_sold_select');
 };
 
-Game.handleMouseSelection = () => {
+Game.handleMouseSelection = (e) => {
     const mouse = Game.mouse;
+    // Additive selection comes from the EVENT's live modifier state, never the
+    // keydown/keyup map: a missed Shift keyup (focus change mid-order) left the
+    // map stuck true, so left-clicking empty ground could never deselect again.
+    const additive = e ? !!e.shiftKey
+        : !!(Game.keys['ShiftLeft'] || Game.keys['ShiftRight']);
     const dx = mouse.dragCurrentX - mouse.dragStartX;
     const dy = mouse.dragCurrentY - mouse.dragStartY;
     const boxW = Math.abs(dx);
@@ -1190,7 +1195,7 @@ Game.handleMouseSelection = () => {
         // click on empty ground between units deselects instead of grabbing the
         // nearest one (left-click empty = deselect).
         if (!picked) {
-            let bestScreenDist = 169; // 13px squared
+            let bestScreenDist = 81; // 9px squared — clicks between men must deselect
             for (const unit of Game.units) {
                 if (!unit.alive || unit.team !== Game.playerTeam || unit._inVehicle != null) continue;
                 const sp = Game.worldToScreen(unit.x, unit.z);
@@ -1203,12 +1208,15 @@ Game.handleMouseSelection = () => {
                 }
             }
         }
-        if (!Game.keys['ShiftLeft'] && !Game.keys['ShiftRight']) Game.selection.clear();
+        if (!additive) Game.selection.clear();
         if (picked) {
             Game.selectedBuilding = null;
             if (Game.Audio) Game.Audio.voice(Game.isTank(picked.kind) ? 'f_tank_select' : 'f_sold_select');
             const now = performance.now();
-            if (Game._lastPickedKind === picked.kind && now - Game._lastPickedTime < 300) {
+            // Double-click = two quick clicks on the SAME unit. Matching by
+            // kind let two fast clicks on two different riflemen mass-select
+            // the whole kind, and the selection then felt "stuck".
+            if (Game._lastPickedId === picked.id && now - Game._lastPickedTime < 300) {
                 // Double-click: select all visible units of same kind
                 Game.units.forEach(u => {
                     if (u.alive && u.team === Game.playerTeam && u.kind === picked.kind && u._inVehicle == null) {
@@ -1218,9 +1226,11 @@ Game.handleMouseSelection = () => {
             } else {
                 Game.selection.add(picked.id);
             }
-            Game._lastPickedKind = picked.kind;
+            Game._lastPickedId = picked.id;
             Game._lastPickedTime = now;
         } else {
+            Game._lastPickedId = null;
+            Game._lastPickedTime = 0;
             // No unit under the click: a GARRISONED building can be selected
             // (Sudden Strike). Right-click terrain then sends the whole
             // garrison out to that point; right-click the building itself
@@ -1244,7 +1254,7 @@ Game.handleMouseSelection = () => {
         const ex = sx + boxW;
         const ey = sy + boxH;
 
-        if (!Game.keys['ShiftLeft'] && !Game.keys['ShiftRight']) Game.selection.clear();
+        if (!additive) Game.selection.clear();
         const boxHits = [];
         Game.units.forEach(unit => {
             if (!unit.alive || unit.team !== Game.playerTeam || unit._inVehicle != null) return;
@@ -1607,7 +1617,7 @@ Game.handleInputEvents = () => {
     window.addEventListener('mouseup', e => {
         if (e.button === 0 && Game.mouse.down) {
             Game.mouse.down = false;
-            Game.handleMouseSelection();
+            Game.handleMouseSelection(e);
         } else if (e.button === 2 && Game._rightOrderDrag) {
             const drag = Game._rightOrderDrag;
             const releaseGround = Game.screenToGround(e.clientX, e.clientY);
@@ -1643,6 +1653,11 @@ Game.handleInputEvents = () => {
     });
 
     window.addEventListener('blur', Game._cancelRightOrderDrag);
+    // A keyup that fires while the window is unfocused never reaches the map:
+    // wipe held-key state on blur so no modifier can stick across a focus loss.
+    window.addEventListener('blur', () => {
+        for (const k in Game.keys) Game.keys[k] = false;
+    });
 
     // Mouse wheel does NOT zoom — use the +/- keys. Swallow the event so the
     // page/trackpad never scrolls the canvas. While an air strike is armed, the
