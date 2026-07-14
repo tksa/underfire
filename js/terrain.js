@@ -3314,13 +3314,16 @@ Game._addTerrainSurfaceDetails = () => {
         Game.terrainGroup.add(puddleMesh);
     }
 
-    // Small rocks/gravel on hard surfaces and plowed ground.
+    // Small rocks/gravel on hard surfaces and plowed ground. Field-tile
+    // clutter is scenario-scalable: an all-fields map like Mokra otherwise
+    // drowns in scatter that reads fine on the mixed bocage map.
+    const fieldMul = Game.FIELD_CLUTTER_MUL ?? 1;
     const rocks = [];
     for (let ty = 0; ty < Game.MAP_ROWS; ty++) {
         for (let tx = 0; tx < Game.MAP_COLS; tx++) {
             const type = Game.terrain[ty][tx].type;
-            const p = type === 'road' ? 0.42 : type === 'yard' ? 0.34 : type === 'plowed' ? 0.22
-                : type === 'stubble' ? 0.12 : type === 'mud' ? 0.10 : 0;
+            const p = type === 'road' ? 0.42 : type === 'yard' ? 0.34 : type === 'plowed' ? 0.22 * fieldMul
+                : type === 'stubble' ? 0.12 * fieldMul : type === 'mud' ? 0.10 : 0;
             if (!p || !detailChance(p)) continue;
             const count = type === 'road' || type === 'yard' ? Game.randi(1, 2) : 1;
             for (let k = 0; k < count; k++) {
@@ -3359,7 +3362,7 @@ Game._addTerrainSurfaceDetails = () => {
             const type = Game.terrain[ty][tx].type;
             const p = type === 'forest' || type === 'dense_forest' ? 0.42
                 : type === 'hedge' || type === 'orchard' ? 0.24
-                    : type === 'pasture' || type === 'grass' ? 0.035 : 0;
+                    : type === 'pasture' || type === 'grass' ? 0.035 * fieldMul : 0;
             if (!p || !detailChance(p)) continue;
             litter.push({
                 x: tx * T + Game.rand(0.2, T - 0.2),
