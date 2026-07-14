@@ -6,11 +6,17 @@ The start-mission screen's "Latest Updates" panel is generated from the git comm
 log (`scripts/gen-changelog.mjs` → `data/changelog.json`), so it stays current
 without hand-editing.
 
+## v0.15.1 — First-Load Feedback and Mokra Deployment Polish
+
+- **Visible first-load progress:** the black boot cover now identifies itself as battlefield preparation, continuously confirms that loading is active, and cycles through twelve Second World War preparation messages. A longer-load notice appears after nine seconds, with reduced-motion and screen-reader handling included.
+- **Silent Mokra preparation:** the persistent white, top-centre three-minute deployment countdown remains active, but the testing siren no longer plays. The audio helper and asset remain available for a later sound pass.
+- **Tracked opening formation:** the 25 interleaved line infantry and eight-man reserve retain their standing west-facing posture and subtle deterministic scatter, with explicit deployment IDs for regression coverage.
+
 ## v0.15.0 — Railway, Field-Gun Crews, Directional Orders, Bunny CDN
 
 - **Bunny CDN asset delivery:** production loads models, textures, sounds, icons, baked map imagery, and the menu media from `underfire.b-cdn.net`, cache-keyed by a stable release version. A boot-time CORS probe falls back to the origin automatically; localhost and CI keep serving every file locally from the repo.
 - **Textured railway line:** the Mokra railway is rendered with Digital Goblin's CC BY 4.0 "Train Track - Modular Pack" (see `CREDITS.md`), instanced along a flattened, grade-limited rail bed. Tile data remains the sole collision and pathfinding authority.
-- **Mokra opening deployment:** the persistent white, top-centre three-minute warning remains active, while siren playback is temporarily disabled during testing. Opening Polish infantry now stand at attention in a subtly, deterministically scattered formation instead of appearing on a rigid grid.
+- **Mokra opening deployment:** the persistent white, top-centre three-minute warning gives Poland time to prepare. Opening Polish infantry stand at attention in a subtly, deterministically scattered formation instead of appearing on a rigid grid.
 - **Polish 75 mm Armata and crew:** the imported gun now travels muzzle-first instead of trail-first. Its two visible operators use rifle-free clones of the proper Polish-skinned infantry rig, walk through the shared speed-synchronised gait rather than sliding, remain behind the carriage, and recoil in the correct direction. Lightweight figures are retained only as an asset-load fallback.
 - **Directional movement orders:** right-dragging open terrain draws a ground arrow from the destination toward the requested heading. Units move into a formation aligned to that heading and rotate only after reaching their assigned slots; a nearby drag rotates the formation in place. Context actions, double-right retreat, Shift waypoints, Ctrl/Cmd gather, attack-move, path replans, and movement recording retain the final-facing intent.
 - **Persistent cavalry horses:** dismounting a mounted Polish reserve leaves a riderless horse at the exact stopped pose, preserving position, heading, scale, and ground contact. The authored dismount plays at 1.7× speed and places the foot Ułan 0.82 world units from the horse's flank. The horse cannot be selected or controlled; its linked foot Ułan receives the standard enter cursor and must return to a clear mounting side before remounting. The mounted asset is 15% smaller than its earlier tuning, while the dismounted rider uses normal infantry scale. Walk/run playback now follows the progressive braking speed through the final stride instead of snapping from a fixed minimum gait to idle.

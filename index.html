@@ -9,7 +9,7 @@
     // Production serves heavyweight public assets through the Bunny Pull Zone.
     // Localhost, previews and CI stay fully local. `?cdn=0` is an emergency
     // production bypass; `?cdn=1` lets a developer exercise Bunny locally.
-    window.UF_ASSET_VERSION = 'v0.15.0';
+    window.UF_ASSET_VERSION = 'v0.15.1';
     (function () {
       var CDN_ORIGIN = 'https://underfire.b-cdn.net';
       var productionHosts = ['underfire.io', 'www.underfire.io', 'underfire.b-cdn.net'];
@@ -2160,11 +2160,12 @@
     if (vEl) vEl.textContent = UNDER_VERSION;
 
     const FALLBACK_NOTES = [
+      'First load now shows a clear battlefield-preparation screen with rotating Second World War status messages.',
+      'Mokra keeps its visible three-minute warning while the testing siren remains disabled.',
+      'Opening Polish infantry stand at attention in subtly scattered, deterministic positions.',
       'Four mounted Ułans of the 12th Podolian Regiment join the Polish reserve at Mokra.',
       'Dismounting leaves an unselectable riderless horse; the linked Ułan must return to it before remounting.',
-      'Horse movement now accelerates, turns and brakes progressively with speed-synchronised walk and run animation.',
-      'Mounted cavalry uses full-width paths and stays out of buildings, troop transports and foot-only actions.',
-      'Shared GLB requests are parsed once and cloned, avoiding duplicate cavalry-model loading work.',
+      'Horse movement accelerates, turns and brakes progressively with speed-synchronised walk and run animation.',
     ];
     const renderUpdates = (version, date, notes) => {
       if (!upEl) return;

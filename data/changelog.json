@@ -1,8 +1,18 @@
 {
- "version": "v0.15.0",
- "build": "421c6ee",
+ "version": "v0.15.1",
+ "build": "18dfbac",
  "generated": "2026-07-14",
  "commits": [
+  {
+   "hash": "18dfbac",
+   "date": "2026-07-14",
+   "subject": "improve boot feedback and Mokra deployment"
+  },
+  {
+   "hash": "2b82a28",
+   "date": "2026-07-14",
+   "subject": "release v0.15.0"
+  },
   {
    "hash": "421c6ee",
    "date": "2026-07-14",
@@ -62,16 +72,6 @@
    "hash": "5759020",
    "date": "2026-07-12",
    "subject": "add Polish voices and reinforced gun line"
-  },
-  {
-   "hash": "a81cf07",
-   "date": "2026-07-12",
-   "subject": "refresh v0.12.0 release metadata"
-  },
-  {
-   "hash": "3ab10b5",
-   "date": "2026-07-12",
-   "subject": "restore collision-aware truck movement"
   }
  ]
 }
