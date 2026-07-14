@@ -1,8 +1,18 @@
 {
- "version": "v0.15.1",
- "build": "18dfbac",
+ "version": "v0.15.2",
+ "build": "ab76821",
  "generated": "2026-07-14",
  "commits": [
+  {
+   "hash": "ab76821",
+   "date": "2026-07-14",
+   "subject": "redesign landing and mission selection"
+  },
+  {
+   "hash": "99f99cb",
+   "date": "2026-07-14",
+   "subject": "release v0.15.1"
+  },
   {
    "hash": "18dfbac",
    "date": "2026-07-14",
@@ -62,16 +72,6 @@
    "hash": "b315173",
    "date": "2026-07-13",
    "subject": "eliminate freeze hotspots"
-  },
-  {
-   "hash": "afd0087",
-   "date": "2026-07-12",
-   "subject": "release v0.13.0"
-  },
-  {
-   "hash": "5759020",
-   "date": "2026-07-12",
-   "subject": "add Polish voices and reinforced gun line"
   }
  ]
 }
