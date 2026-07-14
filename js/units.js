@@ -1088,15 +1088,19 @@ Game._createUnitMesh = (unit) => {
         side: THREE.DoubleSide,
         transparent: true,
         opacity: 0.9,
-        // Selection must stay readable when the unit sits behind a rise:
-        // ignore the depth buffer and draw late (below the fog overlay's 999).
-        depthTest: false,
-        depthWrite: false
+        // The ring hugs the terrain (see _conformSelectionRing): pull it
+        // slightly toward the camera in depth so the slope never z-fights it,
+        // while real depth testing keeps it BEHIND unit models.
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -4,
+        polygonOffsetUnits: -4
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.03;
-    ring.renderOrder = 998;
+    // Vertices are re-heighted per frame; the stock bounding sphere would cull it.
+    ring.frustumCulled = false;
     ring.visible = false;
     group.add(ring);
     group.userData.selectionRing = ring;

@@ -231,7 +231,9 @@ Game.syncUnitMeshes = (dt) => {
 
         // Selection ring
         if (unit.mesh.userData.selectionRing) {
-            unit.mesh.userData.selectionRing.visible = Game.selection.has(unit.id);
+            const ring = unit.mesh.userData.selectionRing;
+            ring.visible = Game.selection.has(unit.id);
+            if (ring.visible) Game._conformSelectionRing(unit, ring);
         }
 
         // Debug: exact collision OBB for every vehicle hull. The outline uses the
@@ -582,6 +584,27 @@ Game._playClip = (unit, name, fade = 0.25) => {
 };
 
 /** Choose + crossfade the right clip for a unit, then advance its mixer. */
+// Drape the selection ring over the terrain: every vertex is re-heighted to
+// the ground under it, so a ring on a slope lies ON the surface instead of
+// cutting into it — while normal depth testing keeps it behind unit models.
+// Geometry math: the ring is rotated -90° about X, so local (x,y) spans the
+// ground plane and local +z is world up regardless of the group's yaw.
+Game._conformSelectionRing = (unit, ring) => {
+    if (!Game.getHeight) return;
+    const pos = ring.geometry.attributes.position;
+    const yaw = unit.mesh.rotation.y || 0;
+    const s = ring.scale.x || 1;
+    const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
+    const baseY = (unit.y || 0) + ring.position.y;
+    for (let i = 0; i < pos.count; i++) {
+        const lx = pos.getX(i) * s, ly = pos.getY(i) * s;
+        const wx = unit.x + lx * cosY - ly * sinY;
+        const wz = unit.z - lx * sinY - ly * cosY;
+        pos.setZ(i, (Game.getHeight(wx, wz) + 0.08 - baseY) / s);
+    }
+    pos.needsUpdate = true;
+};
+
 Game._updateModelAnimation = (unit, dt) => {
     const ud = unit.mesh && unit.mesh.userData;
     if (!ud || !ud.mixer) return;
