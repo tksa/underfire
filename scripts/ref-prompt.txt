@@ -11,6 +11,7 @@ Respect every existing terrain type and convert it into a realistic version:
 - Muddy/wet areas must remain muddy/wet areas.
 - Stone walls must remain stone walls.
 - Wooden fences must remain wooden fences.
+- Train tracks must remain train tracks, in their exact position and direction.
 - Craters and impact marks must remain in their marked positions.
 
 Do not remove or ignore any visible terrain type. Do not replace one texture type with another. Blend all terrain transitions naturally, with subtle variation in color, height, density, wear, and growth.
@@ -19,6 +20,9 @@ Solid white areas with sharp definition on edges of map. This is area outside th
 
 Roads:
 Make the roads look naturally worn, compacted, muddy or dusty where appropriate, with realistic ruts, tire tracks, soft edges, and smooth believable curves. Keep the road positions exactly the same. Ignore any visible road texture underneath water or mud if it appears flooded.
+
+Train tracks:
+Railway lines appear as straight runs of track with rails and sleepers on a ballast bed. Render them as a realistic rural single-track railway: weathered steel rails with a slight metallic sheen, dark creosoted wooden sleepers at regular spacing, grey-brown crushed-stone ballast, and a gently raised embankment whose edges blend into the surrounding grass and fields with sparse weeds creeping in. Keep the exact position, direction, width, and length of every track run. Where a track crosses a road, render a simple rural level crossing without barriers or signals. Do not add trains, wagons, signals, platforms, overhead lines, or extra tracks.
 
 Grass and vegetation:
 Add realistic lush grass, weeds, small flowers, scrub, and natural ground variation where appropriate. Vegetation should blend into the existing terrain naturally. Do not add any new large objects.

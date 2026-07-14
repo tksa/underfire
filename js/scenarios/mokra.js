@@ -308,6 +308,56 @@ Game.buildMokraRailwayMeshes = () => {
     });
 };
 
+// Capture-time helper: one straight track run at an arbitrary angle, used by
+// the reference-dataset scatter so the generation model sees railways in more
+// orientations than the map's single north-south line. Terrain-conforming per
+// module like the real railway; never used by gameplay (no tile changes).
+Game.buildTrackRun = async (parent, x0, z0, angle, length) => {
+    const THREE = Game.THREE;
+    const model = await Game.loadModel(MOKRA_RAIL_MODEL);
+    let sourceMesh = model.getObjectByName('track_straight');
+    if (sourceMesh && !sourceMesh.isMesh) {
+        let nested = null;
+        sourceMesh.traverse(child => { if (!nested && child.isMesh) nested = child; });
+        sourceMesh = nested;
+    }
+    if (!sourceMesh?.isMesh) model.traverse(child => { if (!sourceMesh && child.isMesh) sourceMesh = child; });
+    if (!sourceMesh?.isMesh) return null;
+    const geometry = sourceMesh.geometry;
+    geometry.computeBoundingBox();
+    const size = new THREE.Vector3();
+    geometry.boundingBox.getSize(size);
+    if (size.x <= 0 || size.z <= 0) return null;
+    const scale = (Game.TILE * 0.92 * 0.64) / size.x;   // same sizing as the map railway
+    const segmentLength = size.z * scale;
+    const count = Math.max(1, Math.ceil(length / segmentLength));
+    const dx = Math.sin(angle), dz = Math.cos(angle);   // module long axis is +Z
+    const instances = new THREE.InstancedMesh(geometry, sourceMesh.material, count);
+    instances.name = 'ref-track-run';
+    const dummy = new THREE.Object3D();
+    dummy.rotation.order = 'YXZ';                        // yaw the run, then pitch along it
+    for (let i = 0; i < count; i++) {
+        const t = (i + 0.5) * segmentLength;
+        const x = Game.clamp(x0 + dx * t, 1, Game.WORLD_W - 1);
+        const z = Game.clamp(z0 + dz * t, 1, Game.WORLD_H - 1);
+        const xa = Game.clamp(x - dx * segmentLength * 0.5, 1, Game.WORLD_W - 1);
+        const za = Game.clamp(z - dz * segmentLength * 0.5, 1, Game.WORLD_H - 1);
+        const xb = Game.clamp(x + dx * segmentLength * 0.5, 1, Game.WORLD_W - 1);
+        const zb = Game.clamp(z + dz * segmentLength * 0.5, 1, Game.WORLD_H - 1);
+        const ya = Game.getHeight(xa, za), yb = Game.getHeight(xb, zb);
+        dummy.position.set(x, (ya + yb) * 0.5 + 0.02, z);
+        dummy.rotation.set(-Math.atan2(yb - ya, Math.max(0.01, segmentLength)), angle, 0);
+        dummy.scale.setScalar(scale);
+        dummy.updateMatrix();
+        instances.setMatrixAt(i, dummy.matrix);
+    }
+    instances.castShadow = true;
+    instances.receiveShadow = true;
+    instances.instanceMatrix.needsUpdate = true;
+    parent.add(instances);
+    return instances;
+};
+
 const _buildLegacyTerrainMeshes = Game.buildTerrainMeshes;
 Game.buildTerrainMeshes = () => {
     _buildLegacyTerrainMeshes();

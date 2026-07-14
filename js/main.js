@@ -3501,6 +3501,42 @@ Game._refCapMeta = (image, cap) => {
     };
 };
 
+// Capture-only track scatter: a few straight railway runs at random angles
+// and lengths, so the dataset sees tracks in every orientation (the Mokra map
+// itself has one north-south line; procedural maps have none). The group is
+// scene-level, so the reference sweep (terrainGroup only) leaves it visible,
+// and it is torn down when the capture ends.
+Game._refScatterTracks = async () => {
+    Game._refClearTracks();
+    if (!Game.buildTrackRun || !Game.THREE || !Game.scene) return;
+    const group = new Game.THREE.Group();
+    group.name = 'ref-random-tracks';
+    Game.scene.add(group);
+    Game._refTrackGroup = group;
+    // Always include one long east-west line (the Mokra map's own railway is
+    // north-south, so the dataset was blind to horizontal tracks), then a few
+    // fully random runs on top.
+    await Game.buildTrackRun(group,
+        5, Game.rand(Game.WORLD_H * 0.2, Game.WORLD_H * 0.8),
+        Math.PI / 2 + Game.rand(-0.17, 0.17), Game.WORLD_W - 10);
+    const runs = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < runs; i++) {
+        await Game.buildTrackRun(group,
+            Game.rand(5, Game.WORLD_W - 5), Game.rand(5, Game.WORLD_H - 5),
+            Math.random() * Math.PI * 2, Game.rand(25, 90));
+    }
+};
+
+Game._refClearTracks = () => {
+    const group = Game._refTrackGroup;
+    if (!group) return;
+    Game.scene.remove(group);
+    // InstancedMesh.dispose frees the per-instance buffers only; geometry and
+    // material belong to the cached rail model and stay shared.
+    group.traverse(o => { if (o.isInstancedMesh) o.dispose(); });
+    Game._refTrackGroup = null;
+};
+
 Game.startRefCapture = async (perMap, total) => {
     if (Game._refCap) return;
     const status = document.getElementById('dbgCapStatus');
@@ -3534,6 +3570,7 @@ Game.startRefCapture = async (perMap, total) => {
     const wasPaused = Game._paused;
     Game._paused = true;
     Game.setReferenceMode(true);
+    await Game._refScatterTracks();
     try {
         while (cap.saved < total && !cap.stop) {
             if (cap.saved > 0 && cap.saved % perMap === 0) {
@@ -3541,6 +3578,7 @@ Game.startRefCapture = async (perMap, total) => {
                 Game.setReferenceMode(false);   // restore before teardown so the sweep state stays clean
                 await Game._refCapRegen();
                 Game.setReferenceMode(true);
+                await Game._refScatterTracks();
                 cap.map++;
                 cap.mapHash = hex();
             }
@@ -3584,6 +3622,7 @@ Game.startRefCapture = async (perMap, total) => {
         console.error('reference capture failed:', e);
         say('error: ' + e.message);
     }
+    Game._refClearTracks();
     Game._refCap = null;
     Game._paused = wasPaused;
     if (btn) btn.textContent = 'Start Capture';
@@ -4964,6 +5003,10 @@ Game.tick = (now) => {
         Game.updateMessages(dt);
         Game.updateLighting(dt);
     } // end pause gate
+
+    // Queued vehicle routes compute on a per-frame budget — also while paused,
+    // so orders issued during a pause are ready the moment the game resumes.
+    if (Game.processVehicleRouteQueue) Game.processVehicleRouteQueue();
 
     // Order markers animate even while paused (orders are issued during pause)
     if (Game.updateOrderMarkers) Game.updateOrderMarkers(dt);
