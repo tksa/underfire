@@ -6,6 +6,16 @@ The start-mission screen's "Latest Updates" panel is generated from the git comm
 log (`scripts/gen-changelog.mjs` → `data/changelog.json`), so it stays current
 without hand-editing.
 
+## v0.16.0 — Anti-Tank Doctrine, Rolling Wheels, Push Crews
+
+- **Infantry anti-tank doctrine:** rifles and machine guns never fire on armor they cannot penetrate, whether auto-acquired or ordered (soft-skinned trucks, transports, and towed guns stay valid targets). A plain attack order on armor is refused with a hint; infantry near a tank they cannot hurt automatically dash to cover and kneel, or give ground when caught in the open.
+- **Grenade close assault:** double right-clicking an armored vehicle sends selected foot infantry charging it to throw their two anti-tank grenade bundles from short range, then break off when the pockets are empty. Double right-click on ground remains the retreat order.
+- **Transports risk their passengers:** every landed hit on a loaded transport has a chance to wound or kill a soldier aboard (higher for high-explosive hits).
+- **Rolling field-gun wheels:** the 75 mm Armata's wheels are now separate hub-pivoted nodes (split in Blender) and roll to match the carriage's real ground speed and direction.
+- **Field-gun crew push:** while the gun moves the two crewmen step in close, lean over the trails, and drive it with hands on the carriage; at rest they kneel exactly as at spawn, with a smooth transition on stopping.
+- **Selection readability:** the green selection ring now shows through raised terrain, while remaining under the fog of war.
+- **Mokra railway:** track modules render a further 20% smaller to fit the compressed map.
+
 ## v0.15.1 — First-Load Feedback and Mokra Deployment Polish
 
 - **Visible first-load progress:** the black boot cover now identifies itself as battlefield preparation, continuously confirms that loading is active, and cycles through twelve Second World War preparation messages. A longer-load notice appears after nine seconds, with reduced-motion and screen-reader handling included.

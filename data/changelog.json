@@ -1,8 +1,28 @@
 {
- "version": "v0.15.2",
- "build": "ab76821",
+ "version": "v0.16.0",
+ "build": "0102abb",
  "generated": "2026-07-14",
  "commits": [
+  {
+   "hash": "0102abb",
+   "date": "2026-07-14",
+   "subject": "selection ring shows through raised terrain"
+  },
+  {
+   "hash": "49d9356",
+   "date": "2026-07-14",
+   "subject": "infantry anti-tank doctrine, grenade close assault, passenger hits"
+  },
+  {
+   "hash": "35fd33e",
+   "date": "2026-07-14",
+   "subject": "rolling wheels and true pushing crew for the 75 mm Armata"
+  },
+  {
+   "hash": "5c3d3bd",
+   "date": "2026-07-14",
+   "subject": "release v0.15.2"
+  },
   {
    "hash": "ab76821",
    "date": "2026-07-14",
@@ -52,26 +72,6 @@
    "hash": "68ddf98",
    "date": "2026-07-14",
    "subject": "ignore the local voice-generator workspace"
-  },
-  {
-   "hash": "e2b942b",
-   "date": "2026-07-13",
-   "subject": "release v0.14.0"
-  },
-  {
-   "hash": "54a3508",
-   "date": "2026-07-13",
-   "subject": "add mounted Polish cavalry"
-  },
-  {
-   "hash": "a829d79",
-   "date": "2026-07-13",
-   "subject": "release v0.13.1"
-  },
-  {
-   "hash": "b315173",
-   "date": "2026-07-13",
-   "subject": "eliminate freeze hotspots"
   }
  ]
 }

@@ -41,3 +41,6 @@ tools/blender_mcp_addon.py
 # Local TTS voice workspace (engines, model weights, takes; ~12 GB — the
 # curated .ogg results are copied into sounds/ and committed from there)
 voice-generator/
+
+# Python bytecode cache (tools/)
+__pycache__/
