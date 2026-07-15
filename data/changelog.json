@@ -1,8 +1,18 @@
 {
- "version": "v0.17.0",
- "build": "4cb96fb",
+ "version": "v0.18.0",
+ "build": "18ebfee",
  "generated": "2026-07-15",
  "commits": [
+  {
+   "hash": "18ebfee",
+   "date": "2026-07-15",
+   "subject": "full mission arc"
+  },
+  {
+   "hash": "9d4ac42",
+   "date": "2026-07-15",
+   "subject": "release v0.17.0"
+  },
   {
    "hash": "4cb96fb",
    "date": "2026-07-15",
@@ -62,16 +72,6 @@
    "hash": "35fd33e",
    "date": "2026-07-14",
    "subject": "rolling wheels and true pushing crew for the 75 mm Armata"
-  },
-  {
-   "hash": "5c3d3bd",
-   "date": "2026-07-14",
-   "subject": "release v0.15.2"
-  },
-  {
-   "hash": "ab76821",
-   "date": "2026-07-14",
-   "subject": "redesign landing and mission selection"
   }
  ]
 }

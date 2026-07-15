@@ -6,6 +6,11 @@ The start-mission screen's "Latest Updates" panel is generated from the git comm
 log (`scripts/gen-changelog.mjs` → `data/changelog.json`), so it stays current
 without hand-editing.
 
+## v0.18.0 — The Full Battle of Mokra
+
+- **The mission now plays the whole day:** survive the five-minute hold and Armoured Train No. 53 Śmiały steams in from the north along the railway, its two 75 mm wagons pounding German forces west of the line before it withdraws. A counterattack window follows — clear the remaining Germans west of the railway — and then the brigade receives withdrawal orders: fall back and move every unit off the eastern map edge, where a pulsing extraction strip saves them. The final report counts units saved and extracted; losing the crossing during the ordered withdrawal is no longer a defeat.
+- **vision.md is honest again:** the status and roadmap sections now reflect the implemented arc (train, counterattack, withdrawal, air raids, the 7TP platoon) and ask for the next depth: a targetable train, Ju 87s, and horse limbers.
+
 ## v0.17.0 — The 7TP Platoon and the Luftwaffe
 
 - **Polish armor arrives in force:** the Mokra reserve now fields the 7TP in all three variants — the single-turret jw with the 37mm Bofors, the twin-machine-gun dw (both turrets traverse independently about their own rings), and the dw refit carrying a gun turret beside an MG turret — plus the 20mm TKS rearmament, the only tankette that can hurt German armor. The MG tankette shares the same new model. All are sized against their real dimensions (a 7TP matches a Panzer II; a TKS is car-sized) and park in the fields facing the German approach.
