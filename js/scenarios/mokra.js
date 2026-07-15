@@ -751,7 +751,16 @@ Game.spawnMokraScenario = () => {
         contestedTime: 0, enemyLosses: 0, enemyCommitted: 0,
         nextWave: 1, reinforcementTriggered: false,
         reinforcementReport: 'German armour is forming beyond the western map edge. Attack in 3:00.',
+        // Later phases (vision.md): armoured train support, the Polish
+        // counterattack, and the protected withdrawal east over the railway.
+        trainArrived: false, counterattackStarted: false,
+        withdrawalStarted: false, extracted: 0,
+        endTime: 500,
     });
+    if (Game._mokraTrain && Game._mokraTrain.mesh && Game.scene) {
+        Game.scene.remove(Game._mokraTrain.mesh);   // restart mid-train: no leak
+    }
+    Game._mokraTrain = null;
 
     ms.initialPolishStrength = Game.getTeamUnits(P).length;
     ms.initialBoforsIds = Game.getTeamUnits(P).filter(u => u.kind === 'bofors37').map(u => u.id);
@@ -770,6 +779,124 @@ Game.startMokraDeployment = () => {
     ms.deploymentRemaining = ms.deploymentDuration || MOKRA_DEPLOYMENT_SECONDS;
     Game.pushMessage('German attack in 3:00. Deploy infantry into the woods!', 8);
     return true;
+};
+
+// ── Armoured Train No. 53 "Śmiały" ──────────────────────────────────────────
+// A scripted rail actor (not a selectable unit): it rolls in from the north
+// on the existing railway, halts short of the central crossing, works its two
+// 75 mm wagons against Germans west of the line, and withdraws north again.
+// Procedural mesh only, so the phase degrades to nothing if THREE is absent.
+Game._buildMokraTrainMesh = () => {
+    const THREE = Game.THREE;
+    const train = new THREE.Group();
+    train.name = 'mokra-armoured-train';
+    const steel = new THREE.MeshStandardMaterial({ color: 0x3c4038, roughness: 0.82 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x2b2e28, roughness: 0.9 });
+    const box = (w, h, d, x, y, z, material = steel) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+        m.position.set(x, y, z);
+        m.castShadow = true;
+        train.add(m);
+        return m;
+    };
+    // Locomotive (armored box + boiler hump), tender, two artillery wagons.
+    box(1.3, 1.15, 3.2, 0, 0.75, 0);                       // armored locomotive
+    const boiler = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 2.2, 10), dark);
+    boiler.rotation.x = Math.PI / 2;
+    boiler.position.set(0, 1.35, -0.3);
+    boiler.castShadow = true;
+    train.add(boiler);
+    box(1.2, 0.85, 2.0, 0, 0.6, 2.9, dark);                // tender
+    const wagons = [];
+    [5.2, 8.0].forEach(off => {
+        box(1.3, 0.95, 2.4, 0, 0.66, off);                 // artillery wagon body
+        const turret = box(0.95, 0.5, 1.0, 0, 1.35, off);  // low turret
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 1.5, 8), dark);
+        barrel.rotation.z = Math.PI / 2;                    // points -X (west, toward the enemy)
+        barrel.position.set(-0.95, 1.4, off);
+        barrel.castShadow = true;
+        train.add(barrel);
+        wagons.push({ turret, barrel, off, cooldown: Game.rand(1.0, 2.4) });
+    });
+    train.userData.wagons = wagons;
+    return train;
+};
+
+Game._mokraTrainStart = () => {
+    if (!Game.THREE || !Game.scene || !Game.railway) return;
+    const mesh = Game._buildMokraTrainMesh();
+    const x = Game.railway.centerX;
+    const startZ = -16;
+    mesh.position.set(x, Game.getHeight(x, 2) + 0.15, startZ);
+    Game.scene.add(mesh);
+    Game._mokraTrain = {
+        mesh, x, z: startZ, state: 'enter',
+        holdZ: 40 * Game.TILE,       // just north of the central crossing
+        departAt: (Game.missionState.holdDuration || 300) + 95,
+        speed: 0,
+    };
+};
+
+Game.updateMokraTrain = (dt) => {
+    const train = Game._mokraTrain;
+    if (!train) return;
+    const ms = Game.missionState;
+    if (train.state === 'enter') {
+        train.speed = Math.min(7, train.speed + dt * 2.2);
+        train.z += train.speed * dt;
+        if (train.z >= train.holdZ) { train.z = train.holdZ; train.state = 'firing'; }
+    } else if (train.state === 'firing') {
+        if (ms.timer >= train.departAt) {
+            train.state = 'depart';
+            Game.pushMessage('Śmiały is expending its ready ammunition — the train withdraws north.', 6);
+        }
+        for (const wagon of train.mesh.userData.wagons) {
+            wagon.cooldown -= dt;
+            if (wagon.cooldown > 0) continue;
+            wagon.cooldown = Game.rand(2.2, 3.4);
+            const wz = train.z + wagon.off;
+            let target = null, bd = 75 * 75;
+            for (const u of Game.units) {
+                if (!u.alive || u.team !== Game.TEAM.GERMAN) continue;
+                const d = Game.distSq(train.x, wz, u.x, u.z);
+                if (d < bd && Game.lineOfSight({ x: train.x, z: wz }, u)) { bd = d; target = u; }
+            }
+            if (!target) continue;
+            const ix = target.x + Game.rand(-1.6, 1.6);
+            const iz = target.z + Game.rand(-1.6, 1.6);
+            Game.tracers.push({
+                x: train.x - 1.0, z: wz, tx: ix, tz: iz,
+                life: 0.16, total: 0.16, team: Game.TEAM.POLISH, big: true, mesh: null,
+            });
+            if (Game.Audio && Game.Audio.cannon) Game.Audio.cannon(train.x, wz);
+            const blastR = 2.8;
+            for (const u of Game.units) {
+                if (!u.alive) continue;
+                const d = Game.dist(ix, iz, u.x, u.z);
+                if (d >= blastR) continue;
+                const falloff = 1 - d / blastR;
+                u.hp -= 32 * falloff;
+                u.suppressionValue = Game.clamp((u.suppressionValue || 0) + 26 * falloff, 0, 100);
+                u.shaken = 0.4;
+                if (u.hp <= 0) {
+                    u.alive = false; u.hp = 0;
+                    if (u.mesh) u.mesh.visible = false;
+                }
+            }
+            if (Game.Audio && Game.Audio.explosion) Game.Audio.explosion(ix, iz);
+            if (Math.random() < 0.3 && Game.spawnCrater) Game.spawnCrater(ix, iz, 1.1, 0.22);
+        }
+    } else if (train.state === 'depart') {
+        train.speed = Math.min(8, train.speed + dt * 2.0);
+        train.z -= train.speed * dt;
+        if (train.z < -30) {
+            Game.scene.remove(train.mesh);
+            Game._mokraTrain = null;
+            return;
+        }
+    }
+    const y = Game.getHeight(train.x, Game.clamp(train.z, 1, Game.WORLD_H - 1)) + 0.15;
+    train.mesh.position.set(train.x, y, train.z);
 };
 
 Game.updateMokraMission = (dt) => {
@@ -811,11 +938,14 @@ Game.updateMokraMission = (dt) => {
     const germanAlive = Game.getTeamUnits(Game.TEAM.GERMAN).length;
     ms.enemyLosses = Math.max(0, (ms.enemyCommitted || 0) - germanAlive);
 
-    if (polishAlive === 0) {
+    // A brigade that has been extracted is saved, not destroyed.
+    if (polishAlive === 0 && !(ms.withdrawalStarted && ms.extracted > 0)) {
         ms.lost = true;
         Game.pushMessage('The brigade has been destroyed. Mission failed.', 20);
         return;
     }
+
+    if (Game.updateMokraTrain) Game.updateMokraTrain(dt);
 
     // German air raid: the siren gives ~4 seconds of warning, then two Bf-110
     // runs bomb positions near currently-held Polish ground. Bombs use the
@@ -866,7 +996,8 @@ Game.updateMokraMission = (dt) => {
         ms.phase = 2; ms.phaseName = 'Forward screen';
     } else if (ms.timer < 205) {
         ms.phase = 3; ms.phaseName = 'Armoured assault';
-    } else {
+    } else if (!ms.trainArrived) {
+        // Phases 5+ (train, counterattack, withdrawal) own the label below.
         ms.phase = 4; ms.phaseName = 'Hold the railway';
     }
 
@@ -878,24 +1009,78 @@ Game.updateMokraMission = (dt) => {
     if (germanAtCrossing && !polishAtCrossing) ms.contestedTime += dt;
     else ms.contestedTime = Math.max(0, ms.contestedTime - dt * 1.5);
 
-    if (ms.contestedTime >= 25) {
+    // The breakthrough loss applies while the line must hold; once the
+    // withdrawal is ordered, giving up the crossing is the plan.
+    if (!ms.withdrawalStarted && ms.contestedTime >= 25) {
         ms.lost = true;
         Game.pushMessage('German armour has broken through the central railway crossing. Mission failed.', 20);
         return;
     }
 
-    if (ms.timer >= ms.holdDuration) {
-        ms.won = true;
+    // ── Later phases (vision.md): the hold succeeds, then Śmiały arrives,
+    // the brigade counterattacks, and finally withdraws under protection. ──
+    if (!ms.trainArrived && ms.timer >= ms.holdDuration) {
+        ms.trainArrived = true;
         ms.phase = 5;
-        ms.phaseName = 'Timetable disrupted';
-        const boforsSurvives = ms.initialBoforsIds.some(id => {
-            const u = Game.getUnitById(id); return u && u.alive;
-        });
-        const commandSurvives = ms.commandIds.some(id => {
-            const u = Game.getUnitById(id); return u && u.alive;
-        });
-        const secondary = boforsSurvives && commandSurvives ? ' Secondary objective complete.' : '';
-        Game.pushMessage(`The German timetable is broken. Mokra held.${secondary}`, 20);
+        ms.phaseName = 'Śmiały on the line';
+        ms.tacticalHint = 'The armoured train covers the northern flank. Press the advantage.';
+        Game.pushMessage('Armoured Train No. 53 Śmiały is rolling in from the north!', 8);
+        if (Game._mokraTrainStart) Game._mokraTrainStart();
+    }
+    if (ms.trainArrived && !ms.counterattackStarted && ms.timer >= ms.holdDuration + 10) {
+        ms.counterattackStarted = true;
+        ms.phase = 6;
+        ms.phaseName = 'Counterattack';
+        ms.primaryObjective = 'Counterattack: destroy the remaining Germans west of the railway.';
+        ms.tacticalHint = 'Tanks lead, infantry clears the hedges. Śmiały supports from the rail line.';
+        Game.pushMessage('Counterattack! Clear the remaining German forces west of the railway.', 10);
+        if (Game.Audio && Game.Audio.voice) Game.Audio.voice('f_sold_attack');
+    }
+    const withdrawalDue = ms.counterattackStarted
+        && (ms.timer >= ms.holdDuration + 120 || germanAlive === 0);
+    if (!ms.withdrawalStarted && withdrawalDue) {
+        ms.withdrawalStarted = true;
+        ms.phase = 7;
+        ms.phaseName = 'Protected withdrawal';
+        ms.primaryObjective = 'Withdraw: move the brigade off the EASTERN map edge.';
+        ms.tacticalHint = 'Break contact in bounds. Every unit that reaches the eastern edge is saved.';
+        Game.pushMessage(germanAlive === 0
+            ? 'The German attack is beaten. Withdraw east before their reserves arrive!'
+            : 'Orders from brigade: break contact and withdraw east of the map edge!', 12);
+    }
+    if (ms.withdrawalStarted) {
+        // Pulse the extraction strip and extract anyone who reaches it.
+        ms._extractPulse = (ms._extractPulse || 0) - dt;
+        if (ms._extractPulse <= 0 && Game.spawnOrderMarker) {
+            ms._extractPulse = 4;
+            Game.spawnOrderMarker(Game.WORLD_W - 6, Game.rand(30, Game.WORLD_H - 30), 0x55ccff);
+        }
+        for (const u of Game.units) {
+            if (!u.alive || u.team !== Game.TEAM.POLISH || u._inVehicle) continue;
+            if (u.x >= Game.WORLD_W - 8) {
+                u.alive = false;
+                u._extracted = true;
+                u.hp = Math.max(1, u.hp);
+                if (u.mesh) u.mesh.visible = false;
+                Game.selection.delete(u.id);
+                ms.extracted++;
+            }
+        }
+        const remaining = Game.getTeamUnits(Game.TEAM.POLISH).length;
+        if (ms.timer >= ms.endTime || remaining === 0) {
+            ms.won = true;
+            ms.phase = 8;
+            ms.phaseName = 'Timetable disrupted';
+            const boforsSurvives = ms.initialBoforsIds.some(id => {
+                const u = Game.getUnitById(id); return u && (u.alive || u._extracted);
+            });
+            const commandSurvives = ms.commandIds.some(id => {
+                const u = Game.getUnitById(id); return u && (u.alive || u._extracted);
+            });
+            const secondary = boforsSurvives && commandSurvives ? ' Secondary objective complete.' : '';
+            const saved = ms.extracted + remaining;
+            Game.pushMessage(`The German timetable is broken. Mokra held — ${saved} of ${ms.initialPolishStrength} units saved (${ms.extracted} extracted east).${secondary}`, 25);
+        }
     }
 };
 

@@ -104,10 +104,10 @@ The current allowlist uses Kar98k/MG34 infantry with one limited-issue MP38 squa
 | Dedicated Polish infantry/vehicle/gun models and PNG skins | Partial | Mounted Ułans use a dedicated supplied 17-clip rigged horse-and-rider GLB. The 75 mm Armata now has a dedicated gun model and two rifle-free clones of the Polish-tinted infantry rig for its visible operators. Foot infantry still use tint rather than a painted Polish PNG, and most Polish vehicles/guns remain procedural. |
 | Mounted cavalry reserve | Implemented | Four player-controlled `mounted_ulan` units deploy east of the railway. Dismounting parks a persistent, unselectable riderless horse; its linked Ułan must return through an enter-style order before remounting. Mounted movement uses acceleration, braking, limited turning, and speed-synchronised walk/run animation. |
 | Horse artillery limbers | Planned | Horse teams, gun hitching, and limber/unlimber presentation are not part of the mounted-cavalry implementation. |
-| Armoured Train No. 53 “Śmiały” | Planned | Railway path exists; train entity, cars, weapons, timetable, and effects do not. |
-| Scripted Ju 87 phase | Planned | No player-callable air support is used as a substitute. |
+| Armoured Train No. 53 “Śmiały” | Implemented (scripted) | A scripted rail actor arrives from the north after the hold succeeds, works two 75 mm wagons against Germans west of the line, and withdraws. Not yet a targetable unit. |
+| Air-attack phase | Implemented (Bf-110) | The second and final German echelons arrive under siren-warned bombing runs with a visible Bf-110 flyover. Historically Ju 87s; swap the model when a suitable CC-BY/CC0 Stuka lands. |
 | Multi-state destroyed/immobilized/abandoned/recovered scoring | Planned | Current combat has component damage but not the complete dossier ledger. |
-| Counterattack and protected withdrawal east | Planned | Needs multi-zone objective and extraction scripting beyond the current hold phase. |
+| Counterattack and protected withdrawal east | Implemented | After the hold, a counterattack window opens (clear the Germans west of the rail), then the brigade withdraws: units reaching the eastern map edge are extracted and counted in the final report. |
 | Alternate battles/campaign persistence | Planned | Jordanów/Wysoka, Mława, Borowa Góra, Bzura, and Krojanty remain in the dossier backlog. |
 
 ## Polish voice implementation
