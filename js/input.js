@@ -204,6 +204,9 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false,
         unit._faceAngle = null; unit._faceUntil = 0;
         unit._enterRec = null;
         unit._enterCarrierId = null;
+        unit._enterGunId = null;
+        unit._towApproachGunId = null;
+        unit._towApproachTruckId = null;
         if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(unit); // ends guard/at-ease
         // Group pace cap: armor/trucks wait for the slowest member (cleared on arrival).
         if (groupMove && !isQueued) { unit._groupSpeed = groupSpeed; unit._groupMoveActive = true; }
@@ -690,6 +693,9 @@ Game.orderAttackTarget = (target) => {
         Game.clearArrivalFacing(u);
         u._enterRec = null;
         u._enterCarrierId = null;
+        u._enterGunId = null;
+        u._towApproachGunId = null;
+        u._towApproachTruckId = null;
         if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
         if (w.fireType === 'indirect') {
             u.bombardX = target.x; u.bombardZ = target.z;
@@ -1124,50 +1130,10 @@ Game.handleMouseSelection = (e) => {
         }
         Game.selectedFighter = null;
 
-        // An empty horse is a persistent world prop, never a selectable unit. A
-        // compatible dismounted reserve rider uses the same early click-to-enter
-        // interception as buildings/transports and walks over to remount.
-        const selectedUnits = Game.selectedPlayerUnits();
-        const directlyPickedUnit = Game.unitAtScreen
-            ? Game.unitAtScreen(mouse.dragCurrentX, mouse.dragCurrentY) : null;
-        const horseGround = Game.screenToGround(mouse.dragCurrentX, mouse.dragCurrentY);
-        const onHorse = (Game.horseAtScreen
-            && Game.horseAtScreen(mouse.dragCurrentX, mouse.dragCurrentY))
-            || (!directlyPickedUnit && horseGround && Game.horseAtWorld
-                && Game.horseAtWorld(horseGround.x, horseGround.z));
-        const mountRider = onHorse && Game.canMountHorse
-            ? selectedUnits.find(u => Game.canMountHorse(u, onHorse))
-            : null;
-        if (mountRider && Game.orderMountHorse) {
-            Game.orderMountHorse(onHorse);
-            return;
-        }
-
-        // Enter-building: if infantry are selected and the click lands on a
-        // building (and not on a friendly unit you meant to select instead),
-        // send the selected infantry in rather than changing the selection.
-        const enterInf = selectedUnits.filter(u => u.alive && Game.isFootInfantry(u)
-            && !u._garrisoned && u._inVehicle == null);
-        if (enterInf.length) {
-            const picked0 = directlyPickedUnit;
-            // Once every selected soldier is already queued for this truck, a
-            // further left-click means "select the truck", not "enter" again.
-            // This lets the player move it while the pending passengers retain
-            // their carrier-relative order.
-            const hasNewPassenger = picked0 && enterInf.some(u => u._enterCarrierId !== picked0.id);
-            if (picked0 && picked0.team === Game.playerTeam
-                && picked0.supportType === 'transport' && hasNewPassenger) {
-                Game.orderEnterCarrier(picked0);
-                return;
-            }
-            const onFriendly = picked0 && picked0.team === Game.playerTeam;
-            if (!onFriendly) {
-                const gp = Game.screenToGround(mouse.dragCurrentX, mouse.dragCurrentY);
-                const rec = (Game.buildingAtScreen && Game.buildingAtScreen(mouse.dragCurrentX, mouse.dragCurrentY))
-                    || (gp && Game.buildingAt && Game.buildingAt(gp.x, gp.z));
-                if (rec && !rec.collapsed) { Game.orderEnterBuilding(rec); return; }
-            }
-        }
+        // Left-click never issues interaction orders. Mounting horses, manning
+        // guns, boarding transports/buildings and tow hook-ups are all
+        // RIGHT-click commands (see the order dispatch below); a left-click on
+        // any of those targets simply selects like everywhere else.
 
         // Click select — dual approach: world-space + screen-space
         let picked = null;
@@ -1529,6 +1495,19 @@ Game.handleInputEvents = () => {
                             Game.orderMountHorse(onHorse);
                         } else if (nearbyEnemy) {
                             Game._attackOrCharge(nearbyEnemy);
+                        } else if (Game.getTowHoverPair && Game.orderTowApproach
+                            && Game.getTowHoverPair(picked
+                                || (Game.towCounterpartAtWorld && Game.towCounterpartAtWorld(ground.x, ground.z)))) {
+                            Game.orderTowApproach(Game.getTowHoverPair(picked
+                                || Game.towCounterpartAtWorld(ground.x, ground.z)));
+                        } else if (picked && picked.team === Game.playerTeam
+                            && Game.GUN_CREWS && Game.GUN_CREWS[picked.kind]
+                            && picked._unmanned && Game.orderManGun
+                            && selectedUnits.some(u => Game.isFootInfantry(u)
+                                && !u._garrisoned && u._inVehicle == null)) {
+                            // Right-click an unmanned gun with infantry: man it.
+                            Game.orderManGun(picked, selectedUnits.filter(u =>
+                                Game.isFootInfantry(u) && !u._garrisoned && u._inVehicle == null));
                         } else if (onTransport && selectedUnits.some(Game.isFootInfantry)) {
                             Game.orderEnterCarrier(onTransport);
                         } else if (onBuilding && !onBuilding.collapsed) {

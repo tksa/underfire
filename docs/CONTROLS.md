@@ -57,12 +57,12 @@ applicable in a browser or to this game's design).
 
 | SS2 | Status | Under Fire |
 |---|---|---|
-| Left-click / drag: select / box-select | ✅ | Same (Shift adds to selection) |
+| Left-click / drag: select / box-select | ✅ | Same (Shift adds to selection). Left-click only ever selects — mounting, boarding, manning guns and tow hook-ups are right-click orders |
 | Right-click: move / contextual action | ✅ | Same; E toggles move vs attack-move stance |
 | Right-click + drag on open terrain | — | The press point is the destination and the arrow sets the formation's final facing. Drag beside the selected formation to rotate it in place. Shift queues the destination/facing order; Ctrl/Cmd retains gather behavior. |
 | Right-click enemy: attack | ✅ | Same |
-| Right-click building with infantry selected: enter | ✅ | Same (click also works; capacity enforced) |
-| Hover/click a riderless horse with its linked Ułan selected | — | Shows the green enter cursor; left- or right-click sends the Ułan to the horse's mounting side. The horse itself cannot be selected or controlled. |
+| Right-click building with infantry selected: enter | ✅ | Same (right-click only; left-click selects; capacity enforced) |
+| Hover a riderless horse with its linked Ułan selected | — | Shows the green enter cursor; right-click sends the Ułan to the horse's mounting side. The horse itself cannot be selected or controlled. |
 | Select building → unload occupants | ✅ | Select a garrisoned building (click it with nothing else selected): right-click terrain = **all** file out and move there; right-click the building itself = **one** soldier steps out |
 | Cursor edge scrolling | ✅ | Same (+ WASD/arrow keys, wheel zoom) |
 | Double right-click ground | — | Retreat order (Under Fire extra) |
