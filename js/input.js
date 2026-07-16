@@ -1286,7 +1286,17 @@ Game._canDeferTerrainRightOrder = (screenX, screenY, ground, modifiers = {}) => 
         && selectedUnits.some(Game.isFootInfantry);
     const onBuilding = (Game.buildingAtScreen && Game.buildingAtScreen(screenX, screenY))
         || (Game.buildingAt && Game.buildingAt(ground.x, ground.z));
+    // A click that would form a tow hook-up (or man an abandoned gun) is an
+    // INTERACTION, not a terrain order. Without these two checks the deferral
+    // captured the click and issued a plain move — the gun walked to the
+    // truck and stood there, and the tow dispatch below never even ran.
+    const towPair = Game.getTowHoverPair && Game.getTowHoverPair(picked
+        || (Game.towCounterpartAtWorld && Game.towCounterpartAtWorld(ground.x, ground.z)));
+    const onManGun = picked && picked.team === Game.playerTeam
+        && Game.GUN_CREWS && Game.GUN_CREWS[picked.kind] && picked._unmanned
+        && selectedUnits.some(u => Game.isFootInfantry(u) && !u._garrisoned && u._inVehicle == null);
     return !clickedEnemy && !mountRider && !nearbyEnemy && !onTransport
+        && !towPair && !onManGun
         && !(onBuilding && !onBuilding.collapsed);
 };
 
@@ -1489,17 +1499,26 @@ Game.handleInputEvents = () => {
                             const w = Game.WEAPONS[u.weaponKey];
                             return w && w.fireType !== 'none' && (w.gameRange || 0) > 0;
                         });
+                        // Tow hook-up: resolve once, with reasons. A refused
+                        // almost-pair consumes the click — it must NOT fall
+                        // through to a plain move that walks the gun to the
+                        // truck and leaves it standing there.
+                        Game._towClickReason = false;
+                        const towPair = Game.getTowHoverPair && Game.orderTowApproach
+                            ? Game.getTowHoverPair(picked
+                                || (Game.towCounterpartAtWorld
+                                    && Game.towCounterpartAtWorld(ground.x, ground.z)), true)
+                            : null;
                         if (clickedEnemy) {
                             Game._attackOrCharge(clickedEnemy);
                         } else if (mountRider && Game.orderMountHorse) {
                             Game.orderMountHorse(onHorse);
                         } else if (nearbyEnemy) {
                             Game._attackOrCharge(nearbyEnemy);
-                        } else if (Game.getTowHoverPair && Game.orderTowApproach
-                            && Game.getTowHoverPair(picked
-                                || (Game.towCounterpartAtWorld && Game.towCounterpartAtWorld(ground.x, ground.z)))) {
-                            Game.orderTowApproach(Game.getTowHoverPair(picked
-                                || Game.towCounterpartAtWorld(ground.x, ground.z)));
+                        } else if (towPair) {
+                            Game.orderTowApproach(towPair);
+                        } else if (Game._towClickReason) {
+                            // Refusal already explained in the message log.
                         } else if (picked && picked.team === Game.playerTeam
                             && Game.GUN_CREWS && Game.GUN_CREWS[picked.kind]
                             && picked._unmanned && Game.orderManGun

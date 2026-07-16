@@ -2473,6 +2473,17 @@ Game.updateGunManning = () => {
         if (!u.alive || u._enterGunId == null) continue;
         const gun = Game.getUnitById(u._enterGunId);
         if (!gun || !gun.alive || gun._towed || (gun._crewAboard || 0) >= 2) {
+            // The piece got hitched while its crew was still walking back:
+            // they chase the truck and ride along instead of standing lost.
+            if (gun && gun.alive && gun._towed && u._crewOfGunId === gun.id) {
+                const tower = Game.getUnitById(gun._towedBy);
+                if (tower && tower.alive && Game.transportHasRoom(tower)) {
+                    const entry = Game.transportEntryPoint(tower);
+                    u._enterCarrierId = tower.id;
+                    u.path = Game.findCarrierEntryPath(u, entry.x, entry.z);
+                    u.moving = u.path.length > 0;
+                }
+            }
             u._enterGunId = null;
             continue;
         }
@@ -2502,12 +2513,17 @@ Game.updateGunManning = () => {
 // through to a plain move order (walk to the truck and stand there), which
 // looked like the hook-up "not working". The mover is the nearest eligible
 // selected unit; an unmanned gun cannot move itself.
-Game.getTowHoverPair = (hoverUnit) => {
+Game.getTowHoverPair = (hoverUnit, explain = false) => {
     if (!hoverUnit || !hoverUnit.alive || hoverUnit.team !== Game.playerTeam) return null;
     const sel = Game.selectedPlayerUnits().filter(u => u !== hoverUnit);
     if (!sel.length) return null;
     const truckFree = u => Game.isTruck(u.kind) && Game.canTow(u) && !Game.towedBy(u);
     const gunFree = u => Game.isTowableAT(u) && !u._towed;
+    // A crew walking back to its piece counts as manned: the approach simply
+    // waits for them. Without this, ordering a re-attach in the seconds after
+    // a detach was refused and the click degraded to a dead plain move.
+    const crewInbound = g => Game.units.some(m => m.alive && m._enterGunId === g.id);
+    const canDrive = g => !g._unmanned || crewInbound(g);
     const nearest = (list) => list.sort((a, b) =>
         Game.distSq(a.x, a.z, hoverUnit.x, hoverUnit.z)
         - Game.distSq(b.x, b.z, hoverUnit.x, hoverUnit.z))[0];
@@ -2516,17 +2532,22 @@ Game.getTowHoverPair = (hoverUnit) => {
         if (truck) return { mover: truck, truck, gun: hoverUnit };
     }
     if (truckFree(hoverUnit)) {
-        const gun = nearest(sel.filter(u => gunFree(u) && !u._unmanned));
+        const gun = nearest(sel.filter(u => gunFree(u) && canDrive(u)));
         if (gun) return { mover: gun, truck: hoverUnit, gun };
     }
-    // Almost-pairs get a reason instead of a silent nothing (the click would
-    // otherwise just issue a plain move and look like a dead order).
-    if (truckFree(hoverUnit) && sel.some(u => gunFree(u) && u._unmanned)) {
+    // On an actual CLICK (not the per-frame hover probe), almost-pairs get a
+    // reason and the click is consumed — degrading to a plain move order is
+    // exactly the "walks to the truck and stands there" bug.
+    if (!explain) return null;
+    if (truckFree(hoverUnit) && sel.some(u => gunFree(u) && !canDrive(u))) {
+        Game._towClickReason = true;
         Game.pushMessage('The gun has no crew — man it first, or bring the truck to it.', 2.4);
     } else if (sel.some(truckFree) && Game.isTowableAT(hoverUnit) && hoverUnit._towed) {
+        Game._towClickReason = true;
         Game.pushMessage(`${hoverUnit.label} is already being towed.`, 1.8);
     } else if (sel.some(gunFree) && Game.isTruck(hoverUnit.kind) && Game.towedBy(hoverUnit)) {
-        Game.pushMessage(`${hoverUnit.label} is already towing a gun.`, 1.8);
+        Game._towClickReason = true;
+        Game.pushMessage(`${hoverUnit.label} is already towing a gun — detach it first.`, 2.0);
     }
     return null;
 };
@@ -2552,6 +2573,21 @@ Game.towApproachPoint = (tower) => ({
     x: tower.x - Math.cos(tower.angle) * 2.9,
     z: tower.z - Math.sin(tower.angle) * 2.9,
 });
+
+// A* returns tile-centre waypoints, but the hook-up point is a precise spot
+// at the truck's tailgate. Preserve the A* chain and append the exact rear
+// point as its final, directly walkable leg (same treatment as infantry
+// boarding paths) so the gun really arrives at the back of the truck.
+Game.towApproachPath = (mover, truck) => {
+    const ap = Game.towApproachPoint(truck);
+    const path = Game.findPath(mover, mover.x, mover.z, ap.x, ap.z) || [];
+    const last = path.length ? path[path.length - 1] : { x: mover.x, z: mover.z };
+    if (Game.distSq(last.x, last.z, ap.x, ap.z) > 0.01
+        && (!Game.segmentPassable || Game.segmentPassable(mover, last.x, last.z, ap.x, ap.z))) {
+        path.push({ x: ap.x, z: ap.z, _exactGoal: true });
+    }
+    return path;
+};
 
 // A truck never aims at the gun's exact spot: its bicycle steering orbits a
 // point it keeps overshooting. Stop short on the approach line; the hookup's
@@ -2588,8 +2624,10 @@ Game.orderTowApproach = (pair) => {
             if (mover._towApproachGunId !== gun.id) return;
             mover.path = path;
         });
-    } else {
+    } else if (mover === truck) {
         mover.path = Game.findPath(mover, mover.x, mover.z, goal.x, goal.z);
+    } else {
+        mover.path = Game.towApproachPath(mover, truck);
     }
     mover.moving = true;
     mover.stopTimer = 0;
@@ -2654,8 +2692,7 @@ Game.updateTowApproaches = (dt = 1 / 60) => {
             truck._towApproachTruckId = null;
             gun._towApproachGunId = gun.id;
             gun._towApproachTruckId = truck.id;
-            const ap = Game.towApproachPoint(truck);
-            gun.path = Game.findPath(gun, gun.x, gun.z, ap.x, ap.z);
+            gun.path = Game.towApproachPath(gun, truck);
             gun.moving = gun.path.length > 0;
             gun.orderDelay = 0;
         } else {
@@ -2675,8 +2712,12 @@ Game.updateTowApproaches = (dt = 1 / 60) => {
                 u._towProg = { gap, t: 0 };
                 u.stopTimer = 0;
                 u.orderDelay = 0;
-                const goal = u === truck ? Game.towTruckGoal(truck, gun) : Game.towApproachPoint(truck);
-                u.path = Game.findPath(u, u.x, u.z, goal.x, goal.z);
+                if (u === truck) {
+                    const goal = Game.towTruckGoal(truck, gun);
+                    u.path = Game.findPath(u, u.x, u.z, goal.x, goal.z);
+                } else {
+                    u.path = Game.towApproachPath(u, truck);
+                }
                 u.moving = u.path.length > 0;
             }
         }
