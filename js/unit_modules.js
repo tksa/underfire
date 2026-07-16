@@ -188,7 +188,8 @@ Game.uMod.supply = (unit, ctx) => {
 Game.uMod.deploy = (unit, ctx) => {
     if (!unit.deployable) return;
     unit._deployT = Math.max(0, (unit._deployT || 0) - ctx.dt);
-    const wantsMove = !!(unit.path && unit.path.length > 0);
+    const wantsMove = !!(unit.path && unit.path.length > 0)
+        || unit._towApproachGunId != null;   // approaching a hook-up: stay limbered
     if (wantsMove && unit.deployed && unit._deployT <= 0) {
         unit.deployed = false;
         unit._deployT = 1.0;
@@ -197,8 +198,10 @@ Game.uMod.deploy = (unit, ctx) => {
         unit.deployed = true;
         unit._deployT = 1.0;
     }
-    unit._canMove = !unit.deployed && unit._deployT <= 0;
-    unit._canFire = unit.deployed && unit._deployT <= 0;
+    // An unmanned gun (crew dismounted as real infantry) neither moves nor
+    // fires until soldiers re-man it.
+    unit._canMove = !unit.deployed && unit._deployT <= 0 && !unit._unmanned;
+    unit._canFire = unit.deployed && unit._deployT <= 0 && !unit._unmanned;
 };
 
 // Unforced perception is deliberately staggered. At 60 fps, asking every unit

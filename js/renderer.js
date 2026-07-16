@@ -16,6 +16,13 @@ Game.syncUnitMeshes = (dt) => {
     Game.units.forEach(unit => {
         if (!unit.mesh) return;
         if (!unit.alive) {
+            // Units that LEFT the field rather than dying on it (absorbed
+            // into a gun crew, extracted over the map edge, killed inside a
+            // transport) leave no remnant body.
+            if (unit._noRemnant) {
+                unit.mesh.visible = false;
+                return;
+            }
             const ud = unit.mesh.userData;
             // Promote any freshly-dead unit to a battlefield remnant ONCE, no
             // matter what killed it (direct fire, HE/splash, bleed-out, etc.).
@@ -107,7 +114,7 @@ Game.syncUnitMeshes = (dt) => {
         // Drive skeletal animation only for visible units. Off-map reinforcements
         // and fog-hidden enemies otherwise consumed mixer/bone work every frame.
         Game._updateModelAnimation(unit, dt);
-        if (unit.kind === 'fieldgun75' && Game.updateFieldGunCrew) {
+        if (Game.GUN_CREWS && Game.GUN_CREWS[unit.kind] && Game.updateFieldGunCrew) {
             Game.updateFieldGunCrew(unit, dt);
         }
 
@@ -1915,8 +1922,16 @@ Game.updateHUD = () => {
         towBtn.style.display = (attached || nearby) ? 'flex' : 'none';
         towBtn.classList.remove('disabled');
         const label = towBtn.querySelector('.cmd-label');
-        if (label) label.textContent = attached ? 'Unjoin' : 'Join';
-        towBtn.title = attached ? `Unjoin ${attached.label}` : (nearby ? `Join ${nearby.label}` : 'Join anti-tank gun');
+        if (label) label.textContent = attached ? 'Detach' : 'Tow';
+        towBtn.title = attached ? `Detach ${attached.label}` : (nearby ? `Tow ${nearby.label}` : 'Tow anti-tank gun');
+    }
+    // Crewed guns: dismount button (re-manning is click-on-gun, like horses).
+    const crewBtn = document.getElementById('cmdCrew');
+    if (crewBtn) {
+        const crewedGun = Game.selectedPlayerUnits().find(u =>
+            Game.GUN_CREWS && Game.GUN_CREWS[u.kind] && !u._unmanned && !u._towed);
+        crewBtn.style.display = crewedGun ? 'flex' : 'none';
+        if (crewedGun) crewBtn.title = `${crewedGun.label}: crew dismounts (click the gun with infantry selected to re-man)`;
     }
     const carrierBtn = document.getElementById('cmdCarrier');
     const loaded = transport && transport._passengers && transport._passengers.length;

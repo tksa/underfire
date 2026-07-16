@@ -1060,6 +1060,8 @@ Game.updateMokraMission = (dt) => {
             if (u.x >= Game.WORLD_W - 8) {
                 u.alive = false;
                 u._extracted = true;
+                u._deathHandled = true;   // saved, not killed: no corpse
+                u._noRemnant = true;
                 u.hp = Math.max(1, u.hp);
                 if (u.mesh) u.mesh.visible = false;
                 Game.selection.delete(u.id);

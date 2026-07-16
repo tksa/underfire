@@ -162,56 +162,72 @@ Game.spawnScenario = () => {
     //  staged in the west corner.
     // ═══════════════════════════════════════════════════
 
-    Game.spawnSquad(P, 4 * T, 6 * T, 'A', { aiState: 'player' });
-    Game.spawnSquad(P, 4.5 * T, 10 * T, 'B', { aiState: 'player' });
-    Game.spawnSquad(P, 7 * T, 8 * T, 'C', { aiState: 'player' });
+    // Everyone stages facing the objective town, in clean rows with vehicle
+    // clearance: infantry forward, armor in one line, the AT guns in their own
+    // lane (they were spawning wedged between tank hulls), trucks at the rear.
+    const townDir = (x, z) => Game.angleTo(x * T, z * T,
+        (30 + (Game.villageOfs?.dx || 0)) * T, (13 + (Game.villageOfs?.dy || 0)) * T);
+    const spawnP = (kind, x, z, group, extra = {}) =>
+        Game.makeUnit(P, kind, x * T, z * T,
+            { group, aiState: 'player', angle: townDir(x, z), ...extra });
+
+    Game.spawnSquad(P, 4 * T, 6 * T, 'A', { aiState: 'player', angle: townDir(4, 6) });
+    Game.spawnSquad(P, 4.5 * T, 10 * T, 'B', { aiState: 'player', angle: townDir(4.5, 10) });
+    Game.spawnSquad(P, 7 * T, 8 * T, 'C', { aiState: 'player', angle: townDir(7, 8) });
 
     // Support section + armor differ by doctrine.
     if (P === FRENCH) {
-        Game.makeUnit(FRENCH, 'sniper', 6 * T, 5 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(FRENCH, 'hmg', 5.5 * T, 12.5 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(FRENCH, 'mortar_60', 2 * T, 11 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(FRENCH, 'at_25mm', 3 * T, 12 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(FRENCH, 'at_47mm', 2 * T, 13.5 * T, { group: 'S', aiState: 'player' });
+        // Forward screen + command
+        spawnP('sniper', 6, 5, 'S');
+        spawnP('panhard', 8.5, 6, 'Recon');
+        spawnP('officer', 4.5, 8, 'A');
+        spawnP('medic', 3, 8, 'S');
 
-        // Armor — French tanks individually strong (vision doc)
-        Game.makeUnit(FRENCH, 'h35', 2.6 * T, 10 * T, { group: 'Armor', aiState: 'player', veterancy: .12 });
-        Game.makeUnit(FRENCH, 's35', 5 * T, 11 * T, { group: 'Armor', aiState: 'player', veterancy: .16 });
-        Game.makeUnit(FRENCH, 'r35', 3.8 * T, 13 * T, { group: 'Armor', aiState: 'player', veterancy: .10 });
-        Game.makeUnit(FRENCH, 'b1', 6.5 * T, 12.5 * T, { group: 'Armor', aiState: 'player', veterancy: .14 });
-        Game.makeUnit(FRENCH, 'panhard', 8 * T, 6 * T, { group: 'Recon', aiState: 'player' });
+        // Armor line: one rank, two tiles between hulls.
+        spawnP('h35', 2, 10.5, 'Armor', { veterancy: .12 });
+        spawnP('s35', 4, 10.8, 'Armor', { veterancy: .16 });
+        spawnP('r35', 6, 11.1, 'Armor', { veterancy: .10 });
+        spawnP('b1', 8, 11.4, 'Armor', { veterancy: .14 });
 
-        Game.makeUnit(FRENCH, 'medic', 3 * T, 8 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(FRENCH, 'mechanic', 3.5 * T, 11.5 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(FRENCH, 'supply_truck', 1.5 * T, 12 * T, { group: 'S', aiState: 'player' });
-        // Tailgates face south into open ground. Random headings could put the
-        // rear entry point directly against the fuel truck / AT-gun line, making
-        // a valid boarding route impossible at mission spawn.
-        Game.makeUnit(FRENCH, 'transport_truck', 2.3 * T, 14.5 * T,
-            { group: 'Transport', aiState: 'player', angle: -Math.PI / 2 });
-        Game.makeUnit(FRENCH, 'transport_truck', 3.8 * T, 15 * T,
-            { group: 'Transport', aiState: 'player', angle: -Math.PI / 2 });
-        Game.makeUnit(FRENCH, 'fuel_truck', 1.5 * T, 13.5 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(FRENCH, 'sapper', 5 * T, 13 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(FRENCH, 'officer', 4.5 * T, 8 * T, { group: 'A', aiState: 'player' });
+        // Gun lane: its own row south of the armor, nothing parked in front.
+        spawnP('mortar_60', 1.5, 13, 'S');
+        const gun25 = spawnP('at_25mm', 3.5, 13.3, 'S');
+        const gun47 = spawnP('at_47mm', 5.5, 13.6, 'S');
+        spawnP('hmg', 7.5, 13.3, 'S');
+        spawnP('mechanic', 8.5, 14.5, 'S');
+        spawnP('sapper', 6.8, 14.8, 'S');
+
+        // Trucks at the rear; rears face away from the town, over open ground,
+        // so the boarding tailgates stay reachable at spawn.
+        spawnP('supply_truck', 1.5, 15, 'S');
+        spawnP('fuel_truck', 3, 15.4, 'S');
+        const tow1 = spawnP('transport_truck', 4.7, 15.6, 'Transport');
+        const tow2 = spawnP('transport_truck', 6.4, 15.9, 'Transport');
+        // The motorized battery starts LIMBERED: each AT gun hooked to a
+        // transport with its crew riding aboard. Detach to bring it into
+        // action (the crew hops off and mans the gun automatically).
+        if (Game.towUnit && tow1 && gun25) Game.towUnit(tow1, gun25, true);
+        if (Game.towUnit && tow2 && gun47) Game.towUnit(tow2, gun47, true);
     } else {
-        Game.makeUnit(GERMAN, 'sniper', 6 * T, 5 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(GERMAN, 'hmg', 5.5 * T, 12.5 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(GERMAN, 'mortar_50', 2 * T, 11 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(GERMAN, 'mortar_81', 2 * T, 13.5 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(GERMAN, 'pak36', 3 * T, 12 * T, { group: 'S', aiState: 'player' });
+        // Same staging discipline as the French: forward screen, one armor
+        // rank, a clear gun lane, trucks at the rear — all facing the town.
+        spawnP('sniper', 6, 5, 'S');
+        spawnP('sdkfz', 8.5, 6, 'Recon');
+        spawnP('medic', 3, 8, 'S');
 
-        // Armor — numerous, lighter (vision doc: German tempo)
-        Game.makeUnit(GERMAN, 'panzer1', 2.6 * T, 10 * T, { group: 'Armor', aiState: 'player', veterancy: .10 });
-        Game.makeUnit(GERMAN, 'panzer2', 5 * T, 11 * T, { group: 'Armor', aiState: 'player', veterancy: .12 });
-        Game.makeUnit(GERMAN, 'panzer3', 3.8 * T, 13 * T, { group: 'Armor', aiState: 'player', veterancy: .14 });
-        Game.makeUnit(GERMAN, 'panzer4', 6.5 * T, 12.5 * T, { group: 'Armor', aiState: 'player', veterancy: .14 });
-        Game.makeUnit(GERMAN, 'sdkfz', 8 * T, 6 * T, { group: 'Recon', aiState: 'player' });
+        spawnP('panzer1', 2, 10.5, 'Armor', { veterancy: .10 });
+        spawnP('panzer2', 4, 10.8, 'Armor', { veterancy: .12 });
+        spawnP('panzer3', 6, 11.1, 'Armor', { veterancy: .14 });
+        spawnP('panzer4', 8, 11.4, 'Armor', { veterancy: .14 });
 
-        Game.makeUnit(GERMAN, 'medic', 3 * T, 8 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(GERMAN, 'mechanic', 3.5 * T, 11.5 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(GERMAN, 'supply_truck', 1.5 * T, 12 * T, { group: 'S', aiState: 'player' });
-        Game.makeUnit(GERMAN, 'fuel_truck', 1.5 * T, 13.5 * T, { group: 'S', aiState: 'player' });
+        spawnP('mortar_50', 1.5, 13, 'S');
+        spawnP('pak36', 3.5, 13.3, 'S');
+        spawnP('mortar_81', 5.5, 13.6, 'S');
+        spawnP('hmg', 7.5, 13.3, 'S');
+        spawnP('mechanic', 8.5, 14.5, 'S');
+
+        spawnP('supply_truck', 1.5, 15, 'S');
+        spawnP('fuel_truck', 3, 15.4, 'S');
         // (No German officer/sapper in the roster yet — the chain of command
         // field-promotes an acting leader, so the morale aura still appears.)
     }

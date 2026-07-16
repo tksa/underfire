@@ -70,8 +70,15 @@ Game.updateGarrisonUI = () => {
     const inCmd = !!Game._commandMode || Game.orderStance === 'attack';
     const canEnterBuilding = !!hover && Game.buildingHasRoom(hover);
     const canEnterTransport = !!hoverTransport && Game.transportHasRoom(hoverTransport);
+    // Tow affordance: single transport over a towable gun (or the reverse).
+    // hoverUnit above is gated on infantry being selected; the tow pair needs
+    // its own ungated screen pick (a TRUCK or GUN is selected here).
+    const towScreenHover = Game.mouse && Game.unitAtScreen
+        ? Game.unitAtScreen(Game.mouse.screenX, Game.mouse.screenY) : null;
+    const towPair = Game.getTowHoverPair ? Game.getTowHoverPair(towScreenHover) : null;
+    Game.hoverTowPair = towPair;
     const wantEnter = !inCmd
-        && ((canEnter && (canEnterBuilding || canEnterTransport)) || canEnterHorse);
+        && ((canEnter && (canEnterBuilding || canEnterTransport)) || canEnterHorse || !!towPair);
     const vp = document.getElementById('viewport');
     if (vp) vp.classList.toggle('cmd-enter', wantEnter);
 

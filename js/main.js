@@ -1120,6 +1120,7 @@ Game._pathBlockedByVehicle = (unit, lookAhead = 12) => {
     for (const o of Game.units) {
         if (!o.alive || o.id === unit.id) continue;
         if (unit._enterCarrierId === o.id) continue; // allow the boarding route to terminate at its truck
+        if (unit._towApproachTruckId === o.id) continue; // the hook-up route ends at this truck by design
         if (!(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
         if ((o.currentSpeed || 0) > 0.15) continue;
         if (Game.distSq(unit.x, unit.z, o.x, o.z) > (lookAhead + 8) * (lookAhead + 8)) continue;
@@ -1192,6 +1193,7 @@ Game._vehicleAvoid = (unit) => {
         for (const o of Game.units) {
             if (!o.alive || o.id === unit.id || !(Game.isTank(o.kind) || Game.isTruck(o.kind))) continue;
             if (unit._enterCarrierId === o.id) continue; // the assigned tailgate is intentionally on this hull
+            if (unit._towApproachTruckId === o.id) continue; // hook-up goal legitimately hugs this truck
             const oe = Game._vehicleHalfExtents ? Game._vehicleHalfExtents(o) : { hl: o.size * radMult, hw: o.size * radMult };
             const tr = Math.hypot(oe.hl, oe.hw);
             if (Game.distSq(goal.x, goal.z, o.x, o.z) < (tr + 0.4) * (tr + 0.4)
@@ -2346,9 +2348,12 @@ Game.canTow = (u) => Game.isVehicle(u) || ['supply', 'fuel', 'transport'].includ
 Game.isTowableAT = (u) => !!u && u.deployable && u.kind !== 'hmg';
 Game.towedBy = (tower) => Game.units.find(u => u.alive && u._towed && u._towedBy === tower.id) || null;
 Game.towHitchPoint = (tower) => ({
-    x: tower.x - Math.cos(tower.angle) * 2.0,
-    z: tower.z - Math.sin(tower.angle) * 2.0,
+    x: tower.x - Math.cos(tower.angle) * 1.4,
+    z: tower.z - Math.sin(tower.angle) * 1.4,
 });
+// Drawbar length: hitch to the towed gun's axle. Pivot 1.4 + drawbar 0.6 puts
+// the riding gun 2.0 behind the truck's centre — right on the tailgate.
+Game.TOW_DRAWBAR = 0.6;
 Game.transportEntryPoint = (carrier) => ({
     x: carrier.x - Math.cos(carrier.angle) * 1.82,
     z: carrier.z - Math.sin(carrier.angle) * 1.82,
@@ -2364,7 +2369,7 @@ Game.nearTowTarget = (tower, radius = 2.8) => {
     return best;
 };
 
-Game.towUnit = (tower, target) => {
+Game.towUnit = (tower, target, quiet = false) => {
     if (!tower.alive || !target.alive) return;
     if (!Game.canTow(tower)) return;
     if (!Game.isTowableAT(target)) { Game.pushMessage('Only anti-tank guns can be towed.', 1.5); return; }
@@ -2377,10 +2382,310 @@ Game.towUnit = (tower, target) => {
     target.path = [];
     target.moving = false;
     target.deployed = false; target._deployT = 0; // rides limbered
-    Game.pushMessage(`${tower.label} is towing ${target.label}.`, 2.0);
+    // Couple up straight behind the hitch; the trailer sim swings it from here.
+    const hitch = Game.towHitchPoint(tower);
+    target.angle = tower.angle + Math.PI;
+    target.x = Game.clamp(hitch.x + Math.cos(target.angle) * Game.TOW_DRAWBAR, 1, Game.WORLD_W - 1);
+    target.z = Game.clamp(hitch.z + Math.sin(target.angle) * Game.TOW_DRAWBAR, 1, Game.WORLD_H - 1);
+    // A manned gun's crew climbs aboard as real passengers (visible in the
+    // truck's passenger badge and unloadable like any infantry).
+    let crewBoarded = false;
+    if (Game.GUN_CREWS && Game.GUN_CREWS[target.kind] && !target._unmanned
+        && (target._crewAboard ?? 2) > 0) {
+        const kind = (Game.GUN_CREW_KINDS_BY_TEAM && Game.GUN_CREW_KINDS_BY_TEAM[target.team]) || 'fusilier';
+        const men = target._crewAboard ?? 2;
+        tower._passengers = tower._passengers || [];
+        for (let i = 0; i < men; i++) {
+            const man = Game.makeUnit(target.team, kind, tower.x, tower.z, {
+                group: 'crew',
+                aiState: target.team === Game.playerTeam ? 'player' : 'hold',
+            });
+            if (!man) continue;
+            man._crewOfGunId = target.id;
+            man._inVehicle = tower.id;
+            man._preCarrierStance = man.stance;
+            if (man.mesh) man.mesh.visible = false;
+            tower._passengers.push(man.id);
+        }
+        target._crewAboard = 0;
+        target._unmanned = true;
+        crewBoarded = true;
+    }
+    if (!quiet) Game.pushMessage(crewBoarded
+        ? `${tower.label} is towing ${target.label} — the crew rides on the truck.`
+        : `${tower.label} is towing ${target.label}.`, 2.0);
+};
+
+// ── Gun crews as real men: dismount to infantry, re-man like a horse ────────
+// Dismounting spawns the crew as ordinary foot soldiers beside the trails and
+// leaves the piece unmanned (it cannot move or fire). Any foot infantry can be
+// sent back onto an unmanned gun by clicking it; on arrival they are absorbed
+// and the gun works again.
+Game.GUN_CREW_KINDS_BY_TEAM = { french: 'fusilier', polish: 'rifleman', german: 'grenadier' };
+
+Game.dismountGunCrew = (gun) => {
+    if (!gun || !gun.alive || !(Game.GUN_CREWS && Game.GUN_CREWS[gun.kind])) return false;
+    if (gun._towed) { Game.pushMessage('Detach the gun from the truck first.', 1.6); return false; }
+    if (gun._unmanned) return false;
+    const kind = Game.GUN_CREW_KINDS_BY_TEAM[gun.team] || 'fusilier';
+    const men = gun._crewAboard ?? 2;
+    const behind = gun.angle + Math.PI;
+    for (let i = 0; i < men; i++) {
+        const side = i % 2 ? 1 : -1;
+        const x = Game.clamp(gun.x + Math.cos(behind) * 1.5
+            + Math.cos(gun.angle + Math.PI / 2) * side * 0.9, 1, Game.WORLD_W - 1);
+        const z = Game.clamp(gun.z + Math.sin(behind) * 1.5
+            + Math.sin(gun.angle + Math.PI / 2) * side * 0.9, 1, Game.WORLD_H - 1);
+        const man = Game.makeUnit(gun.team, kind, x, z, {
+            group: 'crew',
+            aiState: gun.team === Game.playerTeam ? 'player' : 'hold',
+        });
+        if (man) man._crewOfGunId = gun.id;
+    }
+    gun._crewAboard = 0;
+    gun._unmanned = true;
+    Game.pushMessage(`${gun.label}: crew dismounts.`, 1.8);
+    return true;
+};
+
+Game.orderManGun = (gun, candidates) => {
+    if (!gun || !gun.alive || gun._towed) return false;
+    const need = 2 - (gun._crewAboard || 0);
+    if (need <= 0) return false;
+    const takers = candidates.slice(0, need);
+    if (!takers.length) return false;
+    takers.forEach(u => {
+        u._enterGunId = gun.id;
+        u.forcedTargetId = null;
+        u._enterRec = null;
+        u._enterCarrierId = null;
+        if (Game.cancelQueuedPath) Game.cancelQueuedPath(u);
+        u.path = Game.findPath(u, u.x, u.z, gun.x, gun.z);
+        u.moving = true;
+        u.orderDelay = Game.commandDelay ? Game.commandDelay(u) : 0;
+    });
+    Game.pushMessage(`${takers.length} soldier${takers.length === 1 ? '' : 's'} moving to man ${gun.label}.`, 1.8);
+    return true;
+};
+
+Game.updateGunManning = () => {
+    for (const u of Game.units) {
+        if (!u.alive || u._enterGunId == null) continue;
+        const gun = Game.getUnitById(u._enterGunId);
+        if (!gun || !gun.alive || gun._towed || (gun._crewAboard || 0) >= 2) {
+            u._enterGunId = null;
+            continue;
+        }
+        if (Game.dist(u.x, u.z, gun.x, gun.z) < 1.5) {
+            u._enterGunId = null;
+            u.alive = false;
+            u._absorbed = true;
+            // He stepped onto the gun, he didn't die: skip the corpse
+            // promotion in the renderer (no phantom body left behind).
+            u._deathHandled = true;
+            u._noRemnant = true;
+            if (u.mesh) u.mesh.visible = false;
+            Game.selection.delete(u.id);
+            gun._crewAboard = (gun._crewAboard || 0) + 1;
+            if (gun._unmanned) {
+                gun._unmanned = false;
+                Game.pushMessage(`${gun.label} is manned again.`, 1.8);
+            }
+        }
+    }
+};
+
+// Hover affordance: a selected transport over a towable gun (or a selected
+// towable gun over a free transport) advertises click-to-attach. Works with
+// ANY selection size — the requirement of exactly one selected unit meant a
+// box-select or double-click selection made the right-click silently fall
+// through to a plain move order (walk to the truck and stand there), which
+// looked like the hook-up "not working". The mover is the nearest eligible
+// selected unit; an unmanned gun cannot move itself.
+Game.getTowHoverPair = (hoverUnit) => {
+    if (!hoverUnit || !hoverUnit.alive || hoverUnit.team !== Game.playerTeam) return null;
+    const sel = Game.selectedPlayerUnits().filter(u => u !== hoverUnit);
+    if (!sel.length) return null;
+    const truckFree = u => Game.isTruck(u.kind) && Game.canTow(u) && !Game.towedBy(u);
+    const gunFree = u => Game.isTowableAT(u) && !u._towed;
+    const nearest = (list) => list.sort((a, b) =>
+        Game.distSq(a.x, a.z, hoverUnit.x, hoverUnit.z)
+        - Game.distSq(b.x, b.z, hoverUnit.x, hoverUnit.z))[0];
+    if (gunFree(hoverUnit)) {
+        const truck = nearest(sel.filter(truckFree));
+        if (truck) return { mover: truck, truck, gun: hoverUnit };
+    }
+    if (truckFree(hoverUnit)) {
+        const gun = nearest(sel.filter(u => gunFree(u) && !u._unmanned));
+        if (gun) return { mover: gun, truck: hoverUnit, gun };
+    }
+    // Almost-pairs get a reason instead of a silent nothing (the click would
+    // otherwise just issue a plain move and look like a dead order).
+    if (truckFree(hoverUnit) && sel.some(u => gunFree(u) && u._unmanned)) {
+        Game.pushMessage('The gun has no crew — man it first, or bring the truck to it.', 2.4);
+    } else if (sel.some(truckFree) && Game.isTowableAT(hoverUnit) && hoverUnit._towed) {
+        Game.pushMessage(`${hoverUnit.label} is already being towed.`, 1.8);
+    } else if (sel.some(gunFree) && Game.isTruck(hoverUnit.kind) && Game.towedBy(hoverUnit)) {
+        Game.pushMessage(`${hoverUnit.label} is already towing a gun.`, 1.8);
+    }
+    return null;
+};
+
+// Forgiving pick for the click-to-attach flow: a click near (not exactly on)
+// the counterpart still counts, like enemyAtWorld does for attack orders.
+Game.towCounterpartAtWorld = (gx, gz, radius = 3.0) => {
+    let best = null, bd = radius * radius;
+    for (const u of Game.units) {
+        if (!u.alive || u.team !== Game.playerTeam) continue;
+        const eligible = (Game.isTruck(u.kind) && Game.canTow(u) && !Game.towedBy(u))
+            || (Game.isTowableAT(u) && !u._towed);
+        if (!eligible) continue;
+        const d = Game.distSq(gx, gz, u.x, u.z);
+        if (d < bd) { bd = d; best = u; }
+    }
+    return best;
+};
+
+// Where an approaching gun aims: past the hitch, clear of the truck's own
+// parked footprint, so A* can actually deliver the gun there.
+Game.towApproachPoint = (tower) => ({
+    x: tower.x - Math.cos(tower.angle) * 2.9,
+    z: tower.z - Math.sin(tower.angle) * 2.9,
+});
+
+// A truck never aims at the gun's exact spot: its bicycle steering orbits a
+// point it keeps overshooting. Stop short on the approach line; the hookup's
+// hold-and-swing closes the rest.
+Game.towTruckGoal = (truck, gun) => {
+    const d = Math.max(0.001, Game.dist(truck.x, truck.z, gun.x, gun.z));
+    const t = Math.max(0, (d - 4.2) / d);
+    return {
+        x: Game.clamp(truck.x + (gun.x - truck.x) * t, 1, Game.WORLD_W - 1),
+        z: Game.clamp(truck.z + (gun.z - truck.z) * t, 1, Game.WORLD_H - 1),
+    };
+};
+
+Game.orderTowApproach = (pair) => {
+    const { mover, truck, gun } = pair || {};
+    if (!mover || !truck || !gun) return false;
+    mover._towApproachTruckId = truck.id;
+    mover._towApproachGunId = gun.id;
+    mover._towProg = null;
+    mover._towRepathT = 0;
+    mover._towCoupleT = 0;
+    if (Game.cancelQueuedPath) Game.cancelQueuedPath(mover);
+    // A clean relocate: nothing may halt the approach to fight.
+    mover.orderMode = 'move';
+    mover.forcedTargetId = null;
+    mover._assaultGoal = null;
+    mover._engageId = null;
+    mover._inFiringPos = false;
+    const goal = mover === truck ? Game.towTruckGoal(truck, gun) : Game.towApproachPoint(truck);
+    if ((Game.isTank(mover.kind) || Game.isTruck(mover.kind)) && Game.queueVehiclePath
+        && Game.dist(mover.x, mover.z, goal.x, goal.z) > 20) {
+        mover.path = [];
+        Game.queueVehiclePath(mover, goal.x, goal.z, (path) => {
+            if (mover._towApproachGunId !== gun.id) return;
+            mover.path = path;
+        });
+    } else {
+        mover.path = Game.findPath(mover, mover.x, mover.z, goal.x, goal.z);
+    }
+    mover.moving = true;
+    mover.stopTimer = 0;
+    // No command-reaction delay: the crew hustles straight to the hook-up.
+    // (A deployed gun still takes its 1 s to limber before rolling.)
+    mover.orderDelay = 0;
+    Game.spawnOrderMarker(goal.x, goal.z, 0x55ccff);
+    Game.pushMessage(mover === truck
+        ? `${truck.label} moving to hook up ${gun.label}.`
+        : `${gun.label} moving to ${truck.label} for towing.`, 2.0);
+    return true;
+};
+
+Game.updateTowApproaches = (dt = 1 / 60) => {
+    for (const u of Game.units) {
+        if (!u.alive || u._towApproachGunId == null) continue;
+        const gun = Game.getUnitById(u._towApproachGunId);
+        const truck = Game.getUnitById(u._towApproachTruckId);
+        if (!gun || !gun.alive || !truck || !truck.alive
+            || gun._towed || Game.towedBy(truck)) {
+            u._towApproachGunId = null;
+            u._towApproachTruckId = null;
+            continue;
+        }
+        const gap = Game.dist(truck.x, truck.z, gun.x, gun.z);
+        // Sudden-Strike hookup: close in, the truck swings its rear toward
+        // the gun, and the coupling happens once roughly aligned. Inside the
+        // hold radius the mover stops and waits for the swing instead of
+        // chasing the rotating hitch point around the truck.
+        const HOLD = 5.4, ATTACH_ALIGN = 0.6;
+        const away = Game.angleTo(gun.x, gun.z, truck.x, truck.z);
+        const aligned = Math.abs(Game.angleDiff(truck.angle, away)) < ATTACH_ALIGN;
+        if (gap < 8) {
+            truck.angle = Game.rotateTo(truck.angle, away,
+                Math.max(truck.rotationSpeed || 0, 1.6) * dt);
+            truck.turretAngle = truck.angle;
+        }
+        if (gap < HOLD) {
+            u.path = [];
+            u.moving = false;
+            // The crew wheels the piece around on the spot (a gun can spin a
+            // full circle in place) so its trail meets the hitch while the
+            // truck swings its rear. And the coupling must NEVER hang on a
+            // perfect line-up: once close for a couple of seconds, hook up.
+            const rideAngle = Game.angleTo(truck.x, truck.z, gun.x, gun.z);
+            gun.angle = Game.rotateTo(gun.angle, rideAngle, 2.4 * dt);
+            if (gun.turretAngle != null) gun.turretAngle = gun.angle;
+            u._towCoupleT = (u._towCoupleT || 0) + dt;
+            if (aligned || u._towCoupleT > 2.5) {
+                u._towApproachGunId = null;
+                u._towApproachTruckId = null;
+                u._towCoupleT = 0;
+                Game.towUnit(truck, gun);
+            }
+        } else if (u === truck && gap < 9 && !gun._unmanned) {
+            // Sudden-Strike handoff: the truck parks close and the crew
+            // wheels the gun the last stretch (the truck's bicycle steering
+            // orbits tight goals; the gun is agile and never misses).
+            truck.path = [];
+            truck.moving = false;
+            truck._towApproachGunId = null;
+            truck._towApproachTruckId = null;
+            gun._towApproachGunId = gun.id;
+            gun._towApproachTruckId = truck.id;
+            const ap = Game.towApproachPoint(truck);
+            gun.path = Game.findPath(gun, gun.x, gun.z, ap.x, ap.z);
+            gun.moving = gun.path.length > 0;
+            gun.orderDelay = 0;
+        } else {
+            u._towCoupleT = 0;
+            // Mid-route watchdog. Two triggers: the path ran dry short of the
+            // hook-up (partial A* leg, counterpart moved), or the gap simply
+            // stopped shrinking — local avoidance cleared the path, or a
+            // parked hull keeps re-arming the stop timer. Either way re-path
+            // and keep driving: an approach order must never quietly die.
+            const pathDry = (!u.path || !u.path.length) && (u.stopTimer || 0) <= 0
+                && (u.orderDelay || 0) <= 0 && (u._deployT || 0) <= 0;
+            if (!u._towProg || gap < u._towProg.gap - 0.4) u._towProg = { gap, t: 0 };
+            else u._towProg.t += dt;
+            u._towRepathT = (u._towRepathT || 0) - dt;
+            if (((pathDry && u._towRepathT <= 0) || u._towProg.t > 2.0) && !u._routePending) {
+                u._towRepathT = 1.2;
+                u._towProg = { gap, t: 0 };
+                u.stopTimer = 0;
+                u.orderDelay = 0;
+                const goal = u === truck ? Game.towTruckGoal(truck, gun) : Game.towApproachPoint(truck);
+                u.path = Game.findPath(u, u.x, u.z, goal.x, goal.z);
+                u.moving = u.path.length > 0;
+            }
+        }
+    }
 };
 
 Game.updateTowing = (dt) => {
+    Game.updateGunManning();
+    Game.updateTowApproaches(dt);
     Game.units.forEach(u => {
         if (!u.alive || !u._towed) return;
         const tower = Game.units.find(t => t.id === u._towedBy && t.alive);
@@ -2391,11 +2696,21 @@ Game.updateTowing = (dt) => {
             u._towedBy = null;
             return;
         }
-        // Follow the towing vehicle from its rear hitch.
+        // Trailer kinematics, not a rigid weld: the gun pivots at the hitch
+        // and is DRAGGED — each frame it keeps its drawbar length along the
+        // previous hitch-to-gun direction, so it swings out through turns and
+        // straightens on the move. A jackknife clamp keeps it within ~55 deg
+        // of straight-behind.
         const hitch = Game.towHitchPoint(tower);
-        u.x = hitch.x;
-        u.z = hitch.z;
-        u.angle = tower.angle;
+        const DRAWBAR = Game.TOW_DRAWBAR;
+        let dx = u.x - hitch.x, dz = u.z - hitch.z;
+        const len = Math.hypot(dx, dz);
+        const straight = tower.angle + Math.PI;
+        let dir = len < 0.05 ? straight : Math.atan2(dz, dx);
+        dir = straight + Game.clamp(Game.angleDiff(straight, dir), -0.95, 0.95);
+        u.x = hitch.x + Math.cos(dir) * DRAWBAR;
+        u.z = hitch.z + Math.sin(dir) * DRAWBAR;
+        u.angle = dir;
     });
     Game.updateCarrierEntry(dt);
     Game.updateCarrierPassengers();
@@ -2424,6 +2739,28 @@ Game.untowUnit = (target) => {
     if (tower) tower._towedUnitId = null;
     target._towed = false;
     target._towedBy = null;
+    // The riding crew hops off beside the gun and mans it again (the manning
+    // loop absorbs them next tick, so this reads as one smooth motion).
+    if (tower && tower._passengers && tower._passengers.length) {
+        const crewIds = tower._passengers.filter(pid => {
+            const man = Game.getUnitById(pid);
+            return man && man._crewOfGunId === target.id;
+        });
+        crewIds.forEach((pid, i) => {
+            const man = Game.getUnitById(pid);
+            tower._passengers = tower._passengers.filter(id => id !== pid);
+            man._inVehicle = null;
+            man.stance = man._preCarrierStance || 'stand';
+            man._preCarrierStance = null;
+            man.x = Game.clamp(target.x + Game.rand(-0.8, 0.8), 1, Game.WORLD_W - 1);
+            man.z = Game.clamp(target.z + Game.rand(-0.8, 0.8), 1, Game.WORLD_H - 1);
+            man.y = Game.getHeight ? Game.getHeight(man.x, man.z) : 0;
+            if (man.mesh) man.mesh.visible = true;
+            man._enterGunId = target.id;
+            man.path = [];
+            man.moving = false;
+        });
+    }
     Game.pushMessage(`${target.label} un-towed.`, 1.5);
 };
 
@@ -5074,11 +5411,19 @@ Game.tick = (now) => {
 
     // Targeting cursor: red reticle when attack-move stance is set or a one-shot
     // target mode (attack-ground, grenade, smoke, air strike, rotate) is armed.
-    const wantAtkCursor = Game.orderStance === 'attack' || !!Game._commandMode;
-    if (wantAtkCursor !== Game._lastAtkCursor) {
+    // Unload aims a destination, not a target: it gets its own troops-out
+    // cursor instead of the attack reticle the other armed modes share.
+    const wantUnloadCursor = Game._commandMode === 'unload';
+    const wantAtkCursor = Game.orderStance === 'attack'
+        || (!!Game._commandMode && !wantUnloadCursor);
+    if (wantAtkCursor !== Game._lastAtkCursor || wantUnloadCursor !== Game._lastUnloadCursor) {
         Game._lastAtkCursor = wantAtkCursor;
+        Game._lastUnloadCursor = wantUnloadCursor;
         const vp = document.getElementById('viewport');
-        if (vp) vp.classList.toggle('cmd-attack', wantAtkCursor);
+        if (vp) {
+            vp.classList.toggle('cmd-attack', wantAtkCursor);
+            vp.classList.toggle('cmd-unload', wantUnloadCursor);
+        }
     }
 
     // DOM reconstruction and the minimap canvas do not need render-rate updates.
@@ -5161,6 +5506,11 @@ Game.boot = async () => {
         cmdProne: () => { Game.toggleProneSelection(); },
         cmdCavalry: () => { Game.toggleSelectedCavalry(); },
         cmdTow: () => { Game.toggleSelectedTow(); },
+        cmdCrew: () => {
+            const gun = Game.selectedPlayerUnits().find(u =>
+                Game.GUN_CREWS && Game.GUN_CREWS[u.kind] && !u._unmanned && !u._towed);
+            if (gun) Game.dismountGunCrew(gun);
+        },
         cmdCarrier: () => { Game.toggleSelectedCarrier(); },
         cmdUnload: () => {
             const carrier = Game.selectedPlayerUnits().find(u => u.supportType === 'transport');
