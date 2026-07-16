@@ -1,8 +1,18 @@
 {
- "version": "v0.19.0",
- "build": "4d073a1",
+ "version": "v0.19.1",
+ "build": "35da6e4",
  "generated": "2026-07-16",
  "commits": [
+  {
+   "hash": "35da6e4",
+   "date": "2026-07-16",
+   "subject": "tow hook-up clicks actually reach the tow logic"
+  },
+  {
+   "hash": "9633ff9",
+   "date": "2026-07-16",
+   "subject": "release v0.19.0"
+  },
   {
    "hash": "4d073a1",
    "date": "2026-07-16",
@@ -62,16 +72,6 @@
    "hash": "bc760fb",
    "date": "2026-07-14",
    "subject": "kill the mass-order freeze"
-  },
-  {
-   "hash": "03dbe37",
-   "date": "2026-07-14",
-   "subject": "railway-aware reference captures for the terrain model"
-  },
-  {
-   "hash": "e99fbb4",
-   "date": "2026-07-14",
-   "subject": "keep the Mokra railway visible in reference mode"
   }
  ]
 }

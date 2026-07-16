@@ -6,6 +6,14 @@ The start-mission screen's "Latest Updates" panel is generated from the git comm
 log (`scripts/gen-changelog.mjs` → `data/changelog.json`), so it stays current
 without hand-editing.
 
+## v0.19.1 — The Hook-Up That Cannot Fail
+
+- **The real cause of "the gun walks to the truck and stops", found and fixed.** Right-clicks are pre-classified as terrain orders before any interaction logic runs, and that classifier did not know about towing: with a gun selected, a right-click on a transport was captured as a plain move order — the tow logic never even saw the click. The classifier now recognises tow hook-ups (and manning an abandoned gun) as interactions. Proven by a new real-input contract that plays actual mouse clicks through the real handler: select the 47mm, right-click the truck, watch it drive, rotate and couple.
+- **Re-attaching right after a detach works now.** In the seconds after detaching, the gun is technically unmanned while its crew walks back — the attach click was silently refused and degraded into a plain move order, so the gun walked to the truck and just stood there. A crew walking back now counts as manned: the pair forms immediately, the gun waits for its crew, then drives to the back of the truck and couples. If the piece gets hitched while the crew is still en route, they chase the truck and climb aboard.
+- **A refused hook-up no longer turns into a dead move order:** the click is consumed and the reason is shown ("already towing a gun — detach it first", "the gun has no crew"). The hover cursor probe no longer risks spamming those messages.
+- **The gun drives to an exact point at the tailgate:** the approach path now ends at the precise rear-of-truck spot (appended like infantry boarding legs), not the nearest tile centre.
+- Verified with a new 47mm contract: eleven scenarios — short distances all around the truck, the real spawn cluster, and the detach-then-immediately-re-attach race — all couple in seconds, alongside the existing three suites.
+
 ## v0.19.0 — French Anti-Tank Guns and Truck Towing
 
 - **The Dyle line gets its guns:** the 25mm Hotchkiss and 47mm SA 37 anti-tank guns join the French roster as project-original CC0 models, with rolling wheels and French-uniformed crews who push, kneel, and serve the piece exactly like the Polish 75mm crew (the crew system is now data-driven per gun type).
