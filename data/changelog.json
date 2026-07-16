@@ -1,8 +1,28 @@
 {
- "version": "v0.18.0",
- "build": "18ebfee",
- "generated": "2026-07-15",
+ "version": "v0.19.0",
+ "build": "4d073a1",
+ "generated": "2026-07-16",
  "commits": [
+  {
+   "hash": "4d073a1",
+   "date": "2026-07-16",
+   "subject": "left-click selects, right-click acts"
+  },
+  {
+   "hash": "87cb4bf",
+   "date": "2026-07-16",
+   "subject": "transport trucks tow AT guns, Sudden Strike style"
+  },
+  {
+   "hash": "837f31b",
+   "date": "2026-07-16",
+   "subject": "French 25mm Hotchkiss and 47mm SA 37 AT guns with crews"
+  },
+  {
+   "hash": "d300f11",
+   "date": "2026-07-15",
+   "subject": "release v0.18.0"
+  },
   {
    "hash": "18ebfee",
    "date": "2026-07-15",
@@ -52,26 +72,6 @@
    "hash": "e99fbb4",
    "date": "2026-07-14",
    "subject": "keep the Mokra railway visible in reference mode"
-  },
-  {
-   "hash": "69434df",
-   "date": "2026-07-14",
-   "subject": "release v0.16.0"
-  },
-  {
-   "hash": "0102abb",
-   "date": "2026-07-14",
-   "subject": "selection ring shows through raised terrain"
-  },
-  {
-   "hash": "49d9356",
-   "date": "2026-07-14",
-   "subject": "infantry anti-tank doctrine, grenade close assault, passenger hits"
-  },
-  {
-   "hash": "35fd33e",
-   "date": "2026-07-14",
-   "subject": "rolling wheels and true pushing crew for the 75 mm Armata"
   }
  ]
 }

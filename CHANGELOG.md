@@ -6,6 +6,14 @@ The start-mission screen's "Latest Updates" panel is generated from the git comm
 log (`scripts/gen-changelog.mjs` → `data/changelog.json`), so it stays current
 without hand-editing.
 
+## v0.19.0 — French Anti-Tank Guns and Truck Towing
+
+- **The Dyle line gets its guns:** the 25mm Hotchkiss and 47mm SA 37 anti-tank guns join the French roster as project-original CC0 models, with rolling wheels and French-uniformed crews who push, kneel, and serve the piece exactly like the Polish 75mm crew (the crew system is now data-driven per gun type).
+- **Trucks tow guns, Sudden Strike style:** a transport can tow one AT gun. Right-click hooks up either way around — send the gun to the truck or the truck to the gun; close in, the truck swings its tailgate toward the gun while the crew wheels the piece around on the spot, and the two couple up. The crew climbs aboard as real passengers, the towed gun trails the truck on its drawbar and visibly swings through turns, and detaching drops the crew beside the trails where they re-man the gun automatically. Both Dyle AT guns now spawn already limbered behind their transports.
+- **Hook-ups don't die anymore:** an attach order mid-route can no longer be silently killed by parked vehicles near the coupling point, a starved stall timer, or a multi-unit selection (the old logic required exactly one selected unit and otherwise issued a plain move — the "walks to the truck and stands there" bug). A progress watchdog re-paths whenever the approach stops closing, and the coupling itself completes within a couple of seconds of getting close, never hanging on a perfect line-up. Verified by three headless contracts: a 16-position approach matrix, the spawn state, and a clutter suite (spawn cluster, adjacent trucks, a wall of parked tanks).
+- **Left-click selects, right-click acts:** mounting horses, manning guns, boarding transports and buildings, and tow hook-ups are right-click orders only; left-click now purely selects, like every other RTS. The unload command mode shows its own cursor.
+- **Units saved at Mokra's extraction edge** no longer leave a phantom body behind.
+
 ## v0.18.0 — The Full Battle of Mokra
 
 - **The mission now plays the whole day:** survive the five-minute hold and Armoured Train No. 53 Śmiały steams in from the north along the railway, its two 75 mm wagons pounding German forces west of the line before it withdraws. A counterattack window follows — clear the remaining Germans west of the railway — and then the brigade receives withdrawal orders: fall back and move every unit off the eastern map edge, where a pulsing extraction strip saves them. The final report counts units saved and extracted; losing the crossing during the ordered withdrawal is no longer a defeat.

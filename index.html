@@ -9,7 +9,7 @@
     // Production serves heavyweight public assets through the Bunny Pull Zone.
     // Localhost, previews and CI stay fully local. `?cdn=0` is an emergency
     // production bypass; `?cdn=1` lets a developer exercise Bunny locally.
-    window.UF_ASSET_VERSION = 'v0.18.0';
+    window.UF_ASSET_VERSION = 'v0.19.0';
     (function () {
       var CDN_ORIGIN = 'https://underfire.b-cdn.net';
       var productionHosts = ['underfire.io', 'www.underfire.io', 'underfire.b-cdn.net'];
@@ -1159,6 +1159,11 @@
        CREDITS.md), bright green + transparent + shadow. */
     #viewport.cmd-enter {
       cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none"><g transform="translate(0.6,0.9)" stroke="black" stroke-opacity="0.45" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H19V18C19 19.1 18.1 20 17 20H9"/><path d="M12 15L15 12L12 9M15 12H5"/></g><g stroke="%2339ff5e" stroke-opacity="0.9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H19V18C19 19.1 18.1 20 17 20H9"/><path d="M12 15L15 12L12 9M15 12H5"/></g></svg>') 16 16, pointer;
+    }
+    /* Unload mode armed: the enter icon reversed (troops OUT of the box),
+       cyan to match the unload waypoint marker. */
+    #viewport.cmd-unload {
+      cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none"><g transform="translate(0.6,0.9)" stroke="black" stroke-opacity="0.45" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4H5V18C5 19.1 5.9 20 7 20H15"/><path d="M16 15L19 12L16 9M19 12H9"/></g><g stroke="%2355ccff" stroke-opacity="0.92" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4H5V18C5 19.1 5.9 20 7 20H15"/><path d="M16 15L19 12L16 9M19 12H9"/></g></svg>') 16 16, pointer;
     }
     /* Attack button while armed (also used for any pre-click targeting mode) */
     .cmd-btn.armed {
@@ -2369,6 +2374,8 @@
               class="cmd-label">Dismount</span></div>
           <div class="cmd-btn" id="cmdTow" title="Join or unjoin a nearby anti-tank gun" style="display:none"><span class="cmd-icon">⛓</span><span
               class="cmd-label">Join</span></div>
+          <div class="cmd-btn" id="cmdCrew" title="Crew dismounts the gun" style="display:none"><span class="cmd-icon">♟</span><span
+              class="cmd-label">Crew off</span></div>
           <div class="cmd-btn" id="cmdCarrier" title="Load or unload infantry" style="display:none"><span class="cmd-icon">⇥</span><span
               class="cmd-label">Load</span></div>
           <div class="cmd-btn" id="cmdUnload" title="Unload infantry" style="display:none"><span class="cmd-badge" id="unloadBadge">0</span><span class="cmd-icon">⇤</span><span
