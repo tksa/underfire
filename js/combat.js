@@ -94,6 +94,7 @@ Game.applyShot = (shooter, target) => {
 
     // Barrel tip position — try to get from actual 3D gun mesh
     const isTankShooter = Game.isTank(shooter.kind);
+    const crewedGun = Game.GUN_CREWS && Game.GUN_CREWS[shooter.kind];
     const isFieldGunShooter = shooter.kind === 'fieldgun75';
     const isHeavyGunShooter = isTankShooter || isFieldGunShooter;
     const fireAngle = isTankShooter ? (shooter.turretAngle || shooter.angle) : shooter.angle;
@@ -126,7 +127,9 @@ Game.applyShot = (shooter, target) => {
             muzzleZ = shooter.z + Math.sin(fireAngle) * 4.0;
         }
     } else {
-        const barrelLen = isTankShooter ? 4.0 : (isFieldGunShooter ? 1.15 : 0.6);
+        // Crewed guns carry their measured barrel-tip offset so muzzle flash
+        // and tracers leave the actual muzzle, not the carriage.
+        const barrelLen = isTankShooter ? 4.0 : (crewedGun && crewedGun.muzzle) || 0.6;
         muzzleX = shooter.x + Math.cos(fireAngle) * barrelLen;
         muzzleZ = shooter.z + Math.sin(fireAngle) * barrelLen;
     }
@@ -349,6 +352,8 @@ Game.applyShot = (shooter, target) => {
                     if (inf.hp <= 0) {
                         inf.hp = 0;
                         inf.alive = false;
+                        inf._deathHandled = true;   // died aboard: no body outside
+                        inf._noRemnant = true;
                         inf._inVehicle = null;
                         target._passengers = target._passengers.filter(id => id !== pid);
                         if (inf.mesh) inf.mesh.visible = false;

@@ -1211,11 +1211,6 @@ Game._loadUnitModel = (unit, mesh) => {
         french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1,
         german_panzer3: 1.35,
         polish_fieldgun75: 1.0,
-        // Sized against the German armor they fight: a 7TP (4.6 m) matches a
-        // Panzer II (4.8 m, scale 1.0); the TKS is a car-sized tankette
-        // (2.56 m) kept slightly above strict scale for readability.
-        polish_7tp: 1.0, polish_7tp_dw: 1.0, polish_7tp_dwr: 1.0,
-        polish_tks20: 0.8, polish_tks: 0.8,
         // The mounted asset is 15% smaller than its earlier tuning
         // (0.72 × 0.85 = 0.612); its parked clone keeps this exact horse scale.
         polish_mounted_ulan: 0.612,
@@ -1736,7 +1731,7 @@ Game._loadUnitModel = (unit, mesh) => {
             // ── 10. Add wrapper to unit mesh group ──
             mesh.add(modelWrapper);
             mesh.userData.modelWrapper = modelWrapper;
-            if (unit.kind === 'fieldgun75' && Game.attachFieldGunCrew) {
+            if (Game.GUN_CREWS && Game.GUN_CREWS[unit.kind] && Game.attachFieldGunCrew) {
                 Game.attachFieldGunCrew(unit, mesh);
             }
             // Soldier model: tag + remember its base orientation/height so the
@@ -2043,6 +2038,9 @@ Game.MODEL_YAW = Game.MODEL_YAW || {
     // Authored muzzle points local -X; after automatic X-axis normalization,
     // this half-turn makes the bore face the engine's local +Z forward.
     polish_fieldgun75: Math.PI,
+    // The AT guns are authored like the Armata (muzzle -X, trail +X).
+    french_at25: Math.PI,
+    french_at47: Math.PI,
     polish_mounted_ulan: Math.PI,
 };
 Game.MODEL_Y_TRIM = Game.MODEL_Y_TRIM || {};
@@ -2052,6 +2050,8 @@ Game.MODEL_SCALE = Game.MODEL_SCALE || {
     french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35,
     french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1,
     polish_mounted_ulan: 0.612, // 0.72 × 0.85: mounted pair is 15% smaller
+    polish_tks20: 0.8, polish_tks: 0.8,   // car-sized tankettes
+    french_at47: 1.44,                     // reads undersized next to the 25mm (two +20% passes)
 };
 
 // Rebuild the loaded model for every live unit of a teamKind, re-reading the
@@ -2063,7 +2063,7 @@ Game.reloadModelFor = (teamKind) => {
     Game.units.forEach(u => {
         if (!u.alive || !u.mesh) return;
         if (`${u.team}_${u.kind}` !== teamKind) return;
-        if (u.kind === 'fieldgun75' && Game.detachFieldGunCrew) {
+        if (Game.GUN_CREWS && Game.GUN_CREWS[u.kind] && Game.detachFieldGunCrew) {
             Game.detachFieldGunCrew(u.mesh);
         }
         const w = u.mesh.userData.modelWrapper;

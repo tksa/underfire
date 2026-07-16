@@ -26,6 +26,41 @@ Game.FIELDGUN75_CREW_PLACEMENTS = Object.freeze([
     Object.freeze({ x:  0.23, z: 0.54, phase: 0.50, restStance: 'crouch', role: 'trail_right' }),
 ]);
 
+// Crewed guns: which kinds get the soldier crew, rolling wheels, and the
+// push/kneel behaviour. The Polish 75 mm pioneered the system; the French
+// 25 mm Hotchkiss reuses it with French-skinned clones of the same rig.
+// `muzzle` is the world-unit barrel-tip offset applyShot fires from.
+Game.GUN_CREWS = Object.freeze({
+    fieldgun75: Object.freeze({
+        placements: Game.FIELDGUN75_CREW_PLACEMENTS,
+        muzzle: 1.15,
+    }),
+    at47: Object.freeze({
+        // The 47 mm SA 37: same crew layout as the Hotchkiss, longer barrel.
+        placements: Object.freeze([
+            Object.freeze({ x: -0.21, z: 0.40, phase: 0.00, restStance: 'crouch', role: 'trail_left' }),
+            Object.freeze({ x:  0.21, z: 0.52, phase: 0.50, restStance: 'crouch', role: 'trail_right' }),
+        ]),
+        muzzle: 0.85,
+    }),
+    at25: Object.freeze({
+        // The Hotchkiss is a much smaller piece: the two crewmen kneel close
+        // behind its split trails.
+        placements: Object.freeze([
+            Object.freeze({ x: -0.20, z: 0.36, phase: 0.00, restStance: 'crouch', role: 'trail_left' }),
+            Object.freeze({ x:  0.20, z: 0.48, phase: 0.50, restStance: 'crouch', role: 'trail_right' }),
+        ]),
+        muzzle: 0.75,
+    }),
+});
+
+// Per-team fallback palettes for the placeholder figures (the real crew path
+// uses applySoldierSkin on the shared rig, keyed by the unit's own team).
+Game.GUN_CREW_FALLBACK_SKINS = Object.freeze({
+    polish: Object.freeze({ coatFallback: 0xa29f78, helmet: 0x5d6245, skin: 0xcaa987 }),
+    french: Object.freeze({ coatFallback: 0x7d86a0, helmet: 0x4c5566, skin: 0xcaa987 }),
+});
+
 Game.FIELDGUN_PUSH_KEYS = Object.freeze([
     { hipL: -0.52, hipR:  0.34, kneeL: 0.12, kneeR: 0.48, bob:  0.000, torso: 0.30, armL: -1.15, armR: -1.10 },
     { hipL: -0.28, hipR:  0.48, kneeL: 0.06, kneeR: 0.34, bob: -0.018, torso: 0.33, armL: -1.20, armR: -1.07 },
@@ -369,12 +404,15 @@ Game._loadFieldGunSoldierCrew = async (unit, unitMesh, crew) => {
         && crew.userData.loadToken === token
         && unitMesh.userData.modelWrapper === gunWrapper
         && (!Game.getUnitById || unit.id == null || Game.getUnitById(unit.id) === unit);
-    const placements = Game.FIELDGUN75_CREW_PLACEMENTS;
+    const config = (Game.GUN_CREWS && Game.GUN_CREWS[unit.kind]) || Game.GUN_CREWS.fieldgun75;
+    const placements = config.placements;
     const models = await Promise.all(placements.map(() => Game.loadModel(Game.SOLDIER_MODEL_PATH)));
     if (!isCurrent()) return false;
 
     const figures = models.map((model, index) => {
-        Game.applySoldierSkin(model, Game.TEAM.POLISH, 'fieldgun_crew');
+        // Skin the shared rig for the GUN'S team: Polish crews for the 75 mm,
+        // French crews for the Hotchkiss, without new animation work.
+        Game.applySoldierSkin(model, unit.team, 'fieldgun_crew');
         return Game._makeFieldGunSoldierCrewman(model, placements[index], index);
     });
     if (!isCurrent()) return false;
@@ -391,7 +429,8 @@ Game._loadFieldGunSoldierCrew = async (unit, unitMesh, crew) => {
 };
 
 Game.attachFieldGunCrew = (unit, unitMesh) => {
-    if (!unit || unit.kind !== 'fieldgun75' || !unitMesh || !Game.THREE) return false;
+    const config = unit && Game.GUN_CREWS && Game.GUN_CREWS[unit.kind];
+    if (!unit || !config || !unitMesh || !Game.THREE) return false;
     const THREE = Game.THREE;
     const old = unitMesh.userData.fieldGunCrew;
     if (old) {
@@ -400,15 +439,16 @@ Game.attachFieldGunCrew = (unit, unitMesh) => {
 
     const crew = new THREE.Group();
     crew.name = 'fieldGunCrew';
-    const skin = Game.FIELDGUN75_CREW_SKIN;
-    const polishCoat = new THREE.Color(
-        (Game.SOLDIER_SKIN_TINT && Game.SOLDIER_SKIN_TINT.polish)
+    const skin = (Game.GUN_CREW_FALLBACK_SKINS && Game.GUN_CREW_FALLBACK_SKINS[unit.team])
+        || Game.FIELDGUN75_CREW_SKIN;
+    const coat = new THREE.Color(
+        (Game.SOLDIER_SKIN_TINT && Game.SOLDIER_SKIN_TINT[unit.team])
         || skin.coatFallback
     );
     const materials = {
-        coat: new THREE.MeshStandardMaterial({ color: polishCoat, roughness: 0.92 }),
+        coat: new THREE.MeshStandardMaterial({ color: coat, roughness: 0.92 }),
         trousers: new THREE.MeshStandardMaterial({
-            color: polishCoat.clone().multiplyScalar(0.72), roughness: 0.95,
+            color: coat.clone().multiplyScalar(0.72), roughness: 0.95,
         }),
         boots: new THREE.MeshStandardMaterial({ color: 0x211b16, roughness: 0.96 }),
         leather: new THREE.MeshStandardMaterial({ color: 0x38281b, roughness: 0.88 }),
@@ -419,7 +459,7 @@ Game.attachFieldGunCrew = (unit, unitMesh) => {
     // Two cheap articulated figures cover the short async load window and are
     // retained only if the shared soldier asset fails. The normal path below
     // replaces them with the two proper crewmen.
-    const positions = Game.FIELDGUN75_CREW_PLACEMENTS.slice(0, 2);
+    const positions = config.placements.slice(0, 2);
     crew.userData.figures = positions.map((placement, index) => {
         const figure = Game._makeFieldGunCrewman(materials);
         figure.name = `fieldGunCrewman_${index + 1}`;
@@ -438,15 +478,16 @@ Game.attachFieldGunCrew = (unit, unitMesh) => {
     // Crew are siblings of modelWrapper, so they do not inherit MODEL_YAW.
     // Apply only the per-model correction (not the wrapper's automatic -90°)
     // to put them behind the now +Z-facing bore and facing its breech.
-    crew.rotation.y = (Game.MODEL_YAW && Game.MODEL_YAW.polish_fieldgun75) || 0;
-    crew.userData.skinTeam = skin.team;
-    crew.userData.uniformTint = polishCoat.getHex();
+    crew.rotation.y = (Game.MODEL_YAW && Game.MODEL_YAW[`${unit.team}_${unit.kind}`]) || 0;
+    crew.userData.skinTeam = unit.team;
+    crew.userData.uniformTint = coat.getHex();
     crew.userData.materials = materials;
     crew.userData.crewMode = 'fallback';
-    crew.userData.expectedCrewCount = Game.FIELDGUN75_CREW_COUNT;
+    crew.userData.expectedCrewCount = config.placements.length;
     crew.userData.loadToken = {};
     unitMesh.add(crew);
     unitMesh.userData.fieldGunCrew = crew;
+    unit._crewAboard = unit._crewAboard ?? config.placements.length;
     unitMesh.userData.fieldGunPushTime = 0;
     unitMesh.userData.fieldGunPushBlend = 0;
     Game.updateFieldGunCrew(unit, 0);
@@ -454,7 +495,7 @@ Game.attachFieldGunCrew = (unit, unitMesh) => {
         if (unitMesh.userData.fieldGunCrew !== crew || !crew.userData.loadToken) return;
         if (!Game._fieldGunCrewLoadWarned) {
             Game._fieldGunCrewLoadWarned = true;
-            console.warn('Polish field-gun crew model failed; using lightweight fallback.', error);
+            console.warn('Gun crew model failed; using lightweight fallback.', error);
         }
     });
     return true;
@@ -563,6 +604,14 @@ Game.updateFieldGunCrew = (unit, dt) => {
     const crew = ud && ud.fieldGunCrew;
     if (Game.updateFieldGunWheels) Game.updateFieldGunWheels(unit, dt);
     if (!crew || !crew.userData.figures) return;
+    // Towed: the crew has climbed aboard the towing truck. Unmanned: they
+    // dismounted as real infantry. Either way the decorative crew hides
+    // (wheels above keep rolling while towed).
+    if (unit._towed || unit._unmanned) {
+        crew.visible = false;
+        return;
+    }
+    if (!crew.visible) crew.visible = true;
     const speed = unit._dispSpeed != null ? unit._dispSpeed : (unit.currentSpeed || 0);
     // Hysteresis: engage the push at walk-clip pace (0.3, as _chooseClip), and
     // drop it at the PROCEDURAL GAIT threshold (0.2, _soldierProceduralLegs),

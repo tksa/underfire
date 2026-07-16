@@ -117,6 +117,12 @@ flyover. philano does not endorse Under Fire.
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 (Textures recompressed for web; geometry unchanged.)
 
+The **25 mm Hotchkiss** (`models/french_at25.glb`) and **47 mm SA 37**
+(`models/french_at47.glb`) anti-tank guns are
+original models created for Under Fire by the project owner, released as
+**CC0 / public domain**. (Wheels split into hub-pivoted nodes for rolling,
+textures downscaled/re-encoded in-engine processing.)
+
 The **Renault AHN3 supply truck** (`models/french_supply.glb`) and the
 **Laffly fuel truck** (`models/french_fuel.glb`) are original models created for
 Under Fire by the project, released as **CC0 / public domain**.
