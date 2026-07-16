@@ -2604,6 +2604,18 @@ Game.towTruckGoal = (truck, gun) => {
 Game.orderTowApproach = (pair) => {
     const { mover, truck, gun } = pair || {};
     if (!mover || !truck || !gun) return false;
+    // One approach per pair: any other unit still hunting this gun or truck
+    // (an earlier order, or the other member as mover) stands down first.
+    for (const o of Game.units) {
+        if (o !== mover && o.alive
+            && (o._towApproachGunId === gun.id || o._towApproachTruckId === truck.id)) {
+            o._towApproachGunId = null;
+            o._towApproachTruckId = null;
+            if (o !== gun && o !== truck) continue;
+            o.path = [];
+            o.moving = false;
+        }
+    }
     mover._towApproachTruckId = truck.id;
     mover._towApproachGunId = gun.id;
     mover._towProg = null;
@@ -2668,15 +2680,25 @@ Game.updateTowApproaches = (dt = 1 / 60) => {
         if (gap < HOLD) {
             u.path = [];
             u.moving = false;
-            // The crew wheels the piece around on the spot (a gun can spin a
-            // full circle in place) so its trail meets the hitch while the
-            // truck swings its rear. And the coupling must NEVER hang on a
-            // perfect line-up: once close for a couple of seconds, hook up.
+            // The crew wheels the piece the last stretch BY HAND: rotate it
+            // to ride orientation and walk it onto the hitch while the truck
+            // swings its rear. The gun physically arrives — no long-range
+            // snap (attaching from 5 units away read as the gun "vanishing
+            // into the truck"). Couple once it genuinely reaches the hitch.
+            const hitch = Game.towHitchPoint(truck);
             const rideAngle = Game.angleTo(truck.x, truck.z, gun.x, gun.z);
             gun.angle = Game.rotateTo(gun.angle, rideAngle, 2.4 * dt);
             if (gun.turretAngle != null) gun.turretAngle = gun.angle;
+            let hd = Game.dist(gun.x, gun.z, hitch.x, hitch.z);
+            if (!gun._unmanned && hd > 0.01) {
+                gun._hookupT = Game.gameClock || 0;   // stay limbered, wheels rolling
+                const step = Math.min(hd, Math.max(gun.speed || 1.5, 1.2) * 0.85 * dt);
+                gun.x += (hitch.x - gun.x) / hd * step;
+                gun.z += (hitch.z - gun.z) / hd * step;
+                hd -= step;
+            }
             u._towCoupleT = (u._towCoupleT || 0) + dt;
-            if (aligned || u._towCoupleT > 2.5) {
+            if (hd < 1.3 || (u._towCoupleT > 5 && hd < 2.6)) {
                 u._towApproachGunId = null;
                 u._towApproachTruckId = null;
                 u._towCoupleT = 0;

@@ -189,7 +189,9 @@ Game.uMod.deploy = (unit, ctx) => {
     if (!unit.deployable) return;
     unit._deployT = Math.max(0, (unit._deployT || 0) - ctx.dt);
     const wantsMove = !!(unit.path && unit.path.length > 0)
-        || unit._towApproachGunId != null;   // approaching a hook-up: stay limbered
+        || unit._towApproachGunId != null    // approaching a hook-up: stay limbered
+        // …or being wheeled onto a hitch by its crew (mover may be the truck)
+        || ((Game.gameClock || 0) - (unit._hookupT || -10) < 0.5);
     if (wantsMove && unit.deployed && unit._deployT <= 0) {
         unit.deployed = false;
         unit._deployT = 1.0;
@@ -1648,7 +1650,13 @@ Game.uMod.move = (unit, ctx) => {
     if (unit.path && unit.path.length && maxSpeed > 0
         && (unit.stopTimer || 0) <= 0 && (unit.orderDelay || 0) <= 0 && !unit._reverseMove) {
         const moved = Math.hypot(unit.x - prevX, unit.z - prevZ);
-        if (moved < 0.03) {
+        // "No real headway" must be judged against THIS unit's own pace. A flat
+        // 0.03/frame branded the slowest units (the 47mm AT gun walks 0.014 to
+        // 0.025 per frame at 60fps) as permanently stuck while moving normally:
+        // three phantom "replans" later the settle below deleted their path
+        // mid-map — the reported "it moves and then suddenly stops".
+        const stuckStep = Math.min(0.03, maxSpeed * dt * 0.45);
+        if (moved < stuckStep) {
             unit._stuckT = (unit._stuckT || 0) + dt;
             // A recent failed recovery search put this unit on backoff: retrying
             // the same impossible goal every stall tick is what churned frames.
@@ -1698,8 +1706,17 @@ Game.uMod.move = (unit, ctx) => {
                         unit._crawlT = Math.max(unit._crawlT || 0, 0.5);
                         unit._stuckReplans = 0;
                     } else {
-                        // Packed infantry at an objective settle instead of churning.
-                        unit.path = []; unit.moving = false; unit._stuckReplans = 0;
+                        // Packed infantry AT the objective settle instead of
+                        // churning — but only near it. Far from the goal this
+                        // silently deleted the player's order; re-path instead.
+                        const goal = unit.path[unit.path.length - 1];
+                        if (Game.dist(unit.x, unit.z, goal.x, goal.z) < 4) {
+                            unit.path = []; unit.moving = false;
+                        } else {
+                            unit.path = Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
+                            unit.moving = unit.path.length > 0;
+                        }
+                        unit._stuckReplans = 0;
                     }
                 } else {
                     unit._detour = null;
@@ -1724,8 +1741,11 @@ Game.uMod.move = (unit, ctx) => {
                             unit.path = Game._restoreTruckRecovery(unit, recovery);
                         }
                     } else {
+                        // Foot troops and crew-pushed guns re-plan on the tile
+                        // grid; the vehicle recovery search runs in hull
+                        // configuration space and returns nothing for them.
                         const goal = unit.path[unit.path.length - 1];
-                        unit.path = Game._vehicleRecoveryRoute(unit, goal, 'stuck');
+                        unit.path = Game.findPath(unit, unit.x, unit.z, goal.x, goal.z);
                     }
                     unit.moving = unit.path.length > 0;
                 }

@@ -207,6 +207,19 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false,
         unit._enterGunId = null;
         unit._towApproachGunId = null;
         unit._towApproachTruckId = null;
+        // Cancel the COUNTERPART's hook-up too: a truck still holding an
+        // approach toward this gun (or a gun heading for this truck) must not
+        // keep hunting a unit the player has since ordered elsewhere — that
+        // stale approach could couple the gun mid-move.
+        for (const o of Game.units) {
+            if (o !== unit && o.alive
+                && (o._towApproachGunId === unit.id || o._towApproachTruckId === unit.id)) {
+                o._towApproachGunId = null;
+                o._towApproachTruckId = null;
+                o.path = [];
+                o.moving = false;
+            }
+        }
         if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(unit); // ends guard/at-ease
         // Group pace cap: armor/trucks wait for the slowest member (cleared on arrival).
         if (groupMove && !isQueued) { unit._groupSpeed = groupSpeed; unit._groupMoveActive = true; }
