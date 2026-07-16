@@ -6,6 +6,13 @@ The start-mission screen's "Latest Updates" panel is generated from the git comm
 log (`scripts/gen-changelog.mjs` → `data/changelog.json`), so it stays current
 without hand-editing.
 
+## v0.19.2 — The Slowest Gun Walks Again
+
+- **The 47mm can complete a move order.** The engine's stuck-detector used a flat per-frame headway threshold that the game's slowest unit walks UNDER at 60fps — so the 47mm was treated as permanently wedged while moving normally, force-"replanned" through a vehicle-only recovery search that returns nothing for a crew-pushed gun, and after three strikes had its path silently deleted mid-map. That was the recurring "it moves and then suddenly stops", diagnosed from the player's own movement recording. The threshold now scales with each unit's speed, foot units and guns re-plan on the tile grid, and the crowd-settle that deleted paths can only fire near the destination.
+- **No more teleport coupling.** Attaching could snap a gun to the hitch from over five units away — it looked like the gun vanishing into the truck. The crew now physically wheels the piece onto the hitch and it couples only on genuine contact.
+- **Stale hook-ups stand down.** An old attach order held by the other member of the pair is cancelled by any new order to either unit, so a forgotten hook-up can never grab a gun the player has since sent elsewhere.
+- New contract replays the player's recording verbatim (same positions, same click) plus stale-override, open-field haul, and truck-skimming variants; all six suites (47 checks) pass.
+
 ## v0.19.1 — The Hook-Up That Cannot Fail
 
 - **The real cause of "the gun walks to the truck and stops", found and fixed.** Right-clicks are pre-classified as terrain orders before any interaction logic runs, and that classifier did not know about towing: with a gun selected, a right-click on a transport was captured as a plain move order — the tow logic never even saw the click. The classifier now recognises tow hook-ups (and manning an abandoned gun) as interactions. Proven by a new real-input contract that plays actual mouse clicks through the real handler: select the 47mm, right-click the truck, watch it drive, rotate and couple.

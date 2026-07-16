@@ -1,8 +1,18 @@
 {
- "version": "v0.19.1",
- "build": "35da6e4",
+ "version": "v0.19.2",
+ "build": "2080121",
  "generated": "2026-07-16",
  "commits": [
+  {
+   "hash": "2080121",
+   "date": "2026-07-16",
+   "subject": "slow units complete moves"
+  },
+  {
+   "hash": "5725a7a",
+   "date": "2026-07-16",
+   "subject": "release v0.19.1"
+  },
   {
    "hash": "35da6e4",
    "date": "2026-07-16",
@@ -62,16 +72,6 @@
    "hash": "378a417",
    "date": "2026-07-14",
    "subject": "release v0.16.1"
-  },
-  {
-   "hash": "c7009d6",
-   "date": "2026-07-14",
-   "subject": "terrain-hugging selection ring"
-  },
-  {
-   "hash": "bc760fb",
-   "date": "2026-07-14",
-   "subject": "kill the mass-order freeze"
   }
  ]
 }
