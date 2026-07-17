@@ -1072,7 +1072,7 @@ Game._waterSparkleTex = () => {
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     return tex;
 };
-Game.WATER_SPARKLE = { intensity: 1.55, scale: 6, speed: 2.9 };
+Game.WATER_SPARKLE = { intensity: 0.55, scale: 3.5, speed: 0.3 };
 
 Game._buildWaterSurface = () => {
     Game._waterFX = null;
@@ -1112,7 +1112,10 @@ Game._buildWaterSurface = () => {
             const a = Game._waterEdgeAlphaAt(wx, wz);
             const i = (y * CW + x) * 4;
             if (a <= 0.003) { d[i + 3] = 0; continue; }
-            const depth = Game._waterDepth01At ? Game._waterDepth01At(wx, wz) : a;
+            // pow curve: saturate depth colour sooner, so a narrow river's
+            // mid-stream reads as WATER, not a pale translucent film
+            const depthRaw = Game._waterDepth01At ? Game._waterDepth01At(wx, wz) : a;
+            const depth = Math.pow(depthRaw, 0.62);
             let r = shallow[0] + (deep[0] - shallow[0]) * depth;
             let g = shallow[1] + (deep[1] - shallow[1]) * depth;
             let b = shallow[2] + (deep[2] - shallow[2]) * depth;
@@ -1122,8 +1125,10 @@ Game._buildWaterSurface = () => {
             g += (foamC[1] - g) * foam;
             b += (foamC[2] - b) * foam;
             d[i] = r; d[i + 1] = g; d[i + 2] = b;
-            // riffles nearly see-through (gravel bed shows), pools near-opaque
-            d[i + 3] = Math.round(a * (108 + 106 * depth));
+            // riffles translucent (gravel bed still reads), pools near-opaque;
+            // alpha floor raised from 108 — the old value made the whole river
+            // look like a milky film over the bed instead of a body of water
+            d[i + 3] = Math.round(a * (150 + 92 * depth));
         }
     }
     ctx.putImageData(img, 0, 0);
@@ -1131,73 +1136,328 @@ Game._buildWaterSurface = () => {
     map.colorSpace = THREE.SRGBColorSpace;
 
     const normalMap = Game._makeWaterNormalTex();
-    normalMap.repeat.set(w / 14, hSpan / 14);   // ripple wavelength a few metres
+    normalMap.repeat.set(w / 14, hSpan / 14);   // still used by the neural-bake overlay
 
-    const sparkle = Game._waterSparkleTex();
-    const spScale = (Game.WATER_SPARKLE && Game.WATER_SPARKLE.scale) || 6;
-    sparkle.repeat.set(w / spScale, hSpan / spScale);
-    const mat = new THREE.MeshStandardMaterial({
-        map, normalMap,
-        normalScale: new THREE.Vector2(0.5, 0.35),
-        transparent: true, depthWrite: false,
-        roughness: 0.16, metalness: 0.05,
-        emissive: 0xfff6d6,
-        emissiveMap: sparkle,
-        emissiveIntensity: (Game.WATER_SPARKLE && Game.WATER_SPARKLE.intensity) || 1.55,
+    // Custom water shader. The old MeshStandardMaterial + scrolling normal/
+    // emissive textures read as "a pattern slid over the ground", because that
+    // is literally what it was. Here the ripples are computed procedurally in
+    // WORLD space (sums of directional waves — no tiling texture to spot), the
+    // sky reflection comes from a fresnel term against the real view direction,
+    // and the sun glints are true specular sparks that live on ripple facets.
+    // EVERY parameter is a uniform, re-copied from the debug-tunable config
+    // objects each frame in updateWaterFX, so the sliders always take effect.
+    const uniforms = THREE.UniformsUtils.merge([
+        THREE.UniformsLib.fog,
+        {
+            uBase:      { value: null },
+            uTime:      { value: Game.rand(0, 100) },
+            uSunDir:    { value: new THREE.Vector3(0.45, 0.78, -0.34) },
+            uSunColor:  { value: new THREE.Color(1.0, 0.9, 0.72) },
+            uCamDir:    { value: new THREE.Vector3(0.3, 0.7, 0.65) },
+            uSkyColor:  { value: new THREE.Color(0xa3ab99) },   // warm pale sage — steel blue clashed with the golden fields
+            uBright:    { value: 0.2 },
+            uReflect:   { value: 0.82 },
+            uScale:     { value: 0.5 },
+            uAmp:       { value: 1.2 },
+            uBroadAmp:  { value: 0.8 },
+            uLapAmp:    { value: 1.1 },
+            uLapSpeed:  { value: 0.5 },
+            uChopBase:  { value: 0.72 },
+            uChopGust:  { value: 1.02 },
+            uGustCover: { value: 0.54 },
+            uGlintGain: { value: 0.55 },
+            uGlintSharp:{ value: 156.0 },
+            uGlintScale:{ value: 3.43 },
+            uGlintRate: { value: 0.3 },
+            uGlintFloor:{ value: 0.42 },
+            uBurst:     { value: 0.5 },
+        },
+    ]);
+    uniforms.uBase.value = map;
+    const mat = new THREE.ShaderMaterial({
+        uniforms,
+        fog: true,
+        transparent: true,
+        depthWrite: false,
+        vertexShader: /* glsl */`
+            varying vec2 vUv;
+            varying vec3 vWorld;
+            #include <fog_pars_vertex>
+            void main() {
+                vUv = uv;
+                vec4 wp = modelMatrix * vec4(position, 1.0);
+                vWorld = wp.xyz;
+                vec4 mvPosition = viewMatrix * wp;
+                gl_Position = projectionMatrix * mvPosition;
+                #include <fog_vertex>
+            }`,
+        fragmentShader: /* glsl */`
+            uniform sampler2D uBase;
+            uniform float uTime;
+            uniform vec3 uSunDir;
+            uniform vec3 uSunColor;
+            uniform vec3 uCamDir;
+            uniform vec3 uSkyColor;
+            uniform float uBright;
+            uniform float uReflect;
+            uniform float uScale;
+            uniform float uAmp;
+            uniform float uBroadAmp;
+            uniform float uLapAmp;
+            uniform float uLapSpeed;
+            uniform float uChopBase;
+            uniform float uChopGust;
+            uniform float uGustCover;
+            uniform float uGlintGain;
+            uniform float uGlintSharp;
+            uniform float uGlintScale;
+            uniform float uGlintRate;
+            uniform float uGlintFloor;
+            uniform float uBurst;
+            varying vec2 vUv;
+            varying vec3 vWorld;
+            #include <fog_pars_fragment>
+
+            float hash12(vec2 p) {
+                p = fract(p * vec2(123.34, 345.45));
+                p += dot(p, p + 34.345);
+                return fract(p.x * p.y);
+            }
+            // gradient contribution of one directional sine wave
+            vec2 waveGrad(vec2 p, vec2 dir, float wavelength, float amp, float speed, float t, float phase) {
+                float k = 6.28318 / wavelength;
+                return dir * (amp * k * cos(dot(dir, p) * k + t * speed + phase));
+            }
+
+            void main() {
+                vec4 base = texture2D(uBase, vUv);
+                if (base.a < 0.004) discard;
+                vec2 p = vWorld.xz / max(uScale, 0.05);
+                float t = uTime;
+
+                // wind-gust patches: slow low-frequency mask over WORLD space,
+                // so some areas ripple while sheltered ones stay glassy
+                float gn = 0.5 + 0.25 * sin(dot(p, vec2(0.045, 0.030)) + t * 0.10)
+                               + 0.25 * sin(dot(p, vec2(-0.033, 0.052)) + t * 0.073 + 2.1);
+                float gust = smoothstep(1.0 - uGustCover, 1.0 - uGustCover * 0.4, gn);
+                float ampLocal = uAmp * (uChopBase + uChopGust * gust);
+
+                // Domain warp: bend the wave field with low-frequency noise so
+                // crests wobble organically — straight parallel sine bands are
+                // the #1 "fake water" tell.
+                vec2 pw = p + 0.9 * vec2(
+                    sin(p.y * 0.23 + t * 0.07) + 0.5 * sin(p.x * 0.11 - t * 0.043),
+                    sin(p.x * 0.19 - t * 0.061) + 0.5 * sin(p.y * 0.13 + t * 0.052));
+
+                // ripple normal: broad undulation + primary ripples + fine
+                // laps. Directions spread around the circle with incommensurate
+                // wavelengths/speeds so nothing lines up into stripes and there
+                // is no net drift direction.
+                vec2 grad = vec2(0.0);
+                grad += waveGrad(p, vec2(0.94, 0.34), 11.0, 0.60 * uBroadAmp, 0.18, t, 0.0);
+                grad += waveGrad(p, vec2(-0.80, 0.60), 14.0, 0.50 * uBroadAmp, 0.13, t, 1.7);
+                grad += waveGrad(pw, vec2(0.71, 0.71), 2.6, 0.10, 0.9, t, 0.4);
+                grad += waveGrad(pw, vec2(-0.62, 0.78), 3.4, 0.09, 0.7, t, 2.9);
+                grad += waveGrad(pw, vec2(0.31, -0.95), 2.1, 0.07, 1.1, t, 4.2);
+                grad += waveGrad(pw, vec2(0.89, 0.45), 1.05, 0.045 * uLapAmp, 2.6 * uLapSpeed, t, 0.0);
+                grad += waveGrad(pw, vec2(0.10, -0.99), 0.90, 0.038 * uLapAmp, 3.1 * uLapSpeed, t, 1.9);
+                grad += waveGrad(pw, vec2(-0.72, 0.69), 1.30, 0.042 * uLapAmp, 2.2 * uLapSpeed, t, 3.1);
+                grad += waveGrad(pw, vec2(-0.97, -0.26), 0.75, 0.030 * uLapAmp, 3.6 * uLapSpeed, t, 4.4);
+                grad += waveGrad(pw, vec2(0.52, 0.85), 1.15, 0.034 * uLapAmp, 2.9 * uLapSpeed, t, 5.5);
+                grad *= ampLocal;
+                vec3 N = normalize(vec3(-grad.x, 1.0, -grad.y));
+
+                vec3 V = normalize(uCamDir);
+                vec3 L = normalize(uSunDir);
+
+                // base water colour (depth + shore baked into the texture)
+                vec3 col = base.rgb * uBright;
+                // gentle diffuse shading so ripples read even with no glint
+                col *= 0.82 + 0.30 * clamp(dot(N, L), 0.0, 1.0);
+                // fresnel sky reflection, broken up by the ripple normals
+                float ndv = clamp(dot(N, V), 0.0, 1.0);
+                float fres = pow(1.0 - ndv, 3.0);
+                float refl = clamp(uReflect * (0.30 + 0.70 * fres), 0.0, 1.0);
+                col = mix(col, uSkyColor * uBright * 0.85, refl);
+
+                // sun glitter: a soft specular path plus sparse twinkling
+                // glints gated by per-cell hashes (burst envelope from CPU)
+                vec3 H = normalize(L + V);
+                // max() guard: pow(0, x) with a non-constant exponent is
+                // undefined on some GPU drivers (NaN speckle)
+                float align = max(dot(N, H), 0.0001);
+                float soft = pow(align, 36.0) * 0.20 * (0.4 + 0.6 * gust);
+                vec2 cell = floor(vWorld.xz * uGlintScale);
+                float h1 = hash12(cell);
+                float tw = 0.5 + 0.5 * sin(t * uGlintRate * (0.6 + 0.8 * h1) + h1 * 6.28318);
+                float act = clamp(uGlintFloor + uBurst * (0.5 + 0.5 * gust), 0.0, 1.6);
+                float gate = smoothstep(1.0 - 0.22 * act, 1.0 - 0.22 * act + 0.08, h1 * tw);
+                // Base twinkle on any sparkling cell (a narrow river often
+                // misses the physical sun path entirely); the sun path adds
+                // the bright core. The radial falloff shapes each spark into
+                // a soft round point — without it whole cells lit as squares.
+                vec2 cf = fract(vWorld.xz * uGlintScale) - 0.5;
+                float spark = exp(-18.0 * dot(cf, cf));
+                float glint = gate * spark * (0.35 + pow(align, uGlintSharp)) * uGlintGain;
+                col += uSunColor * (soft + glint);
+
+                float alpha = clamp(base.a + glint * 0.5, 0.0, 1.0);
+                gl_FragColor = vec4(col, alpha);
+                #include <tonemapping_fragment>
+                #include <colorspace_fragment>
+                #include <fog_fragment>
+            }`,
     });
+    // The neural-bake overlay builds its own material from these (legacy path).
+    mat.map = map;
+    mat.normalMap = normalMap;
+
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, hSpan), mat);
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.set(minX + w / 2, (Game.WATER_LEVEL || 0.55) + 0.02, minZ + hSpan / 2);
     mesh.name = 'water-surface';
-    mesh.receiveShadow = true;
     mesh.renderOrder = 1;
     mesh.raycast = () => {};   // purely visual — never blocks picking
     Game.terrainGroup.add(mesh);
-    Game._waterFX = { mat, sparkle, w, hSpan, t: Game.rand(0, 100) };
+    Game._waterFX = { mat, uniforms, w, hSpan, minX, minZ, t: uniforms.uTime.value };
 };
 
-// Scroll the ripple normals along the river each frame (called from the loop).
-Game.WATER_RIPPLE = { speed: 2.2, strength: 1 };   // debug-tunable
+// "Water Blur" sliders: screen-space soft focus over the water region, done
+// as a postprocessing pass (see _makeWaterBlurEffect in engine.js) so it
+// blurs the COMPOSED frame — bed, banks, ripples, glints — not just the
+// water's own paint. radius = blur radius in buffer pixels; opacity 0 = off.
+Game.WATER_BLUR = { opacity: 0.35, radius: 3 };
 
+// Drive the water shader each frame (called from the loop, also while paused).
+Game.WATER_RIPPLE = { speed: 0.6, strength: 1.2 };   // debug-tunable
+// Calm-water tuning (all debug-tunable, see the Effects panel). Every value
+// here is copied into a shader uniform EVERY frame by updateWaterFX, so the
+// sliders always take effect immediately:
+//   wander       broad-undulation amplitude × (the slow large-scale breathing)
+//   shimmer      fine lap-ripple amplitude × (the visible small motion)
+//   shimmerSpeed lap tempo ×
+//   chopBase     ripple amplitude on calm water (outside gust patches)
+//   chopGust     extra ripple amplitude inside a gust patch
+//   gustBias     gust-patch coverage 0..1 (0 = whole surface glassy)
+//   glintFloor   sparkle activity between bursts
+//   quiet        burst suppression: higher = rarer/shorter sparkle clusters
+//   bright       overall water brightness (the shader is unlit; this stands
+//                in for scene lighting)
+//   reflect      fresnel sky-reflection strength
+//   rippleScale  wavelength multiplier for every ripple layer
+Game.WATER_CALM = {
+    wander: 0.8, shimmer: 1.1, shimmerSpeed: 0.5,
+    chopBase: 0.72, chopGust: 1.02, gustBias: 0.54,
+    glintFloor: 0.42, quiet: 0.42,
+    bright: 0.2, reflect: 0.82, rippleScale: 0.5,
+};
+// WATER_SPARKLE gains a glint sharpness (specular exponent) on top of the
+// legacy intensity/scale/speed keys the older sliders already set.
+Game.WATER_SPARKLE.sharp = Game.WATER_SPARKLE.sharp || 156;
+
+// Serialise the live water tuning for the debug copy box, so slider-tuned
+// values can be pasted straight back over the defaults above.
+Game._waterValuesText = () => {
+    const f = (n) => { const t = (+n).toFixed(3).replace(/\.?0+$/, ''); return t === '' || t === '-' ? '0' : t; };
+    const R = Game.WATER_RIPPLE || {}, S = Game.WATER_SPARKLE || {}, C = Game.WATER_CALM || {};
+    const v = (x, d) => f(x != null ? x : d);
+    return [
+        `WATER_RIPPLE = { speed: ${v(R.speed, 0.6)}, strength: ${v(R.strength, 1.2)} }`,
+        `WATER_SPARKLE = { intensity: ${v(S.intensity, 0.55)}, scale: ${v(S.scale, 3.5)}, speed: ${v(S.speed, 0.3)}, sharp: ${v(S.sharp, 156)} }`,
+        `WATER_CALM = { wander: ${v(C.wander, 0.8)}, shimmer: ${v(C.shimmer, 1.1)}, shimmerSpeed: ${v(C.shimmerSpeed, 0.5)}, `
+        + `chopBase: ${v(C.chopBase, 0.72)}, chopGust: ${v(C.chopGust, 1.02)}, gustBias: ${v(C.gustBias, 0.54)}, `
+        + `glintFloor: ${v(C.glintFloor, 0.42)}, quiet: ${v(C.quiet, 0.42)}, `
+        + `bright: ${v(C.bright, 0.2)}, reflect: ${v(C.reflect, 0.82)}, rippleScale: ${v(C.rippleScale, 0.5)} }`,
+        `WATER_BLUR = { opacity: ${v((Game.WATER_BLUR || {}).opacity, 0.35)}, radius: ${v((Game.WATER_BLUR || {}).radius, 3)} }`,
+        `BRIDGE_SINK = ${v(Game.BRIDGE_SINK, 0.65)}`,
+    ].join('\n');
+};
+
+Game._waterTmpDir = null;
 Game.updateWaterFX = (dt) => {
     const fx = Game._waterFX;
-    if (!fx) return;
-    const R = Game.WATER_RIPPLE || { speed: 1, strength: 1 };
-    fx.t += dt * (R.speed != null ? R.speed : 1);
-    const nm = fx.mat.normalMap;
-    if (nm) {
-        nm.offset.x = (fx.t * 0.020) % 1;   // flow along the river (E-W)
-        nm.offset.y = (fx.t * 0.008) % 1;
-    }
-    // soft cross-chop so the glints keep moving
-    const k = R.strength != null ? R.strength : 1;
-    fx.mat.normalScale.set(
-        (0.45 + 0.12 * Math.sin(fx.t * 0.9)) * k,
-        (0.32 + 0.09 * Math.sin(fx.t * 1.3 + 1.0)) * k
-    );
-    // sun glints drift much slower than the chop, on their own speed control
-    const SP = Game.WATER_SPARKLE || {};
-    const spT = fx.t * (SP.speed != null ? SP.speed : 1);
-    if (fx.sparkle) {
-        fx.sparkle.offset.x = (spT * 0.0045) % 1;
-        fx.sparkle.offset.y = (spT * 0.0028) % 1;
-    }
-    const BS = Game._neuralBake;
-    if (BS && BS.waterSwap) {
-        const em = BS.waterSwap.mesh.material.emissiveMap;
-        if (em) {
-            em.offset.x = (spT * 0.0045) % 1;
-            em.offset.y = (spT * 0.0028) % 1;
+    const WB = Game._waterBlurEffect;
+    if (WB && (!fx || !fx.uniforms)) WB.uniforms.get('uAmount').value = 0;
+    if (!fx || !fx.uniforms) return;
+    // Screen-space water blur (postfx): mask rect + bake map + unprojection
+    if (WB) {
+        const BL = Game.WATER_BLUR || {};
+        const bu = WB.uniforms;
+        bu.get('uAmount').value = Game.clamp(BL.opacity != null ? BL.opacity : 0, 0, 1);
+        bu.get('uRadius').value = Math.max(0, BL.radius != null ? BL.radius : 3);
+        bu.get('uWaterMap').value = fx.mat.map || null;
+        bu.get('uWaterRect').value.set(fx.minX, fx.minZ, 1 / fx.w, 1 / fx.hSpan);
+        bu.get('uWaterY').value = (Game.WATER_LEVEL || 0.55) + 0.02;
+        if (Game.camera) {
+            Game._waterBlurM = Game._waterBlurM || new Game.THREE.Matrix4();
+            Game._waterBlurM.multiplyMatrices(Game.camera.matrixWorld, Game.camera.projectionMatrixInverse);
+            bu.get('uInvVP').value.copy(Game._waterBlurM);
         }
     }
-    // the neural-bake water overlay shares the scrolling normal texture;
-    // keep its (subtler) chop in step with the same controls
+    const R = Game.WATER_RIPPLE || {};
+    const C = Game.WATER_CALM || {};
+    const SP = Game.WATER_SPARKLE || {};
+    fx.t += dt * (R.speed != null ? R.speed : 1);
+    const U = fx.uniforms;
+    U.uTime.value = fx.t;
+
+    // Sparkle burst envelope (CPU side): clusters of glints with quiet spells
+    // between. At defaults: a ~4 s cluster every ~11 s, ~2/3 of the time quiet.
+    const spT = fx.t * (SP.speed != null ? SP.speed : 1);
+    const burst = Math.max(0,
+        0.55 * Math.sin(spT * 0.079) + 0.45 * Math.sin(spT * 0.031 + 2.0)
+        + 0.35 * Math.sin(spT * 0.171 + 4.1)
+        - (C.quiet != null ? C.quiet : 0.42));
+    U.uBurst.value = Math.min(1, burst);
+
+    // Copy the whole config into the uniforms — this is what guarantees every
+    // debug slider works: there is no other path into the shader.
+    U.uAmp.value = R.strength != null ? R.strength : 1;
+    U.uBroadAmp.value = C.wander != null ? C.wander : 0.8;
+    U.uLapAmp.value = C.shimmer != null ? C.shimmer : 1.1;
+    U.uLapSpeed.value = C.shimmerSpeed != null ? C.shimmerSpeed : 0.5;
+    U.uChopBase.value = C.chopBase != null ? C.chopBase : 0.72;
+    U.uChopGust.value = C.chopGust != null ? C.chopGust : 1.02;
+    // floor 0.02: smoothstep edges must never coincide (undefined in GLSL)
+    U.uGustCover.value = Game.clamp(C.gustBias != null ? C.gustBias : 0.54, 0.02, 1.0);
+    U.uGlintFloor.value = C.glintFloor != null ? C.glintFloor : 0.42;
+    U.uGlintGain.value = SP.intensity != null ? SP.intensity : 0.55;
+    U.uGlintScale.value = 12 / Math.max(0.5, SP.scale != null ? SP.scale : 3.5);
+    U.uGlintRate.value = SP.speed != null ? SP.speed : 0.3;
+    U.uGlintSharp.value = Math.max(2, SP.sharp != null ? SP.sharp : 156);
+    U.uBright.value = C.bright != null ? C.bright : 0.2;
+    U.uReflect.value = C.reflect != null ? C.reflect : 0.82;
+    U.uScale.value = Math.max(0.05, C.rippleScale != null ? C.rippleScale : 0.5);
+
+    // Real sun + camera directions, so glitter and fresnel respond to the
+    // rotatable camera and the actual light.
+    if (Game.sun && Game.sun.target) {
+        U.uSunDir.value.copy(Game.sun.position).sub(Game.sun.target.position).normalize();
+    }
+    if (Game.camera) {
+        Game._waterTmpDir = Game._waterTmpDir || new Game.THREE.Vector3();
+        Game.camera.getWorldDirection(Game._waterTmpDir);
+        U.uCamDir.value.copy(Game._waterTmpDir).negate();
+    }
+
+    // Neural-bake overlay (AI render mode) still uses the legacy texture
+    // approach on its own material: give it a gentle wandering scroll.
     const B = Game._neuralBake;
-    if (B && B.waterSwap && B.waterSwap.mesh.material.normalScale) {
-        B.waterSwap.mesh.material.normalScale.set(
-            (0.14 + 0.05 * Math.sin(fx.t * 0.9)) * k,
-            (0.10 + 0.04 * Math.sin(fx.t * 1.3 + 1.0)) * k
-        );
+    if (B && B.waterSwap) {
+        const m = B.waterSwap.mesh.material;
+        const t = fx.t;
+        if (m.normalMap) {
+            m.normalMap.offset.x = 0.028 * Math.sin(t * 0.115) + 0.010 * Math.sin(t * 1.9 * (C.shimmerSpeed || 1));
+            m.normalMap.offset.y = 0.020 * Math.sin(t * 0.089 + 0.8);
+        }
+        if (m.emissiveMap) {
+            m.emissiveMap.offset.x = 0.016 * Math.sin(spT * 0.021);
+            m.emissiveMap.offset.y = 0.012 * Math.sin(spT * 0.017 + 2.2);
+        }
+        if ('emissiveIntensity' in m) {
+            m.emissiveIntensity = (SP.intensity != null ? SP.intensity : 1.55)
+                * ((C.glintFloor != null ? C.glintFloor : 0.30) + U.uBurst.value);
+        }
     }
 };
 
@@ -4473,6 +4733,16 @@ Game.buildTerrainMeshes = () => {
     // The modeled stone bridge (models/bridge_stone.glb) replaces the
     // procedural causeway once it loads; the procedural build below stays as
     // the instant visual and the fallback if the model is missing.
+    // How deep the stone model beds into the banks (debug-tunable live via
+    // the "Bridge Sink" slider; higher = lower bridge).
+    Game.BRIDGE_SINK = Game.BRIDGE_SINK != null ? Game.BRIDGE_SINK : 0.65;
+    Game.applyBridgeSink = () => {
+        const g = Game.terrainGroup && Game.terrainGroup.getObjectByName('bridges-model');
+        if (!g) return;
+        g.children.forEach(m => {
+            if (m.userData.bridgeBaseY != null) m.position.y = m.userData.bridgeBaseY - Game.BRIDGE_SINK;
+        });
+    };
     if (Game.bridges && Game.bridges.length) {
         const procBridges = new THREE.Group();
         procBridges.name = 'bridges-procedural';
@@ -4542,11 +4812,15 @@ Game.buildTerrainMeshes = () => {
                     m.scale.set(sSpan, sY, sWide);
                     // Bed the ends well into the banks so the deck meets the
                     // road with no step; the arch dips into the carved channel.
+                    // How deep is debug-tunable (Game.BRIDGE_SINK, "Bridge
+                    // Sink" slider) — the base Y is kept on the mesh so
+                    // applyBridgeSink can re-seat it live.
                     const bankY = Math.min(
                         Game.getHeight(br.cx, br.cz - br.span / 2 - 1),
                         Game.getHeight(br.cx, br.cz + br.span / 2 + 1)
                     );
-                    m.position.set(br.cx, bankY - bb.min.y * sY - 0.55, br.cz);
+                    m.userData.bridgeBaseY = bankY - bb.min.y * sY;
+                    m.position.set(br.cx, m.userData.bridgeBaseY - (Game.BRIDGE_SINK != null ? Game.BRIDGE_SINK : 0.65), br.cz);
                     group.add(m);
                 });
                 Game.terrainGroup.add(group);

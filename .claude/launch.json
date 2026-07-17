@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "game",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8741"],
+      "port": 8741
+    },
+    {
+      "name": "ref-pipeline",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/ref-pipeline.mjs"],
+      "port": 8742
+    },
+    {
+      "name": "neural-infer",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["scripts/infer_server.py"],
+      "port": 8788
+    }
+  ]
+}

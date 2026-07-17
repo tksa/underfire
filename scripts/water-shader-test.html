@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>water shader sandbox</title>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three-0.180.0.module.min.js" } }
+</script>
+<style>
+html,body{margin:0;background:#111;color:#cde;font:12px monospace}
+#hud{position:fixed;top:8px;left:8px;background:rgba(0,0,0,0.6);padding:8px;white-space:pre-wrap;max-width:46em;z-index:2}
+canvas{display:block}
+</style>
+</head>
+<body>
+<div id="hud">loading…</div>
+<script type="module">
+// Animated sandbox for the REAL water shader from js/terrain.js — extracts the
+// live source, drives uniforms with the same logic as Game.updateWaterFX, and
+// exposes window.CFG (WATER_RIPPLE/WATER_SPARKLE/WATER_CALM equivalents) so
+// control changes can be exercised exactly like the debug sliders.
+// This page never loads the game.
+import * as THREE from 'three';
+const hud = document.getElementById('hud');
+
+const src = await (await fetch('../js/terrain.js?nocache=' + Date.now())).text();
+const vs = src.match(/vertexShader: \/\* glsl \*\/`([\s\S]*?)`,/)[1];
+const fs = src.match(/fragmentShader: \/\* glsl \*\/`([\s\S]*?)`,\n    \}\);/)[1];
+
+// GAME-ACCURATE base map: a narrow winding river (halfWidth ~3 wu) baked
+// with the exact depth/alpha formulas from _buildWaterSurface /
+// _waterDepth01At (cross*(0.35+1.05*pool); alpha = a*(108+106*depth)).
+const N = 1024;
+const WORLD = 80;                                  // canvas covers 80x80 wu
+const c = document.createElement('canvas'); c.width = c.height = N;
+const cx = c.getContext('2d');
+const img = cx.createImageData(N, N);
+const shallow = [88, 126, 108], deep = [22, 50, 64], foamC = [178, 192, 182];
+const smooth = (a, b, x) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
+for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+        const wx = x / N * WORLD, wz = y / N * WORLD;
+        // winding channel centre + half width ~3 wu (game: >= ~2 wu)
+        const centerZ = WORLD / 2 + 6 * Math.sin(wx * 0.09) + 2.5 * Math.sin(wx * 0.23 + 1.2);
+        const halfW = 3.0 + 0.8 * Math.sin(wx * 0.13 + 3);
+        const signed = halfW - Math.abs(wz - centerZ);
+        const i = (y * N + x) * 4;
+        const a = smooth(-0.7, 0.5, signed);        // shore softness ~ game
+        if (a <= 0.003) { img.data[i + 3] = 0; continue; }
+        const pool = 0.5 + 0.5 * Math.sin(wx * 0.11 + 0.7);   // pool/riffle along river
+        const cross = Math.max(0, Math.min(1, signed / (halfW * 0.78)));
+        const depthRaw = Math.max(0, Math.min(1, cross * (0.35 + 1.05 * pool)));
+        const depth = Math.pow(depthRaw, 0.62);
+        let r = shallow[0] + (deep[0] - shallow[0]) * depth;
+        let g = shallow[1] + (deep[1] - shallow[1]) * depth;
+        let b = shallow[2] + (deep[2] - shallow[2]) * depth;
+        const foam = Math.max(0, 1 - depth * 3.5) * Math.max(0, 1 - Math.abs(a - 0.45) * 2.6) * 0.5;
+        r += (foamC[0] - r) * foam; g += (foamC[1] - g) * foam; b += (foamC[2] - b) * foam;
+        img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b;
+        img.data[i + 3] = Math.round(a * (150 + 92 * depth));
+    }
+}
+cx.putImageData(img, 0, 0);
+const baseTex = new THREE.CanvasTexture(c);
+baseTex.colorSpace = THREE.SRGBColorSpace;
+
+const uniforms = THREE.UniformsUtils.merge([
+    THREE.UniformsLib.fog,
+    {
+        uBase: { value: null }, uTime: { value: 37.2 },
+        uSunDir: { value: new THREE.Vector3(0.45, 0.78, -0.34) },
+        uSunColor: { value: new THREE.Color(1, 0.9, 0.72) },
+        uCamDir: { value: new THREE.Vector3(0.3, 0.7, 0.65) },
+        uSkyColor: { value: new THREE.Color(0xa3ab99) },
+        uBright: { value: 2 }, uReflect: { value: 0.5 }, uScale: { value: 1 },
+        uAmp: { value: 1 }, uBroadAmp: { value: 1 }, uLapAmp: { value: 1 },
+        uLapSpeed: { value: 1 }, uChopBase: { value: 0.22 }, uChopGust: { value: 0.38 },
+        uGustCover: { value: 0.34 }, uGlintGain: { value: 1.55 }, uGlintSharp: { value: 48 },
+        uGlintScale: { value: 2 }, uGlintRate: { value: 2.9 }, uGlintFloor: { value: 0.3 },
+        uBurst: { value: 0.5 },
+    },
+]);
+uniforms.uBase.value = baseTex;
+
+const mat = new THREE.ShaderMaterial({
+    uniforms, fog: true, transparent: true, depthWrite: false,
+    vertexShader: vs, fragmentShader: fs,
+});
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+const VW = Math.max(window.innerWidth, 1280), VH = Math.max(window.innerHeight, 720);
+renderer.setSize(VW, VH);
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x2a3226);          // stand-in ground tone
+scene.fog = new THREE.FogExp2(0x14161c, 0.0016);
+
+// terrain stand-in beneath the water so alpha blending shows (gravel bed)
+const bed = new THREE.Mesh(
+    new THREE.PlaneGeometry(80, 80),
+    new THREE.MeshBasicMaterial({ map: (() => { const g = document.createElement('canvas'); g.width = g.height = 256; const gx = g.getContext('2d'); gx.fillStyle = '#585444'; gx.fillRect(0,0,256,256); for (let i = 0; i < 2600; i++) { const v = 60 + Math.random() * 70 | 0; gx.fillStyle = 'rgb(' + (v+18) + ',' + (v+14) + ',' + v + ')'; const r = 1 + Math.random() * 2.5; gx.beginPath(); gx.arc(Math.random()*256, Math.random()*256, r, 0, 7); gx.fill(); } const t = new THREE.CanvasTexture(g); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(10, 10); t.colorSpace = THREE.SRGBColorSpace; return t; })() })
+);
+bed.rotation.x = -Math.PI / 2; bed.position.y = -0.2;
+scene.add(bed);
+
+// water plane, RTS-style ortho camera at the game's tilt/yaw
+const water = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), mat);
+water.rotation.x = -Math.PI / 2;
+scene.add(water);
+
+const aspect = VW / VH;
+const f = 20;   // Game.cam.zoom default
+const cam = new THREE.OrthographicCamera(-f * aspect, f * aspect, f, -f, 0.1, 1000);
+const yaw = 23 * Math.PI / 180, tilt = 45 * Math.PI / 180;
+const elev = f * 1.5 * Math.sin(tilt) / Math.sin(60 * Math.PI / 180);
+const off = elev / Math.tan(tilt);
+cam.position.set(Math.sin(yaw) * off, elev, Math.cos(yaw) * off);
+cam.lookAt(0, 0, 0);
+
+// mirror of Game.updateWaterFX (CPU side), driven by window.CFG
+window.CFG = {
+    R: { speed: 0.6, strength: 1.2 },
+    S: { intensity: 0.55, scale: 3.5, speed: 0.3, sharp: 156 },
+    C: { wander: 0.8, shimmer: 1.1, shimmerSpeed: 0.5, chopBase: 0.72, chopGust: 1.02,
+         gustBias: 0.54, glintFloor: 0.42, quiet: 0.42, bright: 0.2, reflect: 0.82, rippleScale: 0.5 },
+};
+let t = 37.2, last = performance.now();
+const camDir = new THREE.Vector3();
+function frame(now) {
+    const dt = Math.min(0.033, (now - last) / 1000); last = now;
+    const { R, S, C } = window.CFG;
+    t += dt * R.speed;
+    const U = uniforms;
+    U.uTime.value = t;
+    const spT = t * S.speed;
+    const burst = Math.max(0, 0.55 * Math.sin(spT * 0.079) + 0.45 * Math.sin(spT * 0.031 + 2.0)
+        + 0.35 * Math.sin(spT * 0.171 + 4.1) - C.quiet);
+    U.uBurst.value = Math.min(1, burst);
+    U.uAmp.value = R.strength; U.uBroadAmp.value = C.wander;
+    U.uLapAmp.value = C.shimmer; U.uLapSpeed.value = C.shimmerSpeed;
+    U.uChopBase.value = C.chopBase; U.uChopGust.value = C.chopGust;
+    U.uGustCover.value = Math.max(0.02, Math.min(1, C.gustBias));
+    U.uGlintFloor.value = C.glintFloor; U.uGlintGain.value = S.intensity;
+    U.uGlintScale.value = 12 / Math.max(0.5, S.scale);
+    U.uGlintRate.value = S.speed; U.uGlintSharp.value = Math.max(2, S.sharp);
+    U.uBright.value = C.bright; U.uReflect.value = C.reflect;
+    U.uScale.value = Math.max(0.05, C.rippleScale);
+    cam.getWorldDirection(camDir);
+    U.uCamDir.value.copy(camDir).negate();
+    renderer.render(scene, cam);
+    frames++;
+    if (now - lastSample > 500) {
+        lastSample = now;
+        const gl = renderer.getContext();
+        const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight;
+        const px = new Uint8Array(4);
+        const grab = (x, y) => { gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); return Array.from(px).join(','); };
+        hud.textContent = 'water sandbox  t=' + t.toFixed(1) + '  frames=' + frames
+            + '\ncanvas ' + W + 'x' + H
+            + '\ncenter(water): ' + grab(W >> 1, H >> 1)
+            + '\nupper(bed?):   ' + grab(W >> 1, Math.floor(H * 0.92))
+            + '\nlower(bed?):   ' + grab(W >> 1, Math.floor(H * 0.08))
+            + '\nburst=' + U.uBurst.value.toFixed(2);
+    }
+    requestAnimationFrame(frame);
+}
+let frames = 0, lastSample = 0;
+requestAnimationFrame(frame);
+// The embedded viewer reports visibility=hidden, so RAF never fires there.
+// window.step(dt) drives the identical update+render synchronously instead.
+window.step = (dt) => { last -= 0; frame(performance.now()); lastSample = 0; frame(performance.now() + (dt || 0.5) * 1000 / (window.CFG.R.speed || 1)); return hud.textContent; };
+window.stepTo = (dtList) => dtList.map(d => { t += d; lastSample = 0; frame(performance.now()); return hud.textContent.split('\n').slice(0, 4).join(' | '); });
+hud.textContent = 'water sandbox ready. window.step()/stepTo() for synchronous frames.';
+window.step(0.01);
+</script>
+</body>
+</html>

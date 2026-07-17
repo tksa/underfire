@@ -4460,16 +4460,15 @@ Game.NEURAL_BAKE_PPU = 21.6;   // px per world unit ~= training pixel density
         Game.terrainMesh.material.map = tex;
         Game.terrainMesh.material.needsUpdate = true;
         B.tex = tex;
-        // hide the things the model painted INTO the texture; water
-        // stays visible but swaps to the subtle ripple-only material
+        // hide the things the model painted INTO the texture. The water sheet
+        // is NOT swapped anymore: the shader water is self-contained (depth
+        // tint + shore fade + glints) and simply covers the painted water.
+        // The old swap to a near-transparent "ripple-only" MeshStandard
+        // overlay is exactly what kept replacing the real water material on
+        // baked maps, so no water rework was ever visible in-game.
         B.hidden = [];
         B.waterSwap = null;
         for (const o of Game.terrainGroup.children) {
-            if (o.name === 'water-surface' && o.visible) {
-                B.waterSwap = { mesh: o, mat: o.material };
-                o.material = neuralWaterMat(o.material);
-                continue;
-            }
             if (o.visible && (HIDE_NAMES.has(o.name) || HIDE_RE.test(o.name))) {
                 o.visible = false;
                 B.hidden.push(o);
@@ -4913,10 +4912,50 @@ if (dbgTexScale) {
 }
 
 // ── Terrain material controls ──
+// Debug-panel search: filters the panel down to controls whose text matches.
+// Section headers stay visible only while their section still has a match;
+// clearing the box restores everything.
+(() => {
+    const search = document.getElementById('dbgSearch');
+    const panel = document.getElementById('debugPanel');
+    if (!search || !panel) return;
+    const isHeader = (el) => el.classList && (el.classList.contains('dbg-title')
+        || (el.tagName === 'DIV' && /uppercase/.test(el.getAttribute('style') || '')));
+    search.addEventListener('input', () => {
+        const q = search.value.trim().toLowerCase();
+        let header = null, headerHasHit = false;
+        const show = (el, on) => { el.style.display = on ? '' : 'none'; };
+        for (const el of panel.children) {
+            if (el === search) continue;
+            if (isHeader(el)) {
+                if (header) show(header, !q || headerHasHit);
+                header = el; headerHasHit = false;
+                continue;
+            }
+            const hit = !q || (el.textContent || '').toLowerCase().includes(q);
+            show(el, hit);
+            if (hit) headerHasHit = true;
+        }
+        if (header) show(header, !q || headerHasHit);
+    });
+    // typing in the search field must not trigger game hotkeys — the global
+    // keydown handler already ignores INPUT targets, but stop the ` toggle
+    // from closing the panel mid-search
+    search.addEventListener('keydown', e => e.stopPropagation());
+})();
+
 const _dbgSlider = (id, valId, cb) => {
     const el = document.getElementById(id);
     const val = document.getElementById(valId);
-    if (el) el.addEventListener('input', () => { const v = parseFloat(el.value); if (val) val.textContent = v.toFixed(2); cb(v); });
+    if (el) el.addEventListener('input', () => {
+        const v = parseFloat(el.value);
+        if (val) val.textContent = v.toFixed(2);
+        cb(v);
+        // Keep the copy-config box in sync: it used to refresh only on the
+        // dynamic postfx sliders, so these classic sliders left stale values
+        // in the box (bit the water tuning round-trip).
+        if (Game._refreshPostFXCopyBox) Game._refreshPostFXCopyBox();
+    });
 };
 
 _dbgSlider('dbgBump', 'dbgBumpVal', v => {
@@ -5051,6 +5090,53 @@ _dbgSlider('dbgSparkleScale', 'dbgSparkleScaleVal', v => {
 });
 _dbgSlider('dbgSparkleSpeed', 'dbgSparkleSpeedVal', v => {
     (Game.WATER_SPARKLE = Game.WATER_SPARKLE || {}).speed = v;
+});
+// Calm-water envelope (all read live per frame by updateWaterFX)
+_dbgSlider('dbgGlintFloor', 'dbgGlintFloorVal', v => {
+    (Game.WATER_CALM = Game.WATER_CALM || {}).glintFloor = v;
+});
+_dbgSlider('dbgSparkleQuiet', 'dbgSparkleQuietVal', v => {
+    (Game.WATER_CALM = Game.WATER_CALM || {}).quiet = v;
+});
+_dbgSlider('dbgWaterLap', 'dbgWaterLapVal', v => {
+    (Game.WATER_CALM = Game.WATER_CALM || {}).shimmer = v;
+});
+_dbgSlider('dbgWaterLapSpd', 'dbgWaterLapSpdVal', v => {
+    (Game.WATER_CALM = Game.WATER_CALM || {}).shimmerSpeed = v;
+});
+_dbgSlider('dbgWaterDrift', 'dbgWaterDriftVal', v => {
+    (Game.WATER_CALM = Game.WATER_CALM || {}).wander = v;
+});
+_dbgSlider('dbgWaterChopBase', 'dbgWaterChopBaseVal', v => {
+    (Game.WATER_CALM = Game.WATER_CALM || {}).chopBase = v;
+});
+_dbgSlider('dbgWaterChopGust', 'dbgWaterChopGustVal', v => {
+    (Game.WATER_CALM = Game.WATER_CALM || {}).chopGust = v;
+});
+_dbgSlider('dbgWaterGust', 'dbgWaterGustVal', v => {
+    (Game.WATER_CALM = Game.WATER_CALM || {}).gustBias = v;
+});
+_dbgSlider('dbgWaterBright', 'dbgWaterBrightVal', v => {
+    (Game.WATER_CALM = Game.WATER_CALM || {}).bright = v;
+});
+_dbgSlider('dbgWaterReflect', 'dbgWaterReflectVal', v => {
+    (Game.WATER_CALM = Game.WATER_CALM || {}).reflect = v;
+});
+_dbgSlider('dbgWaterScale', 'dbgWaterScaleVal', v => {
+    (Game.WATER_CALM = Game.WATER_CALM || {}).rippleScale = v;
+});
+_dbgSlider('dbgGlintSharp', 'dbgGlintSharpVal', v => {
+    (Game.WATER_SPARKLE = Game.WATER_SPARKLE || {}).sharp = v;
+});
+_dbgSlider('dbgBridgeSink', 'dbgBridgeSinkVal', v => {
+    Game.BRIDGE_SINK = v;
+    if (Game.applyBridgeSink) Game.applyBridgeSink();
+});
+_dbgSlider('dbgWaterBlur', 'dbgWaterBlurVal', v => {
+    (Game.WATER_BLUR = Game.WATER_BLUR || {}).opacity = v;   // postfx pass reads this live
+});
+_dbgSlider('dbgWaterBlurRad', 'dbgWaterBlurRadVal', v => {
+    (Game.WATER_BLUR = Game.WATER_BLUR || {}).radius = v;    // postfx pass reads this live
 });
 _dbgSlider('dbgWaterOpacity', 'dbgWaterOpacityVal', v => {
     Game.NEURAL_WATER = v;
@@ -5431,7 +5517,6 @@ Game.tick = (now) => {
         if (Game.updateSmoke3D) Game.updateSmoke3D(dt);
         if (Game.updateScorch3D) Game.updateScorch3D(dt);
         if (Game.updateFoliageKnockdown) Game.updateFoliageKnockdown(dt);
-        if (Game.updateWaterFX) Game.updateWaterFX(dt);
         if (Game.updateTracks3D) Game.updateTracks3D(dt);
         Game.updateMines(dt);
         Game.updateTowing(dt);
@@ -5459,6 +5544,10 @@ Game.tick = (now) => {
     // Garrison labels + enter affordance (runs while paused so you can read/queue)
     if (Game.updateGarrisonUI) Game.updateGarrisonUI();
     if (Game.updateFoliage) Game.updateFoliage(dt);
+    // Water is ambient scenery like the swaying trees above: it keeps lapping
+    // during a tactical pause. (It used to sit inside the pause gate, which
+    // also made every water debug slider look dead while tuning paused.)
+    if (Game.updateWaterFX) Game.updateWaterFX(dt);
 
     // Reference mode: keep hiding whatever async loaders attach late
     if (Game._refMode && Game._refEnforceSweep) Game._refEnforceSweep();

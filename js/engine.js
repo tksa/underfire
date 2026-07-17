@@ -374,6 +374,74 @@ Game._applyTiltShift = () => {
     if (Game.postfx) Game.postfx.tiltShift = eff;
 };
 
+// Screen-space soft-focus over the water region (the "Water Blur" sliders).
+// Works like the tilt-shift pass, but the blur zone is the WATER: each pixel
+// unprojects onto the water plane (ortho), masks by the baked shoreline
+// alpha, and poisson-blurs the composed frame inside the mask — so the blur
+// includes the bed, banks, ripples and glints, not just the water's own
+// paint. Uniforms are fed per frame from updateWaterFX; amount 0 = passthrough.
+Game._makeWaterBlurEffect = () => {
+    const PF = Game.PostFX;
+    const frag = /* glsl */`
+        uniform sampler2D uWaterMap;
+        uniform mat4 uInvVP;
+        uniform vec4 uWaterRect;   // minX, minZ, 1/w, 1/hSpan
+        uniform float uWaterY;
+        uniform float uRadius;     // blur radius in buffer pixels
+        uniform float uAmount;     // 0..1 overall strength
+
+        void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+            float mask = 0.0;
+            if (uAmount > 0.001 && uRadius > 0.01) {
+                vec4 nearP = uInvVP * vec4(uv * 2.0 - 1.0, -1.0, 1.0);
+                vec4 farP  = uInvVP * vec4(uv * 2.0 - 1.0,  1.0, 1.0);
+                vec3 a = nearP.xyz / nearP.w;
+                vec3 b = farP.xyz / farP.w;
+                float dy = b.y - a.y;
+                if (abs(dy) > 1e-5) {
+                    float t = (uWaterY - a.y) / dy;
+                    if (t > 0.0 && t < 1.0) {
+                        vec3 wp = mix(a, b, t);
+                        vec2 wuv = vec2((wp.x - uWaterRect.x) * uWaterRect.z,
+                                        1.0 - (wp.z - uWaterRect.y) * uWaterRect.w);
+                        if (wuv.x > 0.0 && wuv.x < 1.0 && wuv.y > 0.0 && wuv.y < 1.0) {
+                            mask = texture2D(uWaterMap, wuv).a * uAmount;
+                        }
+                    }
+                }
+            }
+            if (mask < 0.003) { outputColor = inputColor; return; }
+            const vec2 TAPS[12] = vec2[12](
+                vec2(-0.326, -0.406), vec2(-0.840, -0.074), vec2(-0.696, 0.457),
+                vec2(-0.203, 0.621), vec2(0.962, -0.195), vec2(0.473, -0.480),
+                vec2(0.519, 0.767), vec2(0.185, -0.893), vec2(0.507, 0.064),
+                vec2(0.896, 0.412), vec2(-0.322, -0.933), vec2(-0.792, -0.598));
+            vec3 acc = inputColor.rgb;
+            for (int i = 0; i < 12; i++) {
+                acc += texture2D(inputBuffer, uv + TAPS[i] * texelSize * uRadius).rgb;
+            }
+            outputColor = vec4(mix(inputColor.rgb, acc / 13.0, mask), inputColor.a);
+        }`;
+    class WaterBlurEffect extends PF.Effect {
+        constructor() {
+            super('WaterBlurEffect', frag, {
+                // multi-tap inputBuffer sampling = a convolution effect; the
+                // attribute stops the lib fusing it with other convolutions
+                attributes: PF.EffectAttribute.CONVOLUTION,
+                uniforms: new Map([
+                    ['uWaterMap', new THREE.Uniform(null)],
+                    ['uInvVP', new THREE.Uniform(new THREE.Matrix4())],
+                    ['uWaterRect', new THREE.Uniform(new THREE.Vector4(0, 0, 1, 1))],
+                    ['uWaterY', new THREE.Uniform(0.57)],
+                    ['uRadius', new THREE.Uniform(0)],
+                    ['uAmount', new THREE.Uniform(0)],
+                ]),
+            });
+        }
+    }
+    return new WaterBlurEffect();
+};
+
 Game.setupPostFX = () => {
     const PF = Game.PostFX;
     if (!PF || !Game.renderer || !Game.scene || !Game.camera) return false;
@@ -399,6 +467,13 @@ Game.setupPostFX = () => {
 
         const smaaPass = new PF.EffectPass(Game.camera, smaa);
         composer.addPass(smaaPass);
+        // Water blur BEFORE bloom/grade: it behaves like in-scene focus, so
+        // bloom picks highlights from the already-softened water.
+        Game._waterBlurEffect = null;
+        try {
+            Game._waterBlurEffect = Game._makeWaterBlurEffect ? Game._makeWaterBlurEffect() : null;
+            if (Game._waterBlurEffect) composer.addPass(new PF.EffectPass(Game.camera, Game._waterBlurEffect));
+        } catch (e) { console.warn('[postfx] water blur unavailable', e); }
         composer.addPass(new PF.EffectPass(Game.camera, bloom));
         composer.addPass(new PF.EffectPass(Game.camera, hueSat, brightContrast, vignette));
 
@@ -632,6 +707,7 @@ Game.postfxValuesText = () => {
         '',
         Game._modelValuesText ? Game._modelValuesText() : '',
         Game._soldierValuesText ? Game._soldierValuesText() : '',
+        Game._waterValuesText ? Game._waterValuesText() : '',
     ].join('\n');
 };
 

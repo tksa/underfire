@@ -1884,6 +1884,8 @@
     <!-- Debug Panel -->
     <div id="debugPanel">
       <div class="dbg-title">Debug Controls (` to toggle)</div>
+      <input type="search" id="dbgSearch" placeholder="filter controls... (e.g. water, sparkle, bridge)"
+        style="width:100%;box-sizing:border-box;margin:4px 0 6px;background:#1a2026;color:#dfe7ef;border:1px solid rgba(80,90,100,.5);font-size:11px;padding:4px 6px">
 
       <div style="color:#7a8a96;font-size:10px;text-transform:uppercase;margin:6px 0 3px;letter-spacing:1px">Neural
         Terrain</div>
@@ -2162,27 +2164,87 @@
         <input type="range" id="dbgRubbleSize" min="0.4" max="2" step="0.05" value="1">
         <span class="dbg-val" id="dbgRubbleSizeVal">1.00</span>
       </label>
-      <label>Water Ripple Speed
-        <input type="range" id="dbgRippleSpeed" min="0" max="3" step="0.1" value="2.2">
-        <span class="dbg-val" id="dbgRippleSpeedVal">2.2</span>
+      <label>Water Time Scale (master)
+        <input type="range" id="dbgRippleSpeed" min="0" max="3" step="0.1" value="0.6">
+        <span class="dbg-val" id="dbgRippleSpeedVal">0.60</span>
       </label>
       <label>Water Ripple Strength
-        <input type="range" id="dbgRippleStr" min="0" max="3" step="0.1" value="1">
-        <span class="dbg-val" id="dbgRippleStrVal">1.0</span>
+        <input type="range" id="dbgRippleStr" min="0" max="3" step="0.1" value="1.2">
+        <span class="dbg-val" id="dbgRippleStrVal">1.20</span>
       </label>
       <label>Sparkle Intensity
-        <input type="range" id="dbgSparkle" min="0" max="5" step="0.05" value="1.55">
-        <span class="dbg-val" id="dbgSparkleVal">1.55</span>
+        <input type="range" id="dbgSparkle" min="0" max="5" step="0.05" value="0.55">
+        <span class="dbg-val" id="dbgSparkleVal">0.55</span>
       </label>
       <label>Sparkle Scale
-        <input type="range" id="dbgSparkleScale" min="0.5" max="100" step="0.5" value="6">
-        <span class="dbg-val" id="dbgSparkleScaleVal">6.0</span>
+        <input type="range" id="dbgSparkleScale" min="0.5" max="100" step="0.5" value="3.5">
+        <span class="dbg-val" id="dbgSparkleScaleVal">3.50</span>
       </label>
       <label>Sparkle Speed
-        <input type="range" id="dbgSparkleSpeed" min="0" max="15" step="0.1" value="2.9">
-        <span class="dbg-val" id="dbgSparkleSpeedVal">2.9</span>
+        <input type="range" id="dbgSparkleSpeed" min="0" max="15" step="0.1" value="0.3">
+        <span class="dbg-val" id="dbgSparkleSpeedVal">0.30</span>
       </label>
-      <label>Water Overlay Opacity
+      <label>Sparkle Floor
+        <input type="range" id="dbgGlintFloor" min="0" max="1" step="0.02" value="0.42">
+        <span class="dbg-val" id="dbgGlintFloorVal">0.42</span>
+      </label>
+      <label>Sparkle Quiet Bias
+        <input type="range" id="dbgSparkleQuiet" min="0" max="1" step="0.02" value="0.42">
+        <span class="dbg-val" id="dbgSparkleQuietVal">0.42</span>
+      </label>
+      <label>Water Lap Amount
+        <input type="range" id="dbgWaterLap" min="0" max="3" step="0.05" value="1.1">
+        <span class="dbg-val" id="dbgWaterLapVal">1.10</span>
+      </label>
+      <label>Water Lap Speed
+        <input type="range" id="dbgWaterLapSpd" min="0" max="3" step="0.05" value="0.5">
+        <span class="dbg-val" id="dbgWaterLapSpdVal">0.50</span>
+      </label>
+      <label>Water Drift Amount
+        <input type="range" id="dbgWaterDrift" min="0" max="3" step="0.05" value="0.8">
+        <span class="dbg-val" id="dbgWaterDriftVal">0.80</span>
+      </label>
+      <label>Water Chop Base
+        <input type="range" id="dbgWaterChopBase" min="0" max="1" step="0.02" value="0.72">
+        <span class="dbg-val" id="dbgWaterChopBaseVal">0.72</span>
+      </label>
+      <label>Water Chop Gust
+        <input type="range" id="dbgWaterChopGust" min="0" max="1.5" step="0.02" value="1.02">
+        <span class="dbg-val" id="dbgWaterChopGustVal">1.02</span>
+      </label>
+      <label>Water Gustiness
+        <input type="range" id="dbgWaterGust" min="0" max="1" step="0.02" value="0.54">
+        <span class="dbg-val" id="dbgWaterGustVal">0.54</span>
+      </label>
+      <label>Water Brightness
+        <input type="range" id="dbgWaterBright" min="0" max="4" step="0.05" value="0.2">
+        <span class="dbg-val" id="dbgWaterBrightVal">0.20</span>
+      </label>
+      <label>Water Reflectivity
+        <input type="range" id="dbgWaterReflect" min="0" max="1" step="0.02" value="0.82">
+        <span class="dbg-val" id="dbgWaterReflectVal">0.82</span>
+      </label>
+      <label>Water Ripple Scale
+        <input type="range" id="dbgWaterScale" min="0.3" max="3" step="0.05" value="0.5">
+        <span class="dbg-val" id="dbgWaterScaleVal">0.50</span>
+      </label>
+      <label>Glint Sharpness
+        <input type="range" id="dbgGlintSharp" min="4" max="300" step="2" value="156">
+        <span class="dbg-val" id="dbgGlintSharpVal">156</span>
+      </label>
+      <label>Water Blur
+        <input type="range" id="dbgWaterBlur" min="0" max="1" step="0.02" value="0.35">
+        <span class="dbg-val" id="dbgWaterBlurVal">0.35</span>
+      </label>
+      <label>Water Blur Radius
+        <input type="range" id="dbgWaterBlurRad" min="0" max="12" step="0.5" value="3">
+        <span class="dbg-val" id="dbgWaterBlurRadVal">3.00</span>
+      </label>
+      <label>Bridge Sink (stone)
+        <input type="range" id="dbgBridgeSink" min="-0.5" max="2.5" step="0.05" value="0.65">
+        <span class="dbg-val" id="dbgBridgeSinkVal">0.65</span>
+      </label>
+      <label>AI Overlay Water Opacity (neural mode only)
         <input type="range" id="dbgWaterOpacity" min="0" max="1" step="0.05" value="0.3">
         <span class="dbg-val" id="dbgWaterOpacityVal">0.30</span>
       </label>
