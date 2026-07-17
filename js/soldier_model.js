@@ -32,9 +32,15 @@ Game.SOLDIER_CLIP_RANGES = {
     grenade:    [21.6, 24.2],   // wind up + throw
     idle:       [27.3, 28.1],   // calm standing (near-static -> reads as "at ease")
     fire_prone: [30.0, 33.5],   // lying prone, aiming
-    death:      [34.5, 35.7],   // death variant 1 (tune via RAW scrub)
-    death2:     [36.0, 37.5],   // death variant 2
-    death3:     [38.0, 39.5],   // death variant 3
+    // Death windows re-derived from track motion analysis: the baked take has
+    // hard jump-cuts at ~34.63 / 35.83 / 37.03 / 38.24 between four separate
+    // death performances. The old windows straddled those cuts, so a man fell,
+    // teleported, and fell a second time. Each window now starts just after a
+    // cut and ends where the body settles dead-still.
+    death:      [34.68, 35.80], // death variant 1
+    death2:     [35.90, 37.00], // death variant 2
+    death3:     [37.08, 38.14], // death variant 3
+    death4:     [38.30, 38.98], // death variant 4 (quick collapse)
 };
 // idle is also the resting fallback for crouch/prone lookups in _chooseClip.
 
@@ -203,6 +209,48 @@ Game._soldierSkinTex = (url) => {
     return Game._soldierTexCache[url];
 };
 
+// Recolour the model's own (dark feldgrau) body texture toward a faction tint.
+// Multiplying material.color over the dark source map landed Polish troops
+// near-black (dark texel × khaki ≈ black). Instead, remap by luminance so the
+// AVERAGE texel comes out at the tint colour, keeping the baked shading/detail.
+// Cached per source texture + tint; returns null (caller falls back to the old
+// tint) if the embedded image isn't readable.
+Game._soldierTintedMap = (srcTex, tintHex) => {
+    const cache = (Game._soldierTintedMapCache = Game._soldierTintedMapCache || {});
+    const key = (srcTex.uuid || 'src') + '_' + tintHex;
+    if (key in cache) return cache[key];
+    const img = srcTex.image;
+    if (!img || !img.width || !img.height) return null;   // not decoded yet — don't cache
+    let data, c, ctx;
+    try {
+        c = document.createElement('canvas');
+        c.width = img.width; c.height = img.height;
+        ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        data = ctx.getImageData(0, 0, c.width, c.height);
+    } catch (e) { cache[key] = null; return null; }
+    const d = data.data;
+    let sum = 0;
+    for (let i = 0; i < d.length; i += 4) sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+    const avg = Math.max(8, sum / (d.length / 4));
+    const tr = (tintHex >> 16) & 255, tg = (tintHex >> 8) & 255, tb = tintHex & 255;
+    for (let i = 0; i < d.length; i += 4) {
+        // 1.0 = average texel → exactly the tint; cap the lift so highlights
+        // (skin, straps) don't blow out to white
+        const k = Math.min(1.7, (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / avg);
+        d[i] = Math.min(255, tr * k);
+        d[i + 1] = Math.min(255, tg * k);
+        d[i + 2] = Math.min(255, tb * k);
+    }
+    ctx.putImageData(data, 0, 0);
+    const tex = new Game.THREE.CanvasTexture(c);
+    tex.flipY = srcTex.flipY;
+    tex.wrapS = srcTex.wrapS; tex.wrapT = srcTex.wrapT;
+    tex.colorSpace = Game.THREE.SRGBColorSpace;
+    cache[key] = tex;
+    return tex;
+};
+
 Game.applySoldierSkin = (model, team, kind) => {
     const abbr = Game.SOLDIER_TEAM_ABBR[team] || team;
     const role = Game.SOLDIER_KIND_ROLE[kind] || 'rifle';
@@ -235,7 +283,14 @@ Game.applySoldierSkin = (model, team, kind) => {
                         else c.color.setHex(0xffffff);
                     }
                 }
-                else if (c.color) c.color.setHex(tint);   // no painted skin -> tint the German base
+                else if (tint !== 0xffffff) {
+                    // No painted skin: recolour the model's own map toward the
+                    // faction tint (Polish khaki). See _soldierTintedMap — the
+                    // old multiply-tint rendered these troops near-black.
+                    const tinted = c.map ? Game._soldierTintedMap(c.map, tint) : null;
+                    if (tinted) { c.map = tinted; if (c.color) c.color.setHex(0xffffff); }
+                    else if (c.color) c.color.setHex(tint);   // unreadable image -> old tint
+                }
             }
             Game._soldierMatTune(c, isGun);   // metalness/roughness/brightness (fixes the dark look)
             return c;
@@ -355,12 +410,18 @@ Game.playSoldierDeath = (unit) => {
     if ((prevName === 'fire_prone' || prevName === 'crawl' || prevName === 'prone_idle') && prevAct) {
         Object.values(ud.actions).forEach(a => { if (a !== prevAct) { a.stop(); a.enabled = false; } });
         prevAct.paused = true;               // hold the lying pose as the corpse
+        ud._deathClipDuration = 0;
         return true;
     }
-    const opts = ['death', 'death2', 'death3'].filter(n => ud.actions[n]);
+    const opts = ['death', 'death2', 'death3', 'death4'].filter(n => ud.actions[n]);
     if (!opts.length) return false;
     const name = opts[Math.floor(Math.random() * opts.length)];
     const act = ud.actions[name];
+    // (Cavalry note: the Horse_Fall_*/Collapse clips mapped onto death/2/3
+    // already animate the rider's pelvis down with the horse — they're the
+    // authored combined death. The separate Rider_Fall_* clips hold a STANDING
+    // horse on every horse bone, so co-playing one would blend the collapse
+    // 50/50 with a standing pose. Don't.)
     // Keep the clip he was playing alive for a short crossfade into the death
     // clip; hard-stopping everything snapped him to the death clip's first pose
     // in one frame (a visible flip/teleport), THEN played the fall.
@@ -373,7 +434,11 @@ Game.playSoldierDeath = (unit) => {
     act.setEffectiveWeight(1);
     act.setEffectiveTimeScale(1);
     act.play();
-    if (prev && prev !== act) act.crossFadeFrom(prev, 0.12, false);
+    // A galloping half-ton horse shouldn't snap into the fall in 0.12 s; give
+    // the heavy rig a slightly longer blend. Foot infantry keeps the sharp cut.
+    const fade = unit.mesh.userData.isMountedCavalry ? 0.22 : 0.12;
+    if (prev && prev !== act) act.crossFadeFrom(prev, fade, false);
+    ud._deathClipDuration = act.getClip().duration;
     ud._activeClip = name;
     return true;
 };

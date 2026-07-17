@@ -74,10 +74,32 @@ Game.syncUnitMeshes = (dt) => {
                         unit.mesh.position.y = (unit.y || 0) + 0.1;
                         unit._deathAnimRemaining = 0;
                     } else {
+                        // playSoldierDeath stashes the longest clip it started
+                        // (horse fall + rider fall can differ in length).
                         const action = ud.actions && ud.actions[ud._activeClip];
                         unit._deathAnimRemaining = action && !action.paused
-                            ? (action.getClip()?.duration || 2.5) + 0.2 : 0;
+                            ? Math.max(ud._deathClipDuration || 0,
+                                action.getClip()?.duration || 2.5) + 0.2 : 0;
                     }
+                } else if (Game.isSupport(unit.kind)) {
+                    // A crewed gun shouldn't cartwheel 90° onto its side with
+                    // the crew frozen mid-pose: settle it with a knocked-out
+                    // list, char it like a wreck, and hide the decorative crew
+                    // figures (read as: survivors bailed).
+                    unit.isDeadBody = true;
+                    unit.mesh.rotation.z = 0.22;
+                    unit.mesh.position.y = Math.max(0, (unit.y || 0) - 0.05);
+                    unit.mesh.traverse(o => {
+                        if (o.userData && o.userData.isFieldGunCrewman) o.visible = false;
+                        if ((o.isMesh || o.isInstancedMesh) && o.material) {
+                            const mats = Array.isArray(o.material) ? o.material : [o.material];
+                            mats.forEach(m => {
+                                if (m.color) m.color.multiplyScalar(0.45);
+                                if ('roughness' in m) m.roughness = 1.0;
+                            });
+                        }
+                    });
+                    unit._deathAnimRemaining = 0;
                 } else {
                     unit.isDeadBody = true;
                     unit.mesh.rotation.z = Math.PI / 2;        // fall over
