@@ -237,7 +237,7 @@ Game.UNIT_STATS = {
         speed: 1.7, hp: 155, size: 0.72,
         armor: 0,
         sight: 21, rotationSpeed: 3,
-        color: '#676e50', cost: 3, year: 1939,
+        color: '#7d7a58', cost: 3, year: 1939,   // Polish khaki — was so dark the gun read as a black blob
     },
     polish_fieldgun75: {
         label: '75mm Armata wz. 1902/26', kind: 'fieldgun75', class: 'support',
@@ -982,12 +982,21 @@ Game._createUnitMesh = (unit) => {
             addMesh(new THREE.SphereGeometry(0.112, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
                 std(helmetCol, { roughness: 0.6 }), 0, 0.64, 0.13, gnr);                            // helmet
         } else {
-            // AT gun: carriage + wheels + shield + barrel + trail legs
+            // AT gun: carriage + wheels + shield + barrel + trail legs.
+            // Barrel/trails/breech are painted carriage colour, not bare
+            // gunmetal — real AT guns were camouflage-painted all over, and the
+            // near-black metalMat made the whole gun read as a dark blob.
             const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.1, 10);
             wheelGeo.rotateZ(Math.PI / 2);
             const darkMat = std(0x2a2520, { roughness: 0.95 });
+            const hubMat = std(baseColor.clone().multiplyScalar(1.1), { roughness: 0.75 });
             addMesh(wheelGeo, darkMat, -0.42, 0.3, 0);
             addMesh(wheelGeo, darkMat, 0.42, 0.3, 0);
+            // painted hub caps lift the wheels out of the shadow
+            const hubGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.12, 10);
+            hubGeo.rotateZ(Math.PI / 2);
+            addMesh(hubGeo, hubMat, -0.42, 0.3, 0);
+            addMesh(hubGeo, hubMat, 0.42, 0.3, 0);
             addMesh(new THREE.BoxGeometry(0.5, 0.12, 0.5), gunMat, 0, 0.34, 0);
             // shield (angled)
             const shield = addMesh(new THREE.BoxGeometry(0.85, 0.5, 0.04), gunMat, 0, 0.55, 0.18);
@@ -995,10 +1004,12 @@ Game._createUnitMesh = (unit) => {
             const bLen = unit.kind === 'fieldgun75' ? 1.5 : (unit.kind === 'at47' ? 1.3 : 1.0);
             const barrelGeo2 = new THREE.CylinderGeometry(0.03, 0.045, bLen, 8);
             barrelGeo2.rotateX(Math.PI / 2);
-            addMesh(barrelGeo2, metalMat, 0, 0.5, 0.25 + bLen / 2);
+            addMesh(barrelGeo2, gunMat, 0, 0.5, 0.25 + bLen / 2);
+            // breech block behind the shield
+            addMesh(new THREE.BoxGeometry(0.14, 0.16, 0.3), gunMat, 0, 0.48, 0.02);
             // split trail legs
             [-1, 1].forEach(side => {
-                const trail = addMesh(new THREE.BoxGeometry(0.06, 0.06, 1.0), metalMat, side * 0.18, 0.18, -0.55);
+                const trail = addMesh(new THREE.BoxGeometry(0.06, 0.06, 1.0), gunMat, side * 0.18, 0.18, -0.55);
                 trail.rotation.y = side * 0.25;
             });
         }
@@ -1206,15 +1217,10 @@ Game._loadUnitModel = (unit, mesh) => {
     // kinematic bicycle model (uMod.move) already gives realistic front-wheel
     // steering, and a centred body turns cleanly like the procedural trucks do.
     Game.MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT || {};
-    Game.MODEL_SCALE = Game.MODEL_SCALE || {
-        french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35,
-        french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1,
-        german_panzer3: 1.35,
-        polish_fieldgun75: 1.0,
-        // The mounted asset is 15% smaller than its earlier tuning
-        // (0.72 × 0.85 = 0.612); its parked clone keeps this exact horse scale.
-        polish_mounted_ulan: 0.612,
-    };
+    // The authoritative MODEL_SCALE table lives at module scope (search
+    // "Game.MODEL_SCALE =" below) — it always runs before the first model
+    // load, so this is only a belt-and-braces guard, not a second copy.
+    Game.MODEL_SCALE = Game.MODEL_SCALE || {};
     const MODEL_YAW = Game.MODEL_YAW, MODEL_Y_TRIM = Game.MODEL_Y_TRIM, MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT, MODEL_SCALE = Game.MODEL_SCALE;
     // Fused-mesh tanks (turret modelled into the hull, no separate node): aim by
     // rotating the whole hull. The B1 model now has a real "turret" node, so it's
@@ -2050,8 +2056,18 @@ Game.MODEL_SCALE = Game.MODEL_SCALE || {
     french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35,
     french_r35: 1.35, french_fuel: 2.0, french_supply: 2.1, french_transport: 2.1,
     polish_mounted_ulan: 0.612, // 0.72 × 0.85: mounted pair is 15% smaller
-    polish_tks20: 0.8, polish_tks: 0.8,   // car-sized tankettes
     french_at47: 1.44,                     // reads undersized next to the 25mm (two +20% passes)
+    // Soldiers render at ~0.65 world units per real metre (1.14 wu tall). The
+    // size×2.6 footprint fit lands vehicles at ~0.54 wu/m, so they read small
+    // next to infantry; the French multipliers above already compensate. These
+    // bring the Polish + early German motor pool to the same metric
+    // (real lengths: TKS 2.6 m, wz.34 3.6 m, 7TP 4.6 m, Pz I 4.0 m, Pz II
+    // 4.8 m, Pz III 5.4 m, Pz IV 5.9 m, Sd.Kfz. 222 4.8 m).
+    polish_tks: 0.95, polish_tks20: 0.95,  // still the smallest AFV — just no longer a toy
+    polish_wz34: 1.15,
+    polish_7tp: 1.2, polish_7tp_dw: 1.2, polish_7tp_dwr: 1.2,
+    german_panzer1: 1.3, german_panzer2: 1.3, german_panzer3: 1.35,
+    german_panzer4: 1.35, german_sdkfz: 1.35,
 };
 
 // Rebuild the loaded model for every live unit of a teamKind, re-reading the
