@@ -1,8 +1,33 @@
 {
- "version": "v0.19.2",
- "build": "2080121",
- "generated": "2026-07-16",
+ "version": "v0.20.0",
+ "build": "9f62737",
+ "generated": "2026-07-17",
  "commits": [
+  {
+   "hash": "9f62737",
+   "date": "2026-07-17",
+   "subject": "procedural calm-water shader with full debug control"
+  },
+  {
+   "hash": "5095ba5",
+   "date": "2026-07-17",
+   "subject": "Polish khaki uniforms + cut-safe death animations"
+  },
+  {
+   "hash": "c0cf463",
+   "date": "2026-07-17",
+   "subject": "early-war vehicle scale + Polish AT gun readability"
+  },
+  {
+   "hash": "f602916",
+   "date": "2026-07-17",
+   "subject": "hold Shift + arrows to orbit and tilt the camera"
+  },
+  {
+   "hash": "6339b06",
+   "date": "2026-07-16",
+   "subject": "release v0.19.2"
+  },
   {
    "hash": "2080121",
    "date": "2026-07-16",
@@ -47,31 +72,6 @@
    "hash": "18ebfee",
    "date": "2026-07-15",
    "subject": "full mission arc"
-  },
-  {
-   "hash": "9d4ac42",
-   "date": "2026-07-15",
-   "subject": "release v0.17.0"
-  },
-  {
-   "hash": "4cb96fb",
-   "date": "2026-07-15",
-   "subject": "scale field clutter per scenario"
-  },
-  {
-   "hash": "ab3ca65",
-   "date": "2026-07-15",
-   "subject": "left-click deselect can no longer stick"
-  },
-  {
-   "hash": "4cf6572",
-   "date": "2026-07-15",
-   "subject": "7TP platoon, TKS 20mm, and Luftwaffe raids with the Bf-110"
-  },
-  {
-   "hash": "378a417",
-   "date": "2026-07-14",
-   "subject": "release v0.16.1"
   }
  ]
 }

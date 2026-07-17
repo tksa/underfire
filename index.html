@@ -9,7 +9,7 @@
     // Production serves heavyweight public assets through the Bunny Pull Zone.
     // Localhost, previews and CI stay fully local. `?cdn=0` is an emergency
     // production bypass; `?cdn=1` lets a developer exercise Bunny locally.
-    window.UF_ASSET_VERSION = 'v0.19.2';
+    window.UF_ASSET_VERSION = 'v0.20.0';
     (function () {
       var CDN_ORIGIN = 'https://underfire.b-cdn.net';
       var productionHosts = ['underfire.io', 'www.underfire.io', 'underfire.b-cdn.net'];
@@ -2740,12 +2740,11 @@
     if (vEl) vEl.textContent = UNDER_VERSION;
 
     const FALLBACK_NOTES = [
-      'The landing and mission-selection screens now share a wide, responsive command-dossier layout.',
-      'Bundled Barlow typefaces provide consistent interface typography on desktop and mobile.',
-      'The homepage now focuses on play and contribution areas, with Development Paths removed.',
-      'Country choices use rounded SVG flags, including the historical German mission selector.',
-      'The German flag keeps its original emblem geometry while its red side margins are cropped to the shared frame.',
-      'The contribution list now calls out Animations, with shorter fan-built and licence copy.',
+      'Rivers and ponds use a new calm-water shader: real ripples, wind-gust patches, sky reflection and sun sparkle.',
+      'Polish infantry and gun crews now wear their proper light-khaki uniforms, and the 37mm Bofors reads clearly on the field.',
+      'Tankettes and early-war vehicles are sized correctly next to infantry.',
+      'Death animations no longer glitch mid-fall; cavalry and gun positions go down believably.',
+      'Hold Shift with the arrow keys to rotate and tilt the battlefield camera.',
     ];
     const renderUpdates = (version, date, notes) => {
       if (!upEl) return;
