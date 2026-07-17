@@ -8,11 +8,28 @@ Game.updateCamera = (dt) => {
     const edge = 30;  // pixels from edge for edge-pan
     let dx = 0, dz = 0;
 
-    // Arrow keys
-    if (Game.keys['ArrowLeft']) dx -= 1;
-    if (Game.keys['ArrowRight']) dx += 1;
-    if (Game.keys['ArrowUp']) dz -= 1;
-    if (Game.keys['ArrowDown']) dz += 1;
+    // Shift + arrows = orbit the view instead of panning it: left/right spins
+    // the yaw, up/down tilts toward/away from top-down. Zoom stays on +/- and
+    // works with Shift held too. (Shift only modifies mouse clicks elsewhere,
+    // so the arrow keys are free while it's down.)
+    const shiftHeld = Game.keys['ShiftLeft'] || Game.keys['ShiftRight'];
+    if (shiftHeld) {
+        const yawSpeed = 55, tiltSpeed = 35;   // deg/s — slow enough to aim
+        let yaw = Game.camYawDeg != null ? Game.camYawDeg : 23;
+        let tilt = Game.camTiltDeg || 45;
+        if (Game.keys['ArrowLeft']) yaw -= yawSpeed * dt;
+        if (Game.keys['ArrowRight']) yaw += yawSpeed * dt;
+        if (Game.keys['ArrowUp']) tilt += tiltSpeed * dt;    // toward top-down
+        if (Game.keys['ArrowDown']) tilt -= tiltSpeed * dt;  // more oblique
+        Game.camYawDeg = ((yaw % 360) + 360) % 360;
+        Game.camTiltDeg = Game.clamp(tilt, 25, 88);
+    } else {
+        // Arrow keys pan
+        if (Game.keys['ArrowLeft']) dx -= 1;
+        if (Game.keys['ArrowRight']) dx += 1;
+        if (Game.keys['ArrowUp']) dz -= 1;
+        if (Game.keys['ArrowDown']) dz += 1;
+    }
 
     // Edge-pan (screen pixel coordinates) — disabled when mouse is over HUD
     const overHUD = Game.mouse.screenY > Game.viewH - 160;
