@@ -1,8 +1,43 @@
 {
- "version": "v0.20.0",
- "build": "9f62737",
- "generated": "2026-07-17",
+ "version": "v0.21.0",
+ "build": "eb3cb40",
+ "generated": "2026-09-10",
  "commits": [
+  {
+   "hash": "eb3cb40",
+   "date": "2026-09-10",
+   "subject": "bring the contributor guide and GitHub templates up to date"
+  },
+  {
+   "hash": "43a6bef",
+   "date": "2026-09-10",
+   "subject": "no standing corpses, kneeling fire, rate-limited clip switching"
+  },
+  {
+   "hash": "05ac339",
+   "date": "2026-09-10",
+   "subject": "infantry and AT-gun movement under armor"
+  },
+  {
+   "hash": "f0080c4",
+   "date": "2026-09-10",
+   "subject": "device-agnostic inference server (CUDA / MPS / CPU) and 2026-09 plan"
+  },
+  {
+   "hash": "741445c",
+   "date": "2026-09-10",
+   "subject": "AgX filmic tone mapping in the composer"
+  },
+  {
+   "hash": "2ddf095",
+   "date": "2026-09-10",
+   "subject": "map ruler in the debug panel"
+  },
+  {
+   "hash": "9413e68",
+   "date": "2026-07-17",
+   "subject": "release v0.20.0"
+  },
   {
    "hash": "9f62737",
    "date": "2026-07-17",
@@ -37,41 +72,6 @@
    "hash": "5725a7a",
    "date": "2026-07-16",
    "subject": "release v0.19.1"
-  },
-  {
-   "hash": "35da6e4",
-   "date": "2026-07-16",
-   "subject": "tow hook-up clicks actually reach the tow logic"
-  },
-  {
-   "hash": "9633ff9",
-   "date": "2026-07-16",
-   "subject": "release v0.19.0"
-  },
-  {
-   "hash": "4d073a1",
-   "date": "2026-07-16",
-   "subject": "left-click selects, right-click acts"
-  },
-  {
-   "hash": "87cb4bf",
-   "date": "2026-07-16",
-   "subject": "transport trucks tow AT guns, Sudden Strike style"
-  },
-  {
-   "hash": "837f31b",
-   "date": "2026-07-16",
-   "subject": "French 25mm Hotchkiss and 47mm SA 37 AT guns with crews"
-  },
-  {
-   "hash": "d300f11",
-   "date": "2026-07-15",
-   "subject": "release v0.18.0"
-  },
-  {
-   "hash": "18ebfee",
-   "date": "2026-07-15",
-   "subject": "full mission arc"
   }
  ]
 }
