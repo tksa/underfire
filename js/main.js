@@ -5587,6 +5587,7 @@ Game.tick = (now) => {
         Game.updateHUD();
     }
     Game.updateSelectionBox();
+    if (Game.updateRuler) Game.updateRuler();
     Game._minimapRefreshTimer = (Game._minimapRefreshTimer || 0) - dt;
     if (Game._minimapRefreshTimer <= 0) {
         Game._minimapRefreshTimer = 0.125;

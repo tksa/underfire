@@ -51,7 +51,7 @@ applicable in a browser or to this game's design).
 | J | Fighter cover — opens the squadron menu (plane types + counts); pick one, the green patrol ring follows the cursor, right-click calls the sortie (approach path = the map edge nearest the click). An airborne plane is click-selectable like a tank; right-click then re-tasks its patrol circle. (SS2 ran air support through orders-menu plane icons + waypoints.) |
 | Alt | Toggle all health bars |
 | L | Jump to last attack |
-| ` | Debug panel |
+| ` | Debug panel (includes the Ruler: toggle it on, left-click the map to place point A then B — the span is drawn with tick marks one soldier height apart and a label in world units / infantry heights / tiles; Esc exits, Clear wipes all measurements) |
 
 ## Mouse
 

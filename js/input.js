@@ -1128,6 +1128,13 @@ Game.handleMouseSelection = (e) => {
     const boxW = Math.abs(dx);
     const boxH = Math.abs(dy);
 
+    // Debug ruler: while it is on, left clicks place measurement points
+    // instead of selecting units (a drag does nothing).
+    if (Game._ruler && Game._ruler.on) {
+        if (boxW < 4 && boxH < 4) Game.rulerClickAt(mouse.dragCurrentX, mouse.dragCurrentY);
+        return;
+    }
+
     if (boxW < 4 && boxH < 4) {
         // Airborne fighter under the click: select it like any tank — its
         // patrol ring lights up and right-click re-tasks it.
