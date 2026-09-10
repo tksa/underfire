@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Discussions (ideas, questions, voting)
-    url: https://github.com/REPLACE-ME/under/discussions
-    about: Ask questions, float ideas, and vote on direction before opening an issue.
+  - name: Discord (ideas, questions, quick feedback)
+    url: https://discord.gg/jmkh3RDkF
+    about: Ask questions and float ideas before opening an issue.

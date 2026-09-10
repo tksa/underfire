@@ -23,7 +23,9 @@ If you use an AI assistant (Claude Code, Cursor, etc.), point it at this file an
 
 ## 2. How the code is organised
 
-Everything hangs off a single global object, `Game` (defined in `js/config.js`). Files are loaded as classic scripts from `index.html`, except `js/main.js`, which is the ES-module entry point that boots the game. To add a new file, drop it in `js/` and add a `<script>` tag in `index.html` in the right order.
+Everything hangs off a single global object, `Game` (defined in `js/config.js`). Files are loaded as classic scripts from `index.html`, except `js/main.js`, which is the ES-module entry point that boots the game. To add a new file, drop it in `js/` and add its basename to the inline `classic = [...]` loader array in `index.html`, in dependency order, before `main.js` (the loader appends a cache-busting version; do not add `<script>` tags by hand).
+
+If you use Claude Code, `CLAUDE.md` and the task guides in `.claude/skills/` (add-unit, add-scenery, add-sound, new-scenario, run-and-test, neural-renderer) already encode these conventions.
 
 | File | What lives here |
 |------|-----------------|
@@ -34,13 +36,23 @@ Everything hangs off a single global object, `Game` (defined in `js/config.js`).
 | `js/units.js` | Unit factory (`makeUnit`), unit meshes, model loading, the infantry rig |
 | `js/weapons.js` | Weapon definitions (range, damage, penetration, suppression, accuracy) |
 | `js/combat.js` | `applyShot`, the damage/penetration model, hit effects |
-| `js/ai.js` | Enemy AI: per-unit state machine + squad coordination (fire-and-maneuver) |
+| `js/ai.js` | Enemy AI: per-unit state machine + squad coordination (fire-and-maneuver), armor-threat helpers shared with the player side |
+| `js/unit_modules.js` | The per-unit update loop (`Game.uMod`: frame, morale, health, supply, deploy, scan, bombard, engage, takeCover, fire, posture, move) and the `updateUnit` orchestrator |
+| `js/ai_tactics.js` | Idle / at-ease / guard postures (`Game.uMod.ambient`) |
 | `js/pathfinding.js` | A* pathfinding over the tile grid |
 | `js/camera.js` | Camera panning, zoom, follow |
 | `js/input.js` | Mouse and keyboard handling, selection, orders |
 | `js/renderer.js` | Per-frame sync of game state to meshes, tracers, smoke, animation, minimap, HUD |
 | `js/audio.js` | Pooled sound effects, ambient loops, voice barks |
-| `js/mission.js` | Scenario setup: where units spawn, win/lose conditions, reinforcements |
+| `js/mission.js` | Default scenario (Advance to the Dyle): spawns, objective, win/lose, reinforcements |
+| `js/scenarios/mokra.js` | The Mokra: Hold the Railway scenario (authored map, waves, objectives) |
+| `js/buildings.js`, `js/garrison_ui.js` | Enterable buildings and the garrison UI |
+| `js/soldier_model.js`, `js/fieldgun_model.js`, `js/cavalry_model.js` | Rigged soldier, crewed gun and horse-and-rider model handling |
+| `js/aircraft.js` | Fighters, bombers, air strikes |
+| `js/valor.js` | The VALOR finishing post-process pass |
+| `js/editor.js`, `js/ruler.js` | In-game map maker and the debug ruler |
+| `js/neural_export.js` | G-buffer / mask exporter for the neural-renderer pipeline |
+| `data/units.csv` | The editable unit roster, merged over `js/units.js` at boot (see `data/README.md`) |
 | `js/main.js` | Boot sequence, the game loop, fog of war, menu → game start |
 
 When in doubt, search the repo for a string you can see on screen and work backwards from there.
@@ -71,8 +83,11 @@ When in doubt, search the repo for a string you can see on screen and work backw
 - Combat math: `js/combat.js` and `js/weapons.js`. AI behaviour: `js/ai.js`. Mission scripting: `js/mission.js`.
 - Balance and realism are wide open. The vision is historical plausibility — cite a source in your PR when you change a stat.
 
+### New units
+- Prefer adding a row to `data/units.csv` (key `{team}_{kind}`, a `year` for era gating, a weapon key from `js/weapons.js`). `js/units.js` holds the built-in fallback table. See `data/README.md` and the `add-unit` skill.
+
 ### New scenarios / maps
-- Today there is one scenario. The cleanest contribution path is parameterising `js/mission.js` and `js/terrain.js` so a scenario can define its own spawns and map seed. This is a high-value first project.
+- Two scenarios ship today: Advance to the Dyle (`js/mission.js`) and Mokra (`js/scenarios/mokra.js`, with its map under `maps/mokra/`). Use Mokra as the template for an authored scenario, or the in-game Map Maker (debug panel) to paint a map and export it.
 
 ---
 
@@ -91,7 +106,7 @@ This protects the project and every contributor. A great-looking asset we cannot
 ## 5. Coding conventions
 
 - Match the surrounding style. 4-space indent, `const`/`let`, small focused functions hung off `Game`.
-- Keep it dependency-free and build-free. No npm packages in the runtime path; Three.js comes from the CDN importmap.
+- Keep it dependency-free and build-free. No npm packages in the runtime path; Three.js and the other ES-module libraries are vendored under `/vendor` and wired through the importmap in `index.html`.
 - Comment the *why*, not the *what*. Historical or design rationale is especially welcome.
 - Don't break the no-asset-needed promise: prefer procedural defaults so the game still runs if an optional asset is missing.
 
@@ -101,7 +116,17 @@ This protects the project and every contributor. A great-looking asset we cannot
 
 Manual testing is the baseline: run the server, play the scenario, watch the browser console for errors.
 
-For anything non-trivial there is a headless screenshot/inspection harness using `playwright-core` (see `docs/DEPLOYMENT.md` for the pattern). A good PR says what you tested and includes a before/after screenshot for anything visual.
+There is also a headless regression suite (the same one CI runs) built on Playwright. One-time setup, then run any script against your local server:
+
+```bash
+npm install --no-save playwright && npx playwright install chromium
+python3 -m http.server 8741 &
+node scripts/smoke-test.mjs                 # boots the game, fails on runtime errors
+node scripts/tank-approach-test.mjs --assert # infantry / AT-gun behaviour under armor
+node scripts/tow-move-test.mjs               # towed guns; see scripts/ for the rest
+```
+
+`node --check js/yourfile.js` catches syntax errors before you open the browser. A good PR says what you tested and includes a before/after screenshot for anything visual.
 
 ---
 
