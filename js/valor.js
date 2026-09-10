@@ -131,7 +131,7 @@ Game._makeValorEffect = () => {
                 attributes: PF.EffectAttribute.DEPTH,
                 blendFunction: PF.BlendFunction.NORMAL,
                 uniforms: new Map([
-                    ['uExposure', new THREE.Uniform(1.31)],
+                    ['uExposure', new THREE.Uniform(1.0)],   // exposure now lives on the tone mapper (renderer.toneMappingExposure)
                     ['uAerial', new THREE.Uniform(0.35)],
                     ['uAerialStart', new THREE.Uniform(0.25)],
                     ['uAerialEnd', new THREE.Uniform(1.0)],
@@ -159,7 +159,7 @@ Game._makeValorEffect = () => {
 // copy-values box pick them up for free.
 Game._valorDefaults = {
     valorEnable: true,
-    valorExposure: 1.31,
+    valorExposure: 1.0,    // exposure moved to the tone mapper (Tone > Exposure)
     valorAerial: 0.35,
     valorAerialStart: 0.25,
     valorAerialEnd: 1.0,

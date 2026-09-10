@@ -77,7 +77,7 @@ Press `` ` `` (backtick) in-game to toggle the **Debug Controls** panel. It has 
 - **Terrain** — height scale, smoothing, bump/roughness/metalness, texture filter and scale, flat shading (then **Rebuild Terrain**)
 - **Lighting / Water / Camera** — sun and ambient, cloud shadows, water level/opacity/roughness, camera tilt and zoom range
 - **Tank Model** — pick a model and **Scan Nodes** to inspect its mesh hierarchy
-- **Post-processing** — anti-aliasing (SMAA), the render **upscaler**, bloom, tilt-shift depth-of-field, colour grading (hue/saturation, brightness/contrast), vignette, and live **lighting** (sun / ambient / cloud shadows)
+- **Post-processing** — anti-aliasing (SMAA), filmic **tone mapping** (AgX / Neutral / ACES / linear, with exposure), the render **upscaler**, bloom, tilt-shift depth-of-field, colour grading (hue/saturation, brightness/contrast), vignette, and live **lighting** (sun / ambient / cloud shadows)
 
 Each post-processing control has a slider *and* a typeable number box. Retune the look live, then click **Copy values** to copy the current settings to the clipboard (a `postfx = { … }` block including lighting) so you can drop them into an issue, a PR, or a chat.
 

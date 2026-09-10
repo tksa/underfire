@@ -13,6 +13,7 @@ import {
     EffectComposer, RenderPass, EffectPass,
     BloomEffect, TiltShiftEffect, HueSaturationEffect,
     BrightnessContrastEffect, VignetteEffect, SMAAEffect,
+    ToneMappingEffect, ToneMappingMode,
     BlendFunction, KernelSize,
     Effect, EffectAttribute,
 } from 'postprocessing';
@@ -24,10 +25,11 @@ window.Game.GLTFLoader = GLTFLoader;
 window.Game.DRACOLoader = DRACOLoader;
 window.Game.SkeletonUtils = { clone: skeletonClone };  // proper clone for rigged/skinned models
 window.Game.EZTree = { Tree };   // procedural tree generator (MIT); we swap in CC0 materials
-window.Game.PostFX = {           // pmndrs/postprocessing (MIT), loaded from CDN
+window.Game.PostFX = {           // pmndrs/postprocessing (Zlib), vendored under /vendor
     EffectComposer, RenderPass, EffectPass,
     BloomEffect, TiltShiftEffect, HueSaturationEffect,
     BrightnessContrastEffect, VignetteEffect, SMAAEffect,
+    ToneMappingEffect, ToneMappingMode,
     BlendFunction, KernelSize,
     Effect, EffectAttribute,
 };

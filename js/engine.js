@@ -475,10 +475,30 @@ Game.setupPostFX = () => {
             if (Game._waterBlurEffect) composer.addPass(new PF.EffectPass(Game.camera, Game._waterBlurEffect));
         } catch (e) { console.warn('[postfx] water blur unavailable', e); }
         composer.addPass(new PF.EffectPass(Game.camera, bloom));
-        composer.addPass(new PF.EffectPass(Game.camera, hueSat, brightContrast, vignette));
+        // Filmic tone mapping FIRST in the grade pass. The scene is lit in
+        // physical-ish units (sun ~4-5, ambient ~2 on MeshStandardMaterial), so
+        // any sunlit surface brighter than mid-grey clips to white before the
+        // grade; HueSaturationEffect then hard-clamps to 1.0. AgX rolls the
+        // highlights off instead. It has to sit here, not after the grade or
+        // inside VALOR, because those already receive clipped LDR data. Setting
+        // renderer.toneMapping would do nothing: three only applies it when
+        // rendering to the screen and pmndrs materials are toneMapped:false.
+        // Exposure lives on renderer.toneMappingExposure, which three's AgX /
+        // Neutral / ACES functions multiply in (VALOR's exposure is now 1.0).
+        let tone = null;
+        try {
+            if (PF.ToneMappingEffect && PF.ToneMappingMode) {
+                tone = new PF.ToneMappingEffect({ mode: PF.ToneMappingMode.AGX });
+                Game.renderer.toneMappingExposure = Game.TONE_EXPOSURE_DEFAULT;
+            }
+        } catch (e) { console.warn('[postfx] tone mapping unavailable', e); tone = null; }
+        const gradePass = tone
+            ? new PF.EffectPass(Game.camera, tone, hueSat, brightContrast, vignette)
+            : new PF.EffectPass(Game.camera, hueSat, brightContrast, vignette);
+        composer.addPass(gradePass);
 
         Game.composer = composer;
-        Game.postfx = { bloom, tiltShift: null, hueSat, brightContrast, vignette, smaa, smaaPass };
+        Game.postfx = { bloom, tiltShift: null, hueSat, brightContrast, vignette, smaa, smaaPass, tone, gradePass };
 
         // FSR-like upscaler: render the composed frame at reduced resolution and
         // edge-enhance it on the way up to the canvas.
@@ -495,6 +515,7 @@ Game.setupPostFX = () => {
         // Live-tunable state (mirrors the constructor values above) + debug UI.
         Game.postfxState = {
             upscaleFactor: Game.upscaleFactor,
+            toneMode: 'AGX', toneExposure: Game.TONE_EXPOSURE_DEFAULT,
             bloomIntensity: 0.4, bloomThreshold: 0.65,
             tiltFocusArea: 0.92, tiltFeather: 0.22, tiltOffset: 0,
             saturation: 0.05, hue: -0.06,
@@ -646,10 +667,32 @@ Game.setUpscale = (f) => {
 // Descriptors for the debug-panel post-processing sliders. apply() writes the
 // live effect/light; read-back for the copy box comes from Game.postfxState.
 // Lighting writes the *base* the dynamic-light loop reads (Game._dbg*Base).
+// Tone-mapping curve names -> pmndrs ToneMappingMode values (resolved lazily:
+// the PostFX module may not be loaded when this table is first read).
+Game.TONE_MODES = ['LINEAR', 'ACES_FILMIC', 'AGX', 'NEUTRAL'];
+Game.TONE_EXPOSURE_DEFAULT = 1.31;   // the exposure VALOR used to apply as a plain multiply
+Game.setToneMode = (name) => {
+    const pf = Game.postfx || {};
+    const PF = Game.PostFX;
+    if (!pf.tone || !PF || !PF.ToneMappingMode) return;
+    const mode = PF.ToneMappingMode[name];
+    if (mode !== undefined) pf.tone.mode = mode;
+};
+// three uploads toneMappingExposure only when a material is (re)compiled, so a
+// live change has to poke the grade pass' material or the slider does nothing.
+Game.setToneExposure = (v) => {
+    if (!Game.renderer) return;
+    Game.renderer.toneMappingExposure = v;
+    const pass = Game.postfx && Game.postfx.gradePass;
+    if (pass && pass.fullscreenMaterial) pass.fullscreenMaterial.needsUpdate = true;
+};
+
 Game._postfxControlDefs = () => {
     const pf = Game.postfx || {};
     return [
         { group: 'Anti-aliasing', key: 'antialias', type: 'bool', label: 'SMAA', apply: v => { if (pf.smaaPass) pf.smaaPass.enabled = !!v; } },
+        { group: 'Tone', key: 'toneMode', type: 'select', label: 'Curve', options: Game.TONE_MODES, default: 'AGX', apply: v => Game.setToneMode(v) },
+        { group: 'Tone', key: 'toneExposure', label: 'Exposure', min: 0.3, max: 2.5, step: 0.01, apply: v => Game.setToneExposure(v) },
         { group: 'Upscaler', key: 'upscaleFactor', label: 'Upscale Factor', min: 1, max: 3, step: 0.01, apply: v => Game.setUpscale(v) },
         { group: 'Bloom', key: 'bloomIntensity', label: 'Bloom Intensity', min: 0, max: 3, step: 0.05, apply: v => { if (pf.bloom) pf.bloom.intensity = v; } },
         { group: 'Bloom', key: 'bloomThreshold', label: 'Bloom Threshold', min: 0, max: 1, step: 0.01, apply: v => { if (pf.bloom && pf.bloom.luminanceMaterial) pf.bloom.luminanceMaterial.threshold = v; } },
@@ -691,6 +734,7 @@ Game.postfxValuesText = () => {
     return [
         'postfx = {',
         `  antialias: ${s.antialias ? 'true' : 'false'},  // SMAA + 4x MSAA`,
+        `  tone:           { mode: '${s.toneMode || 'AGX'}', exposure: ${f(s.toneExposure != null ? s.toneExposure : Game.TONE_EXPOSURE_DEFAULT)} },`,
         `  upscaleFactor: ${f(s.upscaleFactor)},`,
         `  bloom:          { intensity: ${f(s.bloomIntensity)}, threshold: ${f(s.bloomThreshold)} },`,
         `  tiltShift:      { focusArea: ${f(s.tiltFocusArea)}, feather: ${f(s.tiltFeather)} },`,
@@ -764,6 +808,27 @@ Game.buildPostFXDebugUI = () => {
         if (v0 === undefined) {
             v0 = (def.default !== undefined) ? def.default : (def.type === 'bool' ? false : 0);
             Game.postfxState[def.key] = v0;
+        }
+        // Select controls render as a dropdown of named options.
+        if (def.type === 'select') {
+            const slabel = document.createElement('label');
+            slabel.appendChild(document.createTextNode(def.label + ' '));
+            const sel = document.createElement('select');
+            sel.dataset.postfxKey = def.key;
+            sel.style.cssText = 'background:#2a3038;color:#dfe7ef;border:1px solid rgba(80,90,100,0.4);font-size:11px;padding:1px 3px';
+            (def.options || []).forEach(o => {
+                const opt = document.createElement('option');
+                opt.value = o; opt.textContent = o; opt.selected = (o === v0);
+                sel.appendChild(opt);
+            });
+            sel.addEventListener('change', () => {
+                Game.postfxState[def.key] = sel.value;
+                try { def.apply(sel.value); } catch (e) { /* ignore */ }
+                if (valuesBox) valuesBox.value = Game.postfxValuesText();
+            });
+            slabel.appendChild(sel);
+            wrap.appendChild(slabel);
+            return;
         }
         // Boolean controls render as a checkbox.
         if (def.type === 'bool') {
