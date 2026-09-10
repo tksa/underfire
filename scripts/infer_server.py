@@ -3,7 +3,15 @@
 
 Runs the published ControlNet (https://huggingface.co/tstruk/under-fire-terrain-controlnet)
 locally; the game talks to it on http://127.0.0.1:8788 via the debug panel
-(backtick). Needs a CUDA GPU with ~8GB+ free.
+(backtick). Runs on a CUDA GPU (~8GB+ free), on Apple Silicon through MPS
+(float16, batch size 1; a 512 tile takes roughly 10-20 s on an M-series Max,
+so a full map bake is an hour or two), or on the CPU as a last resort.
+Pick with --device cuda|mps|cpu (default: the best available).
+
+Environment (Python 3.12 recommended; the system Python 3.9 cannot host spandrel):
+    uv venv -p 3.12 .venv && uv pip install --python .venv/bin/python \
+        torch diffusers transformers accelerate safetensors pillow numpy
+    .venv/bin/python scripts/infer_server.py
 
 POST /render with a JPEG game frame (reference mode, zoom 20) as the raw body.
 The frame is resized to the training-canonical 1718x915, the centre 512x512
@@ -38,16 +46,54 @@ ap.add_argument("--checkpoint", default="tstruk/under-fire-terrain-controlnet",
                 help="HF model id or a local save_pretrained folder")
 ap.add_argument("--port", type=int, default=8788)
 ap.add_argument("--steps", type=int, default=25)
+ap.add_argument("--device", default="auto", choices=["auto", "cuda", "mps", "cpu"],
+                help="compute device (auto = cuda, else mps, else cpu)")
 args = ap.parse_args()
 
-dtype = torch.bfloat16
-print(f"loading {args.checkpoint} ...", flush=True)
+
+def pick_device(name):
+    if name == "auto":
+        if torch.cuda.is_available():
+            return "cuda"
+        if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            return "mps"
+        return "cpu"
+    return name
+
+
+DEVICE = pick_device(args.device)
+# bf16 is the CUDA choice; MPS is float16 (bf16 support there is partial and
+# slow), and the CPU path stays float32 for correctness.
+dtype = {"cuda": torch.bfloat16, "mps": torch.float16, "cpu": torch.float32}[DEVICE]
+# diffusers warns that MPS batch inference can produce wrong images: one tile
+# per pipeline call there, eight on CUDA (bounded by VRAM), one on CPU.
+BATCH = 8 if DEVICE == "cuda" else 1
+
+
+def make_generator():
+    # torch.Generator has no MPS variant in every release; the CPU generator
+    # seeds the sampler identically on all devices.
+    return torch.Generator("cuda" if DEVICE == "cuda" else "cpu").manual_seed(SEED)
+
+
+def empty_cache():
+    if DEVICE == "cuda":
+        torch.cuda.empty_cache()
+    elif DEVICE == "mps" and hasattr(torch, "mps"):
+        torch.mps.empty_cache()
+
+
+print(f"loading {args.checkpoint} on {DEVICE} ({dtype}) ...", flush=True)
 cn = ControlNetModel.from_pretrained(args.checkpoint, torch_dtype=dtype)
 pipe = StableDiffusionControlNetPipeline.from_pretrained(
     MODEL, controlnet=cn, torch_dtype=dtype, safety_checker=None)
 pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
 pipe.set_progress_bar_config(disable=True)
-pipe.to("cuda")
+pipe.to(DEVICE)
+if DEVICE != "cuda":
+    # Attention slicing trades a little speed for a lot less memory headroom
+    # on unified-memory machines and CPUs.
+    pipe.enable_attention_slicing()
 # same weights, img2img entry point — used by the refinement pass
 pipe_i2i = StableDiffusionControlNetImg2ImgPipeline(**pipe.components)
 pipe_i2i.set_progress_bar_config(disable=True)
@@ -69,7 +115,9 @@ def esrgan_x2(img):
                 "models/RealESRGAN_x2plus.pth missing - download from the "
                 "Real-ESRGAN releases or bake with upscale=1")
         _esrgan = ModelLoader().load_from_file("models/RealESRGAN_x2plus.pth").model
-        _esrgan = _esrgan.cuda().eval().half()
+        _esrgan = _esrgan.to(DEVICE).eval()
+        if DEVICE != "cpu":
+            _esrgan = _esrgan.half()
     a = np.asarray(img, np.float32) / 255.0
     H, W = a.shape[:2]
     out = np.zeros((H * 2, W * 2, 3), np.float32)
@@ -79,7 +127,9 @@ def esrgan_x2(img):
             for x in range(0, W, T):
                 y0, x0 = max(0, y - OV), max(0, x - OV)
                 y1, x1 = min(H, y + T + OV), min(W, x + T + OV)
-                t = torch.from_numpy(a[y0:y1, x0:x1].transpose(2, 0, 1)).unsqueeze(0).cuda().half()
+                t = torch.from_numpy(a[y0:y1, x0:x1].transpose(2, 0, 1)).unsqueeze(0).to(DEVICE)
+                if DEVICE != "cpu":
+                    t = t.half()
                 r = _esrgan(t)[0].float().clamp(0, 1).cpu().numpy().transpose(1, 2, 0)
                 iy0, ix0 = (y - y0) * 2, (x - x0) * 2
                 oy1, ox1 = min(H, y + T), min(W, x + T)
@@ -108,7 +158,7 @@ NEG = ("blurry, low quality, oversharpened, noisy, grainy, jpeg artifacts, "
 
 
 def render(cond, steps):
-    gen = torch.Generator("cuda").manual_seed(SEED)
+    gen = make_generator()
     return pipe(caption(), negative_prompt=negp(), image=cond, num_inference_steps=steps,
                 generator=gen, guidance_scale=GUIDANCE,
                 controlnet_conditioning_scale=CNSCALE).images[0]
@@ -135,13 +185,13 @@ def render_tiled(img, steps, xs, ys):
     tiles = [(x, y) for y in ys for x in xs]
     conds = [img.crop((x, y, x + 512, y + 512)) for x, y in tiles]
     outs = []
-    for i in range(0, len(conds), 8):
-        gen = torch.Generator("cuda").manual_seed(SEED)   # fixed seed: stable output
-        n = len(conds[i:i + 8])
-        outs += pipe([caption()] * n, negative_prompt=[negp()] * n, image=conds[i:i + 8],
+    for i in range(0, len(conds), BATCH):
+        gen = make_generator()   # fixed seed: stable output
+        n = len(conds[i:i + BATCH])
+        outs += pipe([caption()] * n, negative_prompt=[negp()] * n, image=conds[i:i + BATCH],
                      num_inference_steps=steps, generator=gen, guidance_scale=GUIDANCE,
                      controlnet_conditioning_scale=CNSCALE).images
-        print(f"  tiles {min(i + 8, len(conds))}/{len(conds)}", flush=True)
+        print(f"  tiles {min(i + BATCH, len(conds))}/{len(conds)}", flush=True)
     W, H = img.size
     acc = np.zeros((H, W, 3), np.float32)
     wacc = np.zeros((H, W, 1), np.float32)
@@ -173,17 +223,17 @@ def refine_tiled(ref_img, init_img, steps, strength, xs, ys):
     Low strength keeps layout/colour and adds coherent micro-detail."""
     tiles = [(x, y) for y in ys for x in xs]
     outs = []
-    for i in range(0, len(tiles), 8):
-        chunk = tiles[i:i + 8]
+    for i in range(0, len(tiles), BATCH):
+        chunk = tiles[i:i + BATCH]
         conds = [ref_img.crop((x, y, x + 512, y + 512)) for x, y in chunk]
         inits = [init_img.crop((x, y, x + 512, y + 512)) for x, y in chunk]
-        gen = torch.Generator("cuda").manual_seed(SEED)
+        gen = make_generator()
         outs += pipe_i2i([caption()] * len(chunk), negative_prompt=[negp()] * len(chunk),
                          image=inits, control_image=conds, strength=strength,
                          num_inference_steps=steps, generator=gen,
                          guidance_scale=GUIDANCE,
                          controlnet_conditioning_scale=CNSCALE).images
-        print(f"  refine {min(i + 8, len(tiles))}/{len(tiles)}", flush=True)
+        print(f"  refine {min(i + BATCH, len(tiles))}/{len(tiles)}", flush=True)
     W, H = ref_img.size
     acc = np.zeros((H, W, 3), np.float32)
     wacc = np.zeros((H, W, 1), np.float32)
@@ -213,14 +263,14 @@ def detail_pass(img, strength, steps):
     xs, ys = _positions(W, 402), _positions(H, 403)
     tiles = [(x, y) for y in ys for x in xs]
     outs = []
-    for i in range(0, len(tiles), 8):
-        chunk = tiles[i:i + 8]
+    for i in range(0, len(tiles), BATCH):
+        chunk = tiles[i:i + BATCH]
         inits = [img.crop((x, y, x + 512, y + 512)) for x, y in chunk]
-        gen = torch.Generator("cuda").manual_seed(SEED)
+        gen = make_generator()
         outs += pipe_plain([caption()] * len(chunk), negative_prompt=[negp()] * len(chunk),
                            image=inits, strength=strength, num_inference_steps=steps,
                            generator=gen, guidance_scale=GUIDANCE).images
-        print(f"  detail {min(i + 8, len(tiles))}/{len(tiles)}", flush=True)
+        print(f"  detail {min(i + BATCH, len(tiles))}/{len(tiles)}", flush=True)
     acc = np.zeros((H, W, 3), np.float32)
     wacc = np.zeros((H, W, 1), np.float32)
     for k, (x, y) in enumerate(tiles):
@@ -254,12 +304,12 @@ print(f"warmup {time.time() - t:.1f}s", flush=True)
 def load_checkpoint(path):
     """Hot-swap the ControlNet; the frozen SD base stays resident."""
     global cn
-    new = ControlNetModel.from_pretrained(path, torch_dtype=dtype).to("cuda")
+    new = ControlNetModel.from_pretrained(path, torch_dtype=dtype).to(DEVICE)
     pipe.controlnet = new
     pipe_i2i.controlnet = new
     old, cn = cn, new
     del old
-    torch.cuda.empty_cache()
+    empty_cache()
     args.checkpoint = path
     print(f"checkpoint swapped -> {path}", flush=True)
 
@@ -332,7 +382,7 @@ class H(BaseHTTPRequestHandler):
             # battle-damage patch: one 512 conditioning tile in, one tile out
             result = render(img, steps)
             if refine > 0:
-                gen = torch.Generator("cuda").manual_seed(SEED)
+                gen = make_generator()
                 result = pipe_i2i(caption(), negative_prompt=negp(), image=result,
                                   control_image=img, strength=refine,
                                   num_inference_steps=steps, generator=gen,
@@ -383,5 +433,5 @@ class H(BaseHTTPRequestHandler):
               f"infer={round((t2 - t1) * 1000)}ms", flush=True)
 
 
-print(f"listening :{args.port} checkpoint={args.checkpoint} steps={args.steps}", flush=True)
+print(f"listening :{args.port} device={DEVICE} checkpoint={args.checkpoint} steps={args.steps}", flush=True)
 ThreadingHTTPServer(("0.0.0.0", args.port), H).serve_forever()
