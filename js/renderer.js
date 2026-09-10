@@ -85,9 +85,11 @@ Game.syncUnitMeshes = (dt) => {
                     // A crewed gun shouldn't cartwheel 90° onto its side with
                     // the crew frozen mid-pose: settle it with a knocked-out
                     // list, char it like a wreck, and hide the decorative crew
-                    // figures (read as: survivors bailed).
+                    // figures (read as: survivors bailed). A tripod MG or a
+                    // mortar is a light piece: it goes over on its side.
                     unit.isDeadBody = true;
-                    unit.mesh.rotation.z = 0.22;
+                    const light = unit.kind === 'hmg' || /^mortar/.test(unit.kind);
+                    unit.mesh.rotation.z = light ? 1.25 : 0.22;
                     unit.mesh.position.y = Math.max(0, (unit.y || 0) - 0.05);
                     unit.mesh.traverse(o => {
                         if (o.userData && o.userData.isFieldGunCrewman) o.visible = false;
@@ -595,8 +597,12 @@ Game._chooseClip = (unit) => {
         return (fast && pick(['run'])) || pick(['walk', 'run', 'push', 'move', 'crawl']) || names[0];
     }
     if (unit.fireTargetId != null) {
-        return pick(['fire_' + st, 'fire_crouch', 'fire_stand', 'fire_prone', 'fire', 'attack'])
-            || pick(['idle']) || names[0];
+        // Prone fires prone, a crouched man fires kneeling (composed clip), and
+        // only a standing man uses the standing fire loop. The old fallback
+        // order let a crouched man borrow the STANDING fire clip.
+        if (st === 'prone') return pick(['fire_prone', 'fire_crouch', 'fire_stand', 'fire']) || pick(['idle']) || names[0];
+        if (st === 'crouch') return pick(['fire_crouch', 'crouch', 'fire_stand', 'fire']) || pick(['idle']) || names[0];
+        return pick(['fire_stand', 'fire', 'attack', 'fire_crouch']) || pick(['idle']) || names[0];
     }
     // Idle poses match the stance — a crouched or prone soldier must NOT pop back
     // up into the standing idle (troops "stood up" in bushes the moment they
@@ -666,10 +672,34 @@ Game._updateModelAnimation = (unit, dt) => {
         // clip reads as sliding). Switching BETWEEN walk and run is not urgent
         // — it waits out the min-hold, or pace flutter thrashes the two clips.
         const isLoco = (n) => n === 'walk' || n === 'run' || n === 'crawl';
-        const urgent = want && (want.startsWith('fire') || want === 'grenade'
-            || (isLoco(want) && !isLoco(ud._activeClip)));
-        if (want && (want === ud._activeClip || urgent
-            || (Game.gameClock || 0) - (ud._clipSince ?? -9) > 0.35)) {
+        const now = Game.gameClock || 0;
+        const isFire = (n) => !!n && (n.startsWith('fire') || n === 'grenade');
+        // Locomotion may start at once only for COMMANDED movement or a real
+        // sprint; a nudge from a neighbour (separation) is not a reason to
+        // break into the walk clip and back within half a second.
+        const commanded = !!(unit.moving && unit.path && unit.path.length) || (unit._dispSpeed || 0) > 0.8;
+        const locoStart = isLoco(want) && !isLoco(ud._activeClip) && commanded;
+        // Combat picks react at once, but a fire<->non-fire flip is rate-limited
+        // to one per second: target acquisition blinking at the edge of sight
+        // used to shuttle men between the aim and the idle pose several times a
+        // second (the to-and-fro jitter).
+        let fireSwitch = want && isFire(want) !== isFire(ud._activeClip);
+        if (fireSwitch && now - (ud._fireSwitchT ?? -9) < 1.0) fireSwitch = false;
+        const urgent = want && (locoStart || (isFire(want) && fireSwitch));
+        // A walking man who pauses for a beat (a hull crossing, a kerb wait, a
+        // crowd shuffle) keeps his walk cycle: dropping to the idle pose and
+        // back within half a second is the stop-go stutter. Hold the locomotion
+        // clip until he has been still for 0.4 s (fire picks still win).
+        const spdNow = unit._dispSpeed != null ? unit._dispSpeed : (unit.currentSpeed || 0);
+        if (spdNow > 0.12) ud._stillSince = null;
+        else if (ud._stillSince == null) ud._stillSince = now;
+        const briefPause = isLoco(ud._activeClip) && !isLoco(want) && !isFire(want)
+            && ud._stillSince != null && now - ud._stillSince < 0.4;
+        const held = !briefPause && now - (ud._clipSince ?? -9) > 0.5;      // min-hold for everything else
+        if (want && want !== ud._activeClip && (isFire(want) !== isFire(ud._activeClip)) && !fireSwitch && !held) {
+            // waiting out the fire-switch limiter
+        } else if (want && (want === ud._activeClip || urgent || held)) {
+            if (want !== ud._activeClip && isFire(want) !== isFire(ud._activeClip)) ud._fireSwitchT = now;
             // Transitions in/out of the prone pose fade FAST: a slow blend
             // between a standing and a lying clip reads as a half-standing
             // ghost for a beat (the "standing/prone look" when hitting the dirt).

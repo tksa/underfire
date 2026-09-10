@@ -37,10 +37,15 @@ Game.SOLDIER_CLIP_RANGES = {
     // death performances. The old windows straddled those cuts, so a man fell,
     // teleported, and fell a second time. Each window now starts just after a
     // cut and ends where the body settles dead-still.
-    death:      [34.68, 35.80], // death variant 1
+    // Ends trimmed to where the torso is flat (0.19-0.20 of standing height,
+    // scrubbed with scripts/anim-audit.mjs); the old ends caught the first
+    // frame of the next performance rising again.
+    death:      [34.68, 35.72], // death variant 1
     death2:     [35.90, 37.00], // death variant 2
-    death3:     [37.08, 38.14], // death variant 3
-    death4:     [38.30, 38.98], // death variant 4 (quick collapse)
+    death3:     [37.08, 38.10], // death variant 3
+    // (There is no fourth death: the take after 38.24 is a standing performance.
+    // A 'death4' window there left one corpse in four on its feet, torso at
+    // full standing height. Measured with scripts/anim-audit.mjs.)
 };
 // idle is also the resting fallback for crouch/prone lookups in _chooseClip.
 
@@ -85,6 +90,37 @@ Game._freezeClip = (clip, name, t) => {
     return new THREE.AnimationClip(name, 0.5, tracks);
 };
 
+// Bones that belong to the lower body on this rig (root + pelvis + legs). Used
+// to compose the kneeling fire clip from the crouch pose and the standing fire
+// loop: tracks on these bones come from the pose, everything else from the loop.
+Game.SOLDIER_LOWER_BONES = [
+    'Skeleton_98_rootJoint', 'Root_00', 'GermanSoldierRig_01',
+    'hip_right_02', 'knee_right_03', 'foot_right_04', 'toes_right_05',
+    'hip_left_06', 'knee_left_07', 'foot_left_08', 'toes_left_09',
+];
+
+// Build a clip whose tracks on `lowerBones` are taken from `poseClip` (a static
+// freeze) and all other tracks from `motionClip`; the result loops with the
+// motion clip's duration. Track names are "<bone>.<property>".
+Game._composeClip = (name, poseClip, motionClip, lowerBones) => {
+    const THREE = Game.THREE;
+    const isLower = (trackName) => lowerBones.includes(trackName.split('.')[0]);
+    const tracks = [];
+    const dur = motionClip.duration;
+    for (const t of motionClip.tracks) {
+        if (!isLower(t.name)) tracks.push(t.clone());
+    }
+    for (const t of poseClip.tracks) {
+        if (!isLower(t.name)) continue;
+        // Stretch the two-key freeze to the motion clip's length.
+        const stride = t.values.length / t.times.length;
+        const v = Array.from(t.values.slice(0, stride));
+        tracks.push(new t.constructor(t.name, [0, dur], v.concat(v)));
+    }
+    if (!tracks.length) return null;
+    return new THREE.AnimationClip(name, dur, tracks);
+};
+
 // The source has no static stance; freeze this moment (port-arms, feet together)
 // as the idle pose.
 Game.SOLDIER_IDLE_FREEZE = 10.5;
@@ -111,6 +147,15 @@ Game.splitSoldierAnim = (sourceClips) => {
     // Posture freezes (stand=idle already; prone=fire_prone already).
     const cr = Game._freezeClip(src, 'crouch', Game.SOLDIER_CROUCH_FREEZE); if (cr) out.push(cr);
     const si = Game._freezeClip(src, 'sit', Game.SOLDIER_SIT_FREEZE); if (si) out.push(si);
+    // Kneeling fire: the source has no crouched firing take, so a crouched man
+    // used to borrow the STANDING fire clip and pop upright every time he shot,
+    // then drop back to the crouch freeze. Compose one: legs/pelvis from the
+    // crouch pose, torso/arms/head/weapon from the standing fire loop.
+    const fs = out.find(c => c.name === 'fire_stand');
+    if (cr && fs && Game._composeClip) {
+        const fc = Game._composeClip('fire_crouch', cr, fs, Game.SOLDIER_LOWER_BONES);
+        if (fc) out.push(fc);
+    }
     // Keep the full baked timeline as '_raw' so the debug panel can scrub it to
     // find clip boundaries.
     const raw = Game._subclipByTime(src, '_raw', 0, src.duration);
@@ -316,7 +361,7 @@ Game.SOLDIER_MOVE_SYNC = 1;         // 1 = scale walk/run playback by unit speed
 Game.SOLDIER_FORCE_CLIP = '';       // '' = auto (state driven); else force this clip on ALL soldiers
 Game.SOLDIER_SCRUB_T = 0;           // when force clip == '_raw', hold the timeline at this second
 
-const _SOLDIER_CLIP_LIST = ['', 'idle', 'walk', 'run', 'fire_stand', 'fire_prone', 'grenade', 'death', '_raw'];
+const _SOLDIER_CLIP_LIST = ['', 'idle', 'walk', 'run', 'fire_stand', 'fire_crouch', 'fire_prone', 'grenade', 'death', '_raw'];
 
 // Apply the transform offsets to one soldier (or all if no unit passed).
 Game.applySoldierTransforms = (only) => {
@@ -413,7 +458,7 @@ Game.playSoldierDeath = (unit) => {
         ud._deathClipDuration = 0;
         return true;
     }
-    const opts = ['death', 'death2', 'death3', 'death4'].filter(n => ud.actions[n]);
+    const opts = ['death', 'death2', 'death3'].filter(n => ud.actions[n]);
     if (!opts.length) return false;
     const name = opts[Math.floor(Math.random() * opts.length)];
     const act = ud.actions[name];
@@ -548,7 +593,10 @@ Game._soldierProceduralLegs = (unit, dt) => {
     const spd = (unit._dispSpeed != null) ? unit._dispSpeed : (unit.currentSpeed || 0);
     // Debug: a forced walk/run clip strides in place even when the unit is parked.
     const forcedLoco = Game.SOLDIER_FORCE_CLIP === 'walk' || Game.SOLDIER_FORCE_CLIP === 'run';
-    const moving = forcedLoco || spd > 0.2;
+    // A man on his belly does not swing his legs like a walker (the crawl is
+    // the prone clip sliding; a stride under it read as a lying man kicking).
+    const prone = unit.stance === 'prone' || ud._activeClip === 'fire_prone';
+    const moving = forcedLoco || (spd > 0.2 && !prone);
     ud._gaitBlend = Game.lerp(ud._gaitBlend || 0, moving ? 1 : 0, Math.min(1, dt * 8));
     const bl = ud._gaitBlend;
     if (bl < 0.02) return;                                   // idle: clip owns the legs
@@ -666,7 +714,7 @@ Game.buildSoldierAnimUI = () => {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin-top:3px';
     const clips = [['Auto', ''], ['Stand', 'idle'], ['Walk', 'walk'], ['Run', 'run'],
-        ['Fire', 'fire_stand'], ['Crouch', 'crouch'], ['Sit', 'sit'], ['Prone', 'fire_prone'],
+        ['Fire', 'fire_stand'], ['Kneel fire', 'fire_crouch'], ['Crouch', 'crouch'], ['Sit', 'sit'], ['Prone', 'fire_prone'],
         ['Grenade', 'grenade'], ['Die1', 'death'], ['Die2', 'death2'], ['Die3', 'death3'], ['RAW', '_raw']];
     const btns = {};
     const setActive = (name) => { for (const k in btns) btns[k].style.background = (k === name) ? '#3a6ea5' : '#2a2e35'; };

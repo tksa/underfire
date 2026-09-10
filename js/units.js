@@ -973,6 +973,7 @@ Game._createUnitMesh = (unit) => {
             Game._addWeathering(clothMat, 0.1);
             const gnr = new THREE.Group();
             gnr.position.set(0, 0, -0.42);
+            gnr.userData.isFieldGunCrewman = true;   // hidden when the team is knocked out
             group.add(gnr);
             addMesh(new THREE.BoxGeometry(0.32, 0.16, 0.34), std(baseColor.clone().multiplyScalar(0.72), { roughness: 0.95 }), 0, 0.16, 0.02, gnr); // haunches
             const torso = addMesh(new THREE.BoxGeometry(0.26, 0.26, 0.2), clothMat, 0, 0.42, 0.06, gnr);
@@ -1731,7 +1732,27 @@ Game._loadUnitModel = (unit, mesh) => {
                 mesh.userData.clipNames = clips.map(c => c.name);
                 clips.forEach(c => { mesh.userData.actions[c.name] = mesh.userData.mixer.clipAction(c); });
                 console.log(`Animations for ${unit.label}: ${mesh.userData.clipNames.join(', ')}`);
-                if (Game._updateModelAnimation) Game._updateModelAnimation(unit, 0); // kick the default clip
+                if (!unit.alive && unit._deathHandled && !unit._noRemnant) {
+                    // He died before his model arrived (the placeholder was
+                    // tipped over): pose the rig as a finished corpse instead of
+                    // kicking the standing idle over a fallen placeholder.
+                    unit.mesh.rotation.z = 0; unit.mesh.rotation.x = 0;
+                    unit.mesh.position.y = unit.y || 0;
+                    const dn = ['death', 'death2', 'death3'].find(n => mesh.userData.actions[n]);
+                    if (dn) {
+                        const a = mesh.userData.actions[dn];
+                        a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true;
+                        a.enabled = true; a.setEffectiveWeight(1); a.setEffectiveTimeScale(1); a.play();
+                        a.time = Math.max(0, a.getClip().duration - 0.001);
+                        mesh.userData.mixer.update(0);
+                        mesh.userData._activeClip = dn;
+                        unit._deathAnimRemaining = 0;
+                    } else {
+                        unit.mesh.rotation.z = Math.PI / 2;
+                    }
+                } else if (Game._updateModelAnimation) {
+                    Game._updateModelAnimation(unit, 0); // kick the default clip
+                }
             }
 
             // ── 10. Add wrapper to unit mesh group ──
