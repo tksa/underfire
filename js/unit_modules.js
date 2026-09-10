@@ -97,27 +97,106 @@ Game.uMod.frame = (unit, ctx) => {
 };
 
 // Morale: a nearby friendly officer steadies the troops (RWM officerradius) —
-// faster suppression recovery; suppression escalates stance under fire.
+// faster suppression recovery. Suppression no longer WRITES the stance here;
+// it sets a posture FLOOR (crouch / prone) with hysteresis that uMod.posture
+// merges with whatever the behaviour layer asked for, once per frame. The old
+// per-frame write fought the AI's per-think-tick 'run' for the same man and
+// flickered him run/crouch/prone two to four times a second.
 Game.uMod.morale = (unit, ctx) => {
     unit._steadied = Game.nearOfficer(unit);
     const recovery = (unit.underFire > 0 ? 4 : 11) * (unit._steadied ? 1.8 : 1);
     unit.suppressionValue = Math.max(0, unit.suppressionValue - recovery * ctx.dt);
-    if (!Game.isTank(unit.kind)
-        && !(Game.isMountedCavalry && Game.isMountedCavalry(unit))) {
-        if (unit.suppressionValue > 88) {
-            if (unit.stance !== 'prone') { unit.stance = 'prone'; unit._autoStance = true; }
-        } else if (unit.suppressionValue > 62) {
-            if (unit.stance === 'stand' || unit.stance === 'run') { unit.stance = 'crouch'; unit._autoStance = true; }
-        } else if (unit.suppressionValue < 30 && unit._autoStance
-            && (unit.underFire || 0) <= 0
-            && (Game.gameClock - (unit._threatTime || -1e9)) > 3) {
-            // Recover to standing only once genuinely calm. Recovering on low
-            // suppression alone fought the AI's deliberate combat crouch every
-            // think tick — men flickered crouch->stand->crouch twice a second
-            // (the "repeating animation" stutter) all through a firefight.
-            unit.stance = 'stand';
-            unit._autoStance = false;
+    const s = unit.suppressionValue;
+    const f = unit._suppFloor || null;
+    if (f === 'prone') {
+        if (s < 72) unit._suppFloor = s > 48 ? 'crouch' : null;
+    } else if (f === 'crouch') {
+        if (s > 88) unit._suppFloor = 'prone';
+        else if (s < 48) unit._suppFloor = null;
+    } else if (s > 88) unit._suppFloor = 'prone';
+    else if (s > 62) unit._suppFloor = 'crouch';
+};
+
+// ── Posture requests ────────────────────────────────────────────────────────
+// Everything that WANTS a stance (the AI, take-cover, retreat, an evasion) asks
+// for it here; nothing outside uMod.posture and the manual-order helper below
+// writes unit.stance for foot troops any more. `ttl` is how long the request
+// stands (the AI re-asserts each think tick; a player retreat re-asserts via
+// unit.retreating).
+Game.wantStance = (unit, stance, source = 'ai', ttl = 1.0) => {
+    if (!unit || !stance) return;
+    unit._stanceWant = stance;
+    unit._stanceWantSrc = source;
+    unit._stanceWantUntil = (Game.gameClock || 0) + ttl;
+};
+
+// Player movement-mode order (C key / crawl toggle): a standing preference the
+// resolver returns to whenever nothing is forcing the man lower.
+Game.setManualStance = (unit, stance) => {
+    if (!unit) return;
+    unit._manualStance = stance || null;
+    unit._autoStance = !stance;
+    if (stance) unit.stance = stance;
+};
+
+// Stance rank: lower = closer to the ground. ease/rest are relaxed stands.
+Game._STANCE_RANK = { prone: 0, crouch: 1, stand: 2, ease: 2, rest: 2, run: 3 };
+Game._lowerStance = (a, b) => {
+    if (!a) return b; if (!b) return a;
+    const R = Game._STANCE_RANK;
+    return (R[a] ?? 2) <= (R[b] ?? 2) ? a : b;
+};
+
+// The ONE writer of unit.stance for foot troops, run once per frame:
+//   evasion (a hull about to roll over him)  -> on his feet and running, whatever else
+//   else lowest of: behaviour request, player movement mode, suppression floor,
+//        just-hit floor — except a routing man, who sprints through a crouch floor
+//   nothing asked -> recover to standing once genuinely calm (ambient may then
+//        relax him to at-ease / rest; those stances are left alone)
+// Crew-served pieces have no stance at all (their speed and animation must not
+// inherit a crouch from morale or a run from make-way).
+Game.uMod.posture = (unit, ctx) => {
+    if (ctx.isVeh || Game.isTruck(unit.kind)) return;
+    if (Game.isMountedCavalry && Game.isMountedCavalry(unit)) return;
+    if (unit._garrisoned || unit._inVehicle != null || unit._towed) return;
+    if (unit.deployable) { if (unit.stance !== 'stand') unit.stance = 'stand'; return; }
+    const now = Game.gameClock;
+    const supp = unit.suppressionValue || 0;
+    let target = null;
+    if ((unit._evadeUntil || 0) > now) {
+        target = 'run';
+    } else {
+        const want = (unit._stanceWantUntil || 0) > now ? unit._stanceWant
+            : (unit.retreating && Game.isFootInfantry(unit) ? 'run' : null);
+        let t = Game._lowerStance(want, unit._manualStance || null);
+        const hitFloor = (unit._hitFloorUntil || 0) > now ? 'prone' : null;
+        const floor = Game._lowerStance(unit._suppFloor || null, hitFloor);
+        if (floor) {
+            // Panic has its own physics: a man who has broken and is running
+            // keeps running unless the fire is heavy enough to flatten anyone.
+            const routing = unit.retreating && want === 'run' && supp < 92 && !hitFloor;
+            t = routing ? 'run' : Game._lowerStance(t, floor);
         }
+        target = t;
+    }
+    if (target) {
+        if (unit.stance !== target) unit.stance = target;
+        unit._autoStance = target !== unit._manualStance;
+        return;
+    }
+    // Nothing asked. 'run' is only ever a REQUEST (a dash, an evasion, a
+    // retreat, the player's Run mode): with nothing asking he drops back to a
+    // walk at once — left as 'run' he would sprint through every later order
+    // at 1.5x and stand bolt upright between them.
+    if (unit.stance === 'run') { unit.stance = 'stand'; unit._autoStance = true; return; }
+    // Crouch/prone recover to standing only once genuinely calm: no rounds for
+    // ten seconds and the suppression drained. Men who have just been shot at
+    // do not pop back up the moment the firing pauses.
+    if ((unit.stance === 'crouch' || unit.stance === 'prone')
+        && supp < 25 && (unit.underFire || 0) <= 0
+        && (now - (unit._threatTime || -1e9)) > 10) {
+        unit.stance = 'stand';
+        unit._autoStance = false;
     }
 };
 
@@ -188,17 +267,31 @@ Game.uMod.supply = (unit, ctx) => {
 Game.uMod.deploy = (unit, ctx) => {
     if (!unit.deployable) return;
     unit._deployT = Math.max(0, (unit._deployT || 0) - ctx.dt);
-    const wantsMove = !!(unit.path && unit.path.length > 0)
-        || unit._towApproachGunId != null    // approaching a hook-up: stay limbered
+    const now = Game.gameClock || 0;
+    const hooking = unit._towApproachGunId != null    // approaching a hook-up: stay limbered
         // …or being wheeled onto a hitch by its crew (mover may be the truck)
-        || ((Game.gameClock || 0) - (unit._hookupT || -10) < 0.5);
+        || (now - (unit._hookupT || -10) < 0.5);
+    const hasPath = !!(unit.path && unit.path.length > 0);
+    // Hysteresis: a route must stand for a moment before the crew lifts the
+    // trails. A one-tile AI correction or a shove-and-replan used to buy a full
+    // limber/deploy cycle (two seconds of the gun doing nothing) every time.
+    unit._moveWantT = hasPath ? (unit._moveWantT || 0) + ctx.dt : 0;
+    // The AI keeps a gun in action while armor is in reach (uMod.deploy's
+    // caller sets _holdDeployedUntil); the player's own guns obey their orders.
+    const heldInAction = (unit._holdDeployedUntil || 0) > now && unit.team !== Game.playerTeam;
+    const wantsMove = hooking || (hasPath && unit._moveWantT >= 0.45 && !heldInAction);
+    // Real pieces take seconds to bring in and out of action (weapon setupTime /
+    // teardownTime, scaled to game pace); tripod MGs keep the quick default.
+    const w = Game.WEAPONS[unit.weaponKey] || {};
+    const limberTime = w.teardownTime ? Game.clamp(w.teardownTime * 0.5, 1.0, 2.5) : 1.0;
+    const deployTime = w.setupTime ? Game.clamp(w.setupTime * 0.5, 1.0, 2.5) : 1.0;
     if (wantsMove && unit.deployed && unit._deployT <= 0) {
         unit.deployed = false;
-        unit._deployT = 1.0;
+        unit._deployT = limberTime;
         if (Game.selection.has(unit.id)) Game.pushMessage(`${unit.label}: limbering up.`, 1.0);
     } else if (!wantsMove && !unit.deployed && unit._deployT <= 0) {
         unit.deployed = true;
-        unit._deployT = 1.0;
+        unit._deployT = deployTime;
     }
     // An unmanned gun (crew dismounted as real infantry) neither moves nor
     // fires until soldiers re-man it.
@@ -251,7 +344,9 @@ Game.uMod.scan = (unit, ctx) => {
     }
     // A holding or retreating unit (or one ordered to hold fire) doesn't go
     // looking for a fight.
-    if (!enemy && !facing && !unit.holdFire && unit.orderMode !== 'hold' && unit.orderMode !== 'retreat') {
+    // "Stand ground" (orderMode hold) means hold the POSITION and still fire —
+    // it used to gate acquisition too, so a held MG never shot at anything.
+    if (!enemy && !facing && !unit.holdFire && unit.orderMode !== 'retreat') {
         const now = Game.gameClock;
         let cached = unit._scanEnemy;
         const cachedInvalid = cached && (!cached.alive || cached.team === unit.team);
@@ -267,11 +362,22 @@ Game.uMod.scan = (unit, ctx) => {
             let cand = Game.nearestEnemy(unit);
             // A weapon that cannot penetrate never auto-targets armor: rifles
             // and MGs must not plink at tanks. Remember the vehicle as a
-            // threat so the take-cover reaction still responds to it.
+            // threat so the take-cover reaction still responds to it — and
+            // look again for the nearest target the weapon CAN hurt, so a
+            // tank does not hide the infantry walking beside it.
             if (cand && Game.unitCanHurt && !Game.unitCanHurt(unit, cand)) {
                 unit._armorThreat = cand;
                 unit._armorThreatTime = now;
-                cand = null;
+                cand = Game.nearestEnemy(unit, o => Game.unitCanHurt(unit, o));
+            }
+            // Anti-tank weapons hold for armor: with a killable tank in view an
+            // AT gun or AT rifle lays on it instead of plinking at riflemen.
+            const wdef = Game.WEAPONS[unit.weaponKey];
+            const isAT = !!wdef && (wdef.type === 'atgun' || wdef.type === 'at_rifle');
+            if (isAT) {
+                const armor = Game.nearestEnemy(unit, o => Game.isTank(o.kind)
+                    && (!Game.unitCanHurt || Game.unitCanHurt(unit, o)));
+                if (armor) cand = armor;
             }
             // Target hysteresis: keep the current target through small distance
             // shuffles so the unit doesn't twitch back and forth between two roughly
@@ -293,8 +399,15 @@ Game.uMod.scan = (unit, ctx) => {
                 && (!Game.unitCanHurt || Game.unitCanHurt(unit, cur));
             if (curValid && cand && cand.id !== cur.id) {
                 const dCand = Game.distSq(unit.x, unit.z, cand.x, cand.z);
-                const dwellOk = (now - (unit._targetSince || 0)) > 0.8;
-                enemy = (dCand < curDistSq * 0.64 && dwellOk) ? cand : cur;  // 0.64 = 0.8² → ~20% closer
+                // Crew-served weapons (mortars, MGs, guns) are laid on a target and
+                // stay on it: re-laying the piece for every attacker who is briefly
+                // a metre nearer had a mortar crew turning four full circles a fight.
+                const crewServed = unit.deployable || unit.class === 'support';
+                const dwellOk = (now - (unit._targetSince || 0)) > (crewServed ? 3.0 : 0.8);
+                const closerBy = crewServed ? 0.49 : 0.64;             // 30% / 20% closer
+                // An AT weapon drops a soft target the moment armor shows.
+                const armorFirst = isAT && Game.isTank(cand.kind) && !Game.isTank(cur.kind);
+                enemy = (armorFirst || (dCand < curDistSq * closerBy && dwellOk)) ? cand : cur;
             } else {
                 enemy = curValid ? cur : cand;
             }
@@ -427,6 +540,11 @@ Game.uMod.engage = (unit, ctx) => {
             unit.path = [];
             unit.moving = false;
             unit.stopTimer = Math.max(unit.stopTimer || 0, 0.15);
+        } else if (unit.deployable) {
+            // A gun does not limber up and crawl at a target it cannot see: it
+            // stays in action and waits for the shot. Reposition it by hand.
+            unit.path = [];
+            unit.moving = false;
         } else {
             unit._pursueTimer = (unit._pursueTimer || 0) - dt;
             // Require a meaningful target move (>5u) before re-pathing, and never
@@ -469,13 +587,20 @@ Game.uMod.engage = (unit, ctx) => {
             unit.stopTimer = Math.max(unit.stopTimer || 0, 0.6);
         }
     }
+    // Once stopped to fight, stay stopped for a few seconds after the last
+    // sighting: resuming the instant a target blinked out of view had men
+    // creeping forward and halting again every second (walk/idle/walk).
+    if (unit.orderMode === 'assault' && enemy && (!unit.path || !unit.path.length)) {
+        unit._assaultHoldUntil = Math.max(unit._assaultHoldUntil || 0, Game.gameClock + 2.5);
+    }
 
     // Attack-move RESUME: when the local fight is over (no target in view) and the
     // unit isn't already routed, push on to the ordered destination instead of
     // halting where the last enemy fell. This is what gets tanks + infantry all the
     // way to the red circle after they've cleared resistance on the way.
     if (unit.orderMode === 'assault' && unit._assaultGoal && !enemy
-        && (unit.stopTimer || 0) <= 0 && (!unit.path || !unit.path.length)) {
+        && (unit.stopTimer || 0) <= 0 && (!unit.path || !unit.path.length)
+        && (unit._assaultHoldUntil || 0) <= Game.gameClock) {
         const pendingFacing = unit._arrivalFacing
             && unit._lastMoveOrder?.id === unit._arrivalFacing.orderId;
         const assaultArrival = pendingFacing && Game.arrivalFacingRadius
@@ -513,51 +638,100 @@ Game.uMod.engage = (unit, ctx) => {
 // way; infantry fire isn't gated on being halted). Never overrides an active
 // move order, a player-forced attack, or a hold/retreat order, and only ever
 // dashes a short distance. The enemy AI has its own version of this in ai.js.
+// Armor gets the same doctrine as the AI side: out of the tank's lane
+// SIDEWAYS (never straight down the barrel), then cover or the dirt.
 Game.uMod.takeCover = (unit, ctx) => {
     if (ctx.isVeh || unit.class !== 'infantry'
         || (Game.isMountedCavalry && Game.isMountedCavalry(unit))) return;
     if (unit.deployable || unit.entrenched || unit._garrisoned || unit._enterRec || unit._enterCarrierId != null) return;
     if (unit.forcedTargetId != null || unit.orderMode === 'retreat' || unit.retreating
         || unit.orderMode === 'hold') return;
-    if (unit.path && unit.path.length) return;             // busy moving (order or dash)
+    const now = Game.gameClock;
+    // "Shot at lately": rounds in the last six seconds. underFire itself decays
+    // in under a second, which had men popping upright between bursts.
+    const shotAt = (now - (unit._threatTime || -1e9)) < 6 || (unit.underFire || 0) > 0;
+    if (unit.path && unit.path.length) {
+        // Executing an evasion out of a tank's lane: keep him on his feet and
+        // running for the whole dash (the suppression floor would otherwise
+        // drop him to a crawl half-way out, still inside the lane).
+        if (unit._evadePlan && unit._evadePlan.until > now) {
+            unit._evadeUntil = now + 0.6;
+            Game.wantStance(unit, 'run', 'evade', 0.6);
+        } else if (shotAt && unit._manualStance !== 'run' && !unit.retreating) {
+            // Advancing under fire: a man does not stroll upright through a
+            // firefight, he goes forward at a crouch (the player's explicit
+            // Run mode is respected).
+            Game.wantStance(unit, 'crouch', 'fire', 0.5);
+            // Attack-move becomes a BOUNDING advance: shot at in the open, he
+            // breaks for cover within a short dash (or drops flat when there is
+            // none and the fire is heavy), waits out a few seconds, then the
+            // assault resume in uMod.engage takes him on toward the objective.
+            if (unit.orderMode === 'assault' && Game.positionCover(unit) < Game.COVER_MIN
+                && (now - (unit._boundT || -1e9)) > 6) {
+                const threat = unit._lastThreat || ctx.enemy;
+                const cov = threat ? Game.findCoverPosition(unit, threat.x, threat.z, { rings: 5 }) : null;
+                const dCov = cov ? Game.dist(unit.x, unit.z, cov.x, cov.z) : Infinity;
+                if (cov && dCov < 12) {
+                    unit._boundT = now;
+                    unit._assaultHoldUntil = now + Game.rand(4, 8);
+                    unit.path = Game.findPath(unit, unit.x, unit.z, cov.x, cov.z);
+                    unit.moving = unit.path.length > 0;
+                    Game.wantStance(unit, dCov > 2.5 ? 'run' : 'crouch', 'bound', 1.0);
+                } else if ((unit.suppressionValue || 0) > 40) {
+                    unit._boundT = now;
+                    unit._assaultHoldUntil = now + Game.rand(3, 5);
+                    unit.path = []; unit.moving = false;
+                    Game.wantStance(unit, 'prone', 'bound', 1.0);
+                }
+            }
+        }
+        return;                                            // busy moving (order or dash)
+    }
     // A tank the rifleman cannot hurt never becomes ctx.enemy (scan filters
     // it out), but it is still a mortal threat: react as if under fire.
-    let armorThreat = unit._armorThreat;
-    if (!armorThreat || !armorThreat.alive || armorThreat.team === unit.team
-        || (Game.gameClock - (unit._armorThreatTime || 0)) > 2.5
-        || Game.distSq(unit.x, unit.z, armorThreat.x, armorThreat.z) > 20 * 20) {
-        armorThreat = null;
-    }
-    const engaged = !!ctx.enemy || !!armorThreat
-        || (unit.underFire || 0) > 0 || (unit.suppressionValue || 0) > 20;
+    const armor = Game.armorThreatFor ? Game.armorThreatFor(unit, 30) : null;
+    const lane = armor && Game.laneInfo ? Game.laneInfo(unit, armor) : null;
+    const engaged = !!ctx.enemy || !!armor || shotAt || (unit.suppressionValue || 0) > 20;
     if (!engaged) return;
-    // Already behind something decent: just keep low. (0.22 matches the minimum
-    // cover findCoverPosition will pick, so an arrived man never re-dashes.)
-    if ((unit.coverBonus || 0) > 0.22) {
-        if (unit.stance === 'stand' || unit.stance === 'run') { unit.stance = 'crouch'; unit._autoStance = true; }
+    // In a closing tank's lane: leave it, perpendicular, now. One plan, committed.
+    if (lane && lane.inLane && lane.closing && Game.planArmorEvasion) {
+        const spot = Game.planArmorEvasion(unit, armor);
+        unit.path = Game.findPath(unit, unit.x, unit.z, spot.x, spot.z);
+        unit.moving = unit.path.length > 0;
+        unit._evadePlan = { tankId: armor.id, until: now + 6 };
+        unit._evadeUntil = now + 1.2;
+        Game.wantStance(unit, 'run', 'evade', 1.2);
         return;
     }
-    if ((unit._coverCd || 0) > Game.gameClock) return;     // don't re-plan every frame
-    unit._coverCd = Game.gameClock + 3.0;
-    const threat = ctx.enemy || armorThreat || unit._lastThreat;
+    // In the open and being shot at: on his belly. Behind something: kneel and
+    // fight from it. Nobody stands.
+    const lowStance = (shotAt || (armor && lane.dist < 26)) ? 'prone' : 'crouch';
+    // Already behind something decent: just keep low. (Matches the minimum
+    // cover findCoverPosition will pick, so an arrived man never re-dashes.)
+    if (Game.positionCover(unit) >= Game.COVER_MIN) {
+        Game.wantStance(unit, armor && lane.dist < 20 ? 'prone' : 'crouch', 'cover', 0.5);
+        return;
+    }
+    if ((unit._coverCd || 0) > now) {
+        Game.wantStance(unit, lowStance, 'cover', 0.5);   // between plans: stay down
+        return;
+    }
+    unit._coverCd = now + 3.0;
+    const threat = ctx.enemy || armor || unit._lastThreat;
     if (!threat) return;
-    const cov = Game.findCoverPosition(unit, threat.x, threat.z);
-    if (cov && Game.dist(unit.x, unit.z, cov.x, cov.z) > 1.2) {
+    // Cover search reach: twenty metres or so when the fire is small arms,
+    // shorter with a tank closing (there is no time for a long run).
+    const cov = Game.findCoverPosition(unit, threat.x, threat.z, armor ? { lane: armor, rings: 8 } : { rings: 8 });
+    const dCov = cov ? Game.dist(unit.x, unit.z, cov.x, cov.z) : Infinity;
+    const reach = armor ? Math.min(18, lane.dist * 0.65) : 20;
+    if (cov && dCov > 1.2 && dCov < reach) {
         unit.path = Game.findPath(unit, unit.x, unit.z, cov.x, cov.z);
         unit.moving = unit.path.length > 0;
-        if (unit.stance !== 'prone') { unit.stance = 'crouch'; unit._autoStance = true; }
-    } else if (armorThreat
-        && Game.dist(unit.x, unit.z, armorThreat.x, armorThreat.z) < 10) {
-        // No cover and the armor keeps closing: give ground straight away
-        // from it instead of kneeling in its path.
-        const away = Game.angleTo(armorThreat.x, armorThreat.z, unit.x, unit.z);
-        const fx = Game.clamp(unit.x + Math.cos(away) * 9, 1, Game.WORLD_W - 1);
-        const fz = Game.clamp(unit.z + Math.sin(away) * 9, 1, Game.WORLD_H - 1);
-        unit.path = Game.findPath(unit, unit.x, unit.z, fx, fz);
-        unit.moving = unit.path.length > 0;
-    } else if (unit.stance === 'stand') {
-        // Nothing nearby — at least get low where he stands.
-        unit.stance = 'crouch'; unit._autoStance = true;
+        Game.wantStance(unit, dCov > 2.5 ? 'run' : 'crouch', 'cover', 1.0);
+    } else {
+        // Nothing within reach: down where he stands (prone under fire or
+        // near a tank, otherwise a kneel) and fight from the dirt.
+        Game.wantStance(unit, lowStance, 'cover', 1.0);
     }
 };
 
@@ -645,10 +819,23 @@ Game.uMod.fire = (unit, ctx) => {
                             (unit.rotationSpeed || 2.2) * dt);
                     }
                     unit.turretAngle = aimAngleToEnemy;
-                } else {
+                } else if (unit.deployable) {
+                    // A deployed gun is traversed by its crew: slow, deliberate
+                    // (carriage traverse arcs are narrow; past them the trails
+                    // are lifted and the piece swung round). A limbered piece
+                    // on the move keeps its nose on the road (the aim pull used
+                    // to drag a crawling gun toward the tank).
+                    if (unit.deployed && !unit.moving) {
+                        unit.angle = Game.rotateTo(unit.angle, aimAngleToEnemy, 0.8 * dt);
+                        unit.turretAngle = unit.angle;
+                    }
+                } else if (!unit.moving) {
                     // Infantry: turn the body toward the target at a finite rate
-                    // instead of snapping instantly each frame.
-                    unit.angle = Game.rotateTo(unit.angle, aimAngleToEnemy, 8 * dt);
+                    // instead of snapping instantly each frame. A man on the move
+                    // keeps his body on his line of travel (the move module owns
+                    // his heading while he walks); the aim pull and the path lerp
+                    // each yanking the same angle every frame was a visible shake.
+                    unit.angle = Game.rotateTo(unit.angle, aimAngleToEnemy, 5 * dt);
                     unit.turretAngle = unit.angle;
                 }
                 if (ready && unit.cooldownLeft <= 0) {
@@ -705,8 +892,15 @@ Game.uMod.move = (unit, ctx) => {
         if (Game.getWeatherSpeedMod) maxSpeed *= Game.getWeatherSpeedMod();
     } else if (!isVeh && !isTruck) {
         const speedFactor = Game.clamp(1 - unit.suppressionValue / 135, 0.3, 1);
-        const STANCE_SPEED = { prone: 0.28, crouch: 0.55, stand: 1.0, run: 1.5, ease: 1.0, rest: 0.0 };
-        maxSpeed *= 0.6 * speedFactor * (STANCE_SPEED[unit.stance] ?? 1.0);
+        const STANCE_SPEED = Game.STANCE_SPEED;
+        // Manhandled guns keep the old 0.6 (their CSV speeds were tuned to it);
+        // men get the slower, more believable foot pace.
+        const footFactor = unit.deployable ? 0.6 : Game.FOOT_SPEED_FACTOR;
+        maxSpeed *= footFactor * speedFactor * (STANCE_SPEED[unit.stance] ?? 1.0);
+        // Adrenaline: a man getting out of a tank's path scrambles at a real
+        // jog however shaken he is (suppression would otherwise have him
+        // leaving the lane at a stroll and going under the tracks).
+        if ((unit._evadeUntil || 0) > (Game.gameClock || 0)) maxSpeed = Math.max(maxSpeed, unit.speed * Game.FOOT_SPEED_FACTOR * 1.3);
 
         const tile = Game.getTileAtWorld(unit.x, unit.z);
         if (tile) {
@@ -735,7 +929,7 @@ Game.uMod.move = (unit, ctx) => {
 
     // Combined-movement: while moving as a group, hold the slowest member's pace so
     // armor and trucks don't outrun the infantry they set off with. Applied AFTER
-    // the per-unit modifiers (infantry carry a hidden 0.6 foot factor that vehicles
+    // the per-unit modifiers (infantry carry the FOOT_SPEED_FACTOR that vehicles
     // don't), so _groupSpeed is an EFFECTIVE speed and the cap actually bites on the
     // fast units while leaving the slowest unit (already at that pace) untouched.
     if (unit._groupMoveActive && unit._groupSpeed && unit.path && unit.path.length && maxSpeed > 0) {
@@ -854,7 +1048,34 @@ Game.uMod.move = (unit, ctx) => {
     if (Game._vehicleAvoid && !unit._reverseMove
         && !(unit._drvCmd && unit._drvCmd.cmd)) Game._vehicleAvoid(unit);
 
-    if (unit.path && unit.path.length && unit.stopTimer <= 0 && (unit.orderDelay || 0) <= 0
+    // EVADE (foot troops): a vehicle is about to roll over him. Set by
+    // applySeparation's make-way look-ahead as an INTENT, not a shove: this
+    // module is the single heading authority, so he turns toward the escape
+    // bearing at a finite rate and runs along his own heading — no sideways
+    // slide, no tug-of-war with the path lerp. The path is kept and resumes.
+    const evade = unit._evade;
+    let evaded = false;
+    if (evade && evade.until > (Game.gameClock || 0) && !isVeh && !isTruck && !isMounted
+        && !unit.deployable && !unit._garrisoned && !unit.entrenched) {
+        const want = Math.atan2(evade.dz, evade.dx);
+        unit.angle = Game.rotateTo(unit.angle, want, 9 * dt);
+        unit.turretAngle = unit.angle;
+        // Adrenaline: even a suppressed man scrambles at a jog with a hull on him.
+        const evSpeed = Math.max(maxSpeed, (unit.speed || 4) * Game.FOOT_SPEED_FACTOR * 1.3);
+        unit.currentSpeed = Math.min(evSpeed, (unit.currentSpeed || 0) + 9 * dt);
+        if (Math.abs(Game.angleDiff(unit.angle, want)) < 1.2) {
+            const step = unit.currentSpeed * dt;
+            unit.x += Math.cos(unit.angle) * step;
+            unit.z += Math.sin(unit.angle) * step;
+        }
+        unit.moving = true;
+        unit._stuckT = 0;
+        evaded = true;
+    }
+
+    if (evaded) {
+        // handled above
+    } else if (unit.path && unit.path.length && unit.stopTimer <= 0 && (unit.orderDelay || 0) <= 0
         && (!unit.deployable || unit._canMove)) {
         let next = unit.path[0];
         let dx = next.x - unit.x;
@@ -1386,7 +1607,9 @@ Game.uMod.move = (unit, ctx) => {
 
                 unit.turretAngle = unit.angle;
 
-                unit.currentSpeed = maxSpeed;
+                // Men get up to pace over a few strides rather than in one frame
+                // (a stance change or a stop still bites immediately).
+                unit.currentSpeed = Math.min(maxSpeed, (unit.currentSpeed || 0) + 9 * dt);
 
                 const step = Math.min(unit.currentSpeed * dt, d);
                 unit.x += Math.cos(unit.angle) * step;
@@ -1461,9 +1684,16 @@ Game.uMod.move = (unit, ctx) => {
             // rotate directly in its think tick — one discrete 0.35-0.55 rad
             // step every 0.25-0.5s, which read as a string of small jerky
             // turns. Unlike _faceAngle, this never blocks target acquisition.
-            const rate = isVeh ? unit.rotationSpeed * 0.6 : (unit.rotationSpeed || 6);
-            unit.angle = Game.rotateTo(unit.angle, unit._faceGoal, rate * dt);
-            if (!isVeh || !unit.hasTurret) unit.turretAngle = unit.angle;
+            // While the fire module is laying the weapon on a target it owns
+            // the heading (two per-frame authorities shook the man 7-8 deg a
+            // frame); a deployed gun traverses at crew pace; a man turns at a
+            // body's pace, not a turret's.
+            if (unit.fireTargetId == null || isVeh) {
+                const rate = isVeh ? unit.rotationSpeed * 0.6
+                    : (unit.deployable ? 0.8 : Math.min(unit.rotationSpeed || 6, 4.0));
+                unit.angle = Game.rotateTo(unit.angle, unit._faceGoal, rate * dt);
+                if (!isVeh || !unit.hasTurret) unit.turretAngle = unit.angle;
+            }
             if (Math.abs(Game.angleDiff(unit.angle, unit._faceGoal)) < 0.05) unit._faceGoal = null;
         }
     }
@@ -1635,6 +1865,11 @@ Game.uMod.move = (unit, ctx) => {
     if (!isVeh && !isTruck && Game._tankBoxPush) {
         for (const o of Game.units) {
             if (!o.alive || o.id === unit.id || !Game.isTank(o.kind)) continue;
+            // A rolling ENEMY hull is not a wall to be squeezed out of: the man
+            // either got clear (evade) or goes under the tracks (crushUnit).
+            // Resolving him out of its box every frame bulldozed him along in
+            // front of the nose at tank speed, then pinballed him off diagonally.
+            if (o.team !== unit.team && (o.currentSpeed || 0) > 0.6) continue;
             if (Game.distSq(unit.x, unit.z, o.x, o.z) > 49) continue;
             const p = Game._tankBoxPush(unit.x, unit.z, o,
                 unit.size * (isMounted ? 1.0 : 0.7), 0.05);
@@ -1768,6 +2003,11 @@ Game.uMod.move = (unit, ctx) => {
         && (unit.currentSpeed || 0) > 0.4 && (unit.stopTimer || 0) <= 0) {
         const wp0 = unit.path[0];
         const dWp = Game.dist(unit.x, unit.z, wp0.x, wp0.z);
+        // A fresh destination gets a fresh stall budget: the counter used to
+        // reset only on measurable progress, so three lifetime stalls meant any
+        // later half-second of no-progress silently deleted the order.
+        const goalRef = unit.path[unit.path.length - 1];
+        if (unit._progGoal !== goalRef) { unit._progGoal = goalRef; unit._progReplans = 0; }
         if (unit._progWp !== wp0) { unit._progWp = wp0; unit._progBest = dWp; unit._progT = 0; }
         if (dWp < unit._progBest - 0.06) {
             unit._progBest = dWp; unit._progT = 0; unit._progReplans = 0;
@@ -1966,6 +2206,9 @@ Game.updateUnit = (unit, dt) => {
     if (unit.team !== Game.playerTeam) Game.updateAI(unit, dt, ctx.enemy);
     else if (M.takeCover) M.takeCover(unit, ctx);
     M.fire(unit, ctx);
+    // Posture: the single stance resolver (behaviour requests vs suppression
+    // floors), so the move module reads one settled stance per frame.
+    if (M.posture) M.posture(unit, ctx);
     // Idle/ambient posture (rest, at-ease, ready). Runs just before move so a
     // roused soldier is on his feet before the move module reads his stance.
     if (M.ambient) M.ambient(unit, ctx);

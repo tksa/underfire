@@ -80,8 +80,23 @@ Game.uMod.ambient = (unit, ctx) => {
     const combatBusy = unit.orderMode === 'assault' || unit.retreating
         || unit.fireTargetId != null || unit._reverseMove;
     const orderedMove = ((unit.path && unit.path.length) || unit.moving) && !unit._idleMoving;
-    const alert = !!ctx.enemy || freshThreat || combatBusy || orderedMove
+    // Enemy armour in view keeps a man on his feet even if nobody has fired yet
+    // (checked twice a second; the lookup walks the vehicle list).
+    unit._ambientArmorT = (unit._ambientArmorT || 0) - dt;
+    if (unit._ambientArmorT <= 0) {
+        unit._ambientArmorT = 0.5;
+        unit._ambientArmor = !!(Game.armorThreatFor && Game.armorThreatFor(unit, 30));
+    }
+    const alert = !!ctx.enemy || freshThreat || combatBusy || orderedMove || unit._ambientArmor
         || (unit.suppressionValue || 0) > 12 || (unit.underFire || 0) > 0;
+    // Nobody sits down to rest with a firefight sixty metres away: shooting
+    // nearby in the last half minute keeps the sector "ready" (no rest, no
+    // wandering, no chatting), even if this man was never fired on himself.
+    unit._ambientCombatT = (unit._ambientCombatT || 0) - dt;
+    if (unit._ambientCombatT <= 0) {
+        unit._ambientCombatT = 0.7;
+        unit._ambientCombat = !!(Game.recentCombatNear && Game.recentCombatNear(unit.x, unit.z, 60, 30));
+    }
 
     // Only manage posture when the unit is upright/relaxed. A deliberate (or
     // suppression-driven) crouch/prone is left exactly as it is.
@@ -116,8 +131,8 @@ Game.uMod.ambient = (unit, ctx) => {
         return;
     }
 
-    // Calm — run the wind-down clock.
-    if (unit._calmSince == null) unit._calmSince = now;
+    // Calm — run the wind-down clock. Shooting nearby holds it at "ready".
+    if (unit._calmSince == null || unit._ambientCombat) unit._calmSince = now;
     const calm = now - unit._calmSince;
 
     // Player posture orders override the automatic wind-down:
@@ -134,8 +149,9 @@ Game.uMod.ambient = (unit, ctx) => {
         if (relaxed && unit.stance !== 'stand') unit.stance = 'stand';
     } else if (state === 'ready') {
         if (relaxed && unit.stance !== 'stand') unit.stance = 'stand';
-        // Just out of action: keep eyes on the last place the enemy was.
-        if (unit._lastThreat) {
+        // Just out of action: keep eyes on the last place the enemy was — unless
+        // the player has told him where to face (rotate order / arrival heading).
+        if (unit._lastThreat && unit._faceAngle == null && !unit._arrivalFacing) {
             const a = Game.angleTo(unit.x, unit.z, unit._lastThreat.x, unit._lastThreat.z);
             unit.angle = Game.rotateTo(unit.angle, a, 2.2 * dt);
             unit.turretAngle = unit.angle;
@@ -143,7 +159,7 @@ Game.uMod.ambient = (unit, ctx) => {
     } else if (state === 'ease') {
         // Deliberate "at ease" order: relaxed standing + chatter, no sitting.
         if (relaxed && unit.stance !== 'ease') unit.stance = 'ease';
-        Game.AI._idleLook(unit, dt);   // glance about / turn to a comrade
+        if (unit._faceAngle == null && !unit._arrivalFacing) Game.AI._idleLook(unit, dt);   // glance about / turn to a comrade
     } else { // auto deep-calm: varied idle life (some sit, some stand, some wander)
         Game.AI._idleActivity(unit, ctx);
     }

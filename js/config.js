@@ -63,6 +63,21 @@ Game.enemyTeam = () => {
 
 // Shared arrays
 Game.terrain = [];
+
+// ── Foot movement scale ──────────────────────────────────────────────────────
+// unit.speed for infantry is a CSV figure of ~4.5 world units/s; the foot
+// factor turns it into on-screen pace. One world unit is ~0.74 m (a 1.8 m
+// soldier is 2.45 units tall). 0.5 gives a 2.2 u/s ≈ 1.65 m/s tactical walk
+// (a quick march is ~1.5 m/s), a 1.2 u/s crouch-walk, a 0.6 u/s crawl and a
+// 3.4 u/s ≈ 2.5 m/s battlefield run. It used to be 0.6 (2 m/s walk, 3 m/s run),
+// which read as men jogging everywhere.
+Game.FOOT_SPEED_FACTOR = 0.5;
+Game.STANCE_SPEED = { prone: 0.28, crouch: 0.55, stand: 1.0, run: 1.5, ease: 1.0, rest: 0.0 };
+// A position counts as "in cover" from this tile/adjacency cover value
+// (forest 0.32, hedge 0.42, wall 0.58, house 0.65). Shared by the AI's
+// in-cover test, the refuge search and the player-side take-cover so a man who
+// reaches a refuge always counts as covered on arrival.
+Game.COVER_MIN = 0.30;
 Game.buildings = [];
 Game.walls = [];
 Game.craters = [];

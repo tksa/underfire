@@ -27,21 +27,21 @@ Everything is attached to the global `Game` object (`js/config.js`). Files load 
 
 | File | Responsibility |
 |------|----------------|
-| `js/config.js` | `Game` namespace, constants, shared state |
+| `js/config.js` | `Game` namespace, constants, shared state (incl. `FOOT_SPEED_FACTOR`, `STANCE_SPEED`, `COVER_MIN`) |
 | `js/utils.js` | Math/grid helpers (`rand`, `clamp`, `dist`, `getTile`, LOS) |
 | `js/engine.js` | Three.js scene, camera, lighting, fog, loaders |
 | `js/terrain.js` | Map gen, heightmap, terrain mesh, buildings, props |
 | `js/units.js` | `UNIT_STATS` baseline, `makeUnit`, unit meshes, model loading; **data-driven roster loader** (`loadUnitsCSV`/`applyUnitsCSV`, `unitsForYear`) that merges `data/units.csv` over the baseline |
 | `js/weapons.js` | `WEAPONS` table (range, damage, penetration, suppression) |
 | `js/combat.js` | `applyShot`, damage/penetration model, hit effects |
-| `js/ai.js` | Per-unit FSM + squad coordination + threat propagation |
+| `js/ai.js` | Per-unit FSM + squad coordination + threat propagation; armor-threat helpers shared with the player side (`armorThreatFor`, `laneInfo`, `planArmorEvasion`), crew-served gun brain (`_gunAI`) |
 | `js/pathfinding.js` | A* over the tile grid |
 | `js/camera.js` | Pan / zoom / follow |
 | `js/input.js` | Mouse + keyboard, selection, orders |
 | `js/renderer.js` | Per-frame mesh sync, tracers, smoke, animation, minimap, HUD |
 | `js/audio.js` | Pooled SFX, ambient loops, voice barks (`Game.Audio`) |
 | `js/mission.js` | Scenario: spawns, objective, win/lose, reinforcements |
-| `js/unit_modules.js` | The per-unit update loop (`Game.uMod`): `frame · morale · health · supply · deploy · scan · bombard · engage · fire · move`, plus the `Game.updateUnit` orchestrator. (Was the monolithic `updateUnit` in `main.js`.) |
+| `js/unit_modules.js` | The per-unit update loop (`Game.uMod`): `frame · morale · health · supply · deploy · scan · bombard · engage · takeCover (player) · fire · posture · move`, plus the `Game.updateUnit` orchestrator. `posture` is the ONLY writer of `unit.stance` for foot troops: behaviour code requests a stance with `Game.wantStance`, `morale` only sets suppression floors. (Was the monolithic `updateUnit` in `main.js`.) |
 | `js/main.js` | Boot, game loop, fog of war, menu → game start, supply/towing/mines/deploy helpers (`updateUnit` now lives in `unit_modules.js`) |
 
 ## Data
@@ -67,6 +67,6 @@ Everything is attached to the global `Game` object (`js/config.js`). Files load 
 - New unit? Prefer **adding a row to `data/units.csv`** (key `"{team}_{kind}"`, e.g. `french_hmg`; reference a `Game.WEAPONS` key or synthesize one via the `w_*` columns; set a `year`). The `UNIT_STATS` table in `js/units.js` is the built-in fallback. See `data/README.md`.
 - New per-unit behavior? Add/extend a module in `js/unit_modules.js` (`Game.uMod.*`) rather than growing `updateUnit`.
 - Refresh the menu's "Latest Updates" before deploy: `node scripts/gen-changelog.mjs`.
-- Test before you finish: run the game, watch the console, and run `node scripts/smoke-test.mjs` if you can.
+- Test before you finish: run the game, watch the console, and run `node scripts/smoke-test.mjs` if you can. Movement/AI changes: also `node scripts/tank-approach-test.mjs --assert` (infantry and AT guns vs approaching armor; use `--dump <case>:<idx>` for a per-unit timeline), `node scripts/anim-audit.mjs --assert` (clip thrash, upright corpses, death-window heights), `node scripts/observe-battle.mjs` (screenshots + under-fire posture stats on the real map) and the tow/transport tests in `scripts/`. Six `transport-clearance-test` cases, one `transport-waypoint-test` case and the Mokra contract test are known failures at HEAD.
 
 See `CONTRIBUTING.md` for the human-facing version and the PR workflow, and `vision.md` for direction.

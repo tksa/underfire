@@ -502,6 +502,11 @@ Game._infantryFollow = (unit) => {
         if (!o.alive || o.id === unit.id || o.team !== unit.team) continue;
         if (Game.isTank(o.kind) || Game.isTruck(o.kind)) continue;
         if (o._garrisoned || o._inVehicle != null) continue;
+        // A STANDING man (or an emplaced gun) is an obstacle to step round, not a
+        // leader to queue behind: pacing off him froze the follower on the spot
+        // for as long as he stood there, and the stall guards are gated by the
+        // very speed this zeroes.
+        if ((o.currentSpeed || 0) < 0.25 && !(o.path && o.path.length)) continue;
         const rx = o.x - unit.x, rz = o.z - unit.z;
         if (rx * rx + rz * rz > 4) continue;                 // only the man right ahead
         const ahead = rx * hx + rz * hz;
@@ -682,6 +687,7 @@ Game._tankYield = (unit) => {
     let factor = 1;
     for (const o of Game.units) {
         if (!o.alive || o.id === unit.id || Game.isTank(o.kind)) continue;
+        if (o.team !== unit.team) continue;      // a tank brakes for its OWN men, never the enemy's
         const rx = o.x - unit.x, rz = o.z - unit.z;
         const ahead = rx * hx + rz * hz;
         if (ahead < 0.2 || ahead > lookLen) continue;
@@ -869,6 +875,11 @@ Game.buildMoveRecUI = () => {
 };
 
 Game.applySeparation = (unit, dt) => {
+    // An emplaced gun is not shoved by men — its crew are dug in behind the
+    // trails. Comrades walking into it are pushed off it by THEIR separation
+    // pass (it is an obstacle to them); only vehicles still interact with it
+    // (a tank can overrun the piece).
+    if (unit.deployable && unit.deployed) return;
     let sepX = 0, sepZ = 0;
     const isVeh = Game.isTank(unit.kind) || Game.isTruck(unit.kind);
     const isMounted = Game.isMountedCavalry && Game.isMountedCavalry(unit);
@@ -890,31 +901,29 @@ Game.applySeparation = (unit, dt) => {
 
         const otherVeh = Game.isTank(other.kind) || Game.isTruck(other.kind);
 
-        // MAKE WAY: a foot soldier standing in the path of an ADVANCING FRIENDLY
-        // tank scrambles aside before it arrives, so the tank isn't blocked by its
-        // own infantry and the man isn't run down. Runs ahead of the overlap test
-        // (it's a look-ahead, not a contact response). Urgency scales with how
-        // close the tank is and how deep in its lane the man stands.
+        // MAKE WAY: a foot soldier in the path of an ADVANCING vehicle gets out of
+        // its lane before it arrives — friendly armor isn't blocked by its own
+        // infantry, and enemy armor doesn't get a free kill. Runs ahead of the
+        // overlap test (a look-ahead, not a contact response). The OUTPUT is an
+        // evade INTENT for the move module (direction + urgency), not a
+        // positional shove: pushing his body sideways at run speed while the path
+        // step kept driving him forward and this code spun his heading toward
+        // the escape vector was the diagonal slide / sawtooth dart / spin-in-
+        // place trio. The move module owns heading, speed and stance during the
+        // scramble; the posture resolver puts him on his feet for it.
         //
-        // Gate on the tank ACTUALLY TRANSLATING (currentSpeed), not merely "having a
-        // path". A tank that is only rotating in place to line up its next waypoint
-        // has a path but isn't advancing — the old "|| has path" test made the man
-        // flee the swinging heading the whole time the hull turned, so he got swept
-        // a long way around. Once the tank rolls forward the look-ahead catches him.
+        // Gate on the vehicle ACTUALLY TRANSLATING (currentSpeed), not merely
+        // "having a path": a hull rotating in place to line up its next waypoint
+        // isn't advancing.
         //
-        // Only STANDING troops scramble. A man crossing under his own move order is
-        // "meant to pass" — the TANK yields to him instead (see Game._tankYield), so
-        // we skip make-way for him here and let him walk his line.
-        const manUnderOrders = unit.path && unit.path.length && !unit._idleMoving;
-        // A man being OVERTAKEN — vehicle bearing down from behind on roughly
-        // his own heading — scrambles aside even under orders: the tank only
-        // yields to men CROSSING its lane, so a same-way man ahead used to just
-        // get shoved along by the hull. And men dodge tanks regardless of team
-        // (an enemy tank is MORE worth dodging); the crush check below still
-        // catches anyone too slow.
-        const overtaken = manUnderOrders && Math.cos(unit.angle - other.angle) > 0.5;
-        if (!isVeh && otherVeh
-            && (other.currentSpeed || 0) > 0.45 && (!manUnderOrders || overtaken)) {
+        // A man CROSSING under his own move order is "meant to pass" — a FRIENDLY
+        // tank yields to him (Game._tankYield). He still scrambles when he is
+        // being OVERTAKEN (same heading, hull bearing down from behind) or when
+        // the vehicle is an enemy (enemy armor yields to nobody). A man already
+        // executing an AI/take-cover evasion plan out of this very lane is left
+        // to it. Emplaced guns never scramble (uMod.posture keeps them stanceless
+        // and the AI abandons an overrun piece instead).
+        if (!isVeh && otherVeh && !unit.deployable && (other.currentSpeed || 0) > 0.45) {
             const fX = Math.cos(other.angle), fZ = Math.sin(other.angle);
             const relX = unit.x - other.x, relZ = unit.z - other.z;
             const ahead = relX * fX + relZ * fZ;               // + = in front of the tank
@@ -924,30 +933,51 @@ Game.applySeparation = (unit, dt) => {
             // Look well ahead (scaled by the tank's speed) so the man starts moving
             // out early rather than at the last second.
             const lookAhead = other.size * 2.6 + (other.currentSpeed || 0) * 2.5;
-            if (ahead > -other.size && ahead < lookAhead && Math.abs(lateral) < halfWidth) {
-                // Commit to one side and HOLD it (so he doesn't dither across the
-                // centreline); a man dead-centre picks left deterministically by id.
-                if (unit._bailFor !== other.id) {
-                    unit._bailFor = other.id;
-                    unit._bailSide = Math.abs(lateral) > 0.05 ? (lateral >= 0 ? 1 : -1) : ((unit.id & 1) ? 1 : -1);
+            const manUnderOrders = unit.path && unit.path.length && !unit._idleMoving;
+            // "Same way" is judged from where his ROUTE goes, not his current
+            // heading — the old test read the heading make-way itself had just
+            // rotated, toggling itself on and off at frame rate.
+            let travelAng = unit.angle;
+            if (manUnderOrders) {
+                const wp = unit.path[0];
+                const ddx = wp.x - unit.x, ddz = wp.z - unit.z;
+                if (ddx * ddx + ddz * ddz > 0.04) travelAng = Math.atan2(ddz, ddx);
+            }
+            const overtaken = manUnderOrders && Math.cos(travelAng - other.angle) > 0.5;
+            const enemyVeh = other.team !== unit.team;
+            const now = Game.gameClock || 0;
+            const leaving = unit._evadePlan && unit._evadePlan.until > now
+                && unit._evadePlan.tankId === other.id && unit.path && unit.path.length;
+            unit._bailSides = unit._bailSides || {};
+            // Hysteresis: a man already scrambling keeps going until he is clear
+            // by a margin, not the instant his centre crosses the lane edge (a
+            // hull that turns a degree put him back inside, on/off at frame rate).
+            const bailing = unit._bailSides[other.id] != null;
+            const insideLane = Math.abs(lateral) < halfWidth + (bailing ? 1.2 : 0);
+            if (ahead > -other.size && ahead < lookAhead && insideLane
+                && !leaving && (!manUnderOrders || overtaken || enemyVeh)) {
+                // Commit to one side PER VEHICLE and hold it (so he doesn't dither
+                // across the centreline); a man dead-centre picks by id.
+                let dir = unit._bailSides[other.id];
+                if (dir == null) {
+                    dir = Math.abs(lateral) > 0.05 ? (lateral >= 0 ? 1 : -1) : ((unit.id & 1) ? 1 : -1);
+                    unit._bailSides[other.id] = dir;
                 }
-                const dir = unit._bailSide;
                 const urgency = 1 - Math.max(0, ahead) / lookAhead;          // closer = stronger
-                const push = (halfWidth - Math.abs(lateral) + 0.6) * (5 + urgency * 7);
                 const exX = -fZ * dir, exZ = fX * dir;                       // out of the lane
-                sepX += exX * push;
-                sepZ += exZ * push;
-                // RUN clear, don't slide: face the escape direction and break into a run
-                // so it reads as a man scrambling out of the way rather than bouncing
-                // sideways. (Capped to run speed below, not a sideways dart.)
-                // TURN at a finite rate — the escape vector rotates with the passing
-                // tank, and snapping the facing to it every frame swept the man
-                // through continuous full circles on the spot.
-                unit.angle = Game.rotateTo(unit.angle, Math.atan2(exZ, exX), 9 * dt);
-                unit.turretAngle = unit.angle;
-                if (unit.stance !== 'prone' && unit.stance !== 'crouch') { unit.stance = 'run'; unit._autoStance = true; }
-            } else if (unit._bailFor === other.id && (ahead <= -other.size || Math.abs(lateral) >= halfWidth)) {
-                unit._bailFor = null;                          // cleared the lane — release
+                if (!unit._evade || unit._evade.until <= now || urgency >= (unit._evade.urgency || 0)) {
+                    unit._evade = { dx: exX, dz: exZ, urgency, vehId: other.id, until: now + 0.35 };
+                    unit._evadeUntil = now + 0.35;
+                }
+            } else if (unit._bailSides[other.id] != null) {
+                if (ahead <= -other.size || Math.abs(lateral) >= halfWidth + 2.0) {
+                    delete unit._bailSides[other.id];          // it has passed / he is well clear — release
+                } else if (manUnderOrders && ahead > -other.size && ahead < lookAhead) {
+                    // Stepped aside for it: wait at the kerb until it has passed
+                    // rather than walking straight back under its tracks (the
+                    // resume-evade-resume sawtooth).
+                    unit.stopTimer = Math.max(unit.stopTimer || 0, 0.3);
+                }
             }
         }
 
@@ -973,20 +1003,25 @@ Game.applySeparation = (unit, dt) => {
                 if (!enemyRolling) {
                     // Resolve over a few frames, not in one pop: a deep overlap (a man
                     // shoved into a hull by a crowd) would otherwise jump him >1u in a
-                    // single frame, which reads as a teleport. Cap the correction at a
-                    // RUN-speed rate (dt-scaled) — the old fixed per-FRAME cap of 0.35u
-                    // meant up to ~20u/s at 60fps, and a man straddling the box edge
-                    // visibly vibrated/bounced against the hull every frame.
-                    const pm = Math.hypot(push.x, push.z), cap = 3.4 * dt;
+                    // single frame, which reads as a teleport. Cap the correction at
+                    // the pace his STANCE allows (a prone man cannot skate sideways
+                    // at a sprint) — the old fixed per-FRAME cap of 0.35u meant up to
+                    // ~20u/s at 60fps, and a man straddling the box edge visibly
+                    // vibrated/bounced against the hull every frame.
+                    const capRate = unit.stance === 'prone' ? 1.2 : (unit.stance === 'crouch' ? 2.2 : 3.4);
+                    const pm = Math.hypot(push.x, push.z), cap = capRate * dt;
                     const k = pm > cap ? cap / pm : 1;
                     unit.x += push.x * k; unit.z += push.z * k;
                 }
-                if (tankRolling) {   // scramble toward a flank to clear the lane
+                if (tankRolling && !unit.deployable) {
+                    // In contact with a rolling hull: scramble for the nearer flank —
+                    // as an evade intent (the move module runs him out), not a shove.
                     const fX = Math.cos(other.angle), fZ = Math.sin(other.angle);
                     let pX = -fZ, pZ = fX;
                     if (dx * pX + dz * pZ < 0) { pX = -pX; pZ = -pZ; }
-                    const m = Math.max(push.px, push.pz) + 0.6;
-                    sepX += pX * m * 7.0; sepZ += pZ * m * 7.0;
+                    const now = Game.gameClock || 0;
+                    unit._evade = { dx: pX, dz: pZ, urgency: 1, vehId: other.id, until: now + 0.35 };
+                    unit._evadeUntil = now + 0.35;
                 } else if (unit.path && unit.path.length) {
                     // TANGENTIAL SLIDE around a STOPPED hull. De-penetration alone is
                     // radial — a man heading for a goal BEYOND a parked tank just gets
@@ -1094,10 +1129,12 @@ Game.applySeparation = (unit, dt) => {
             unit._crawlT = 0.8;   // creep back up after the yield (see uMod.move)
         }
     } else {
-        // Infantry: push in any direction, but capped to a RUN speed so getting out of
-        // a tank's way looks like scrambling clear, not a sideways teleport-bounce.
+        // Infantry: push in any direction, but capped to the pace the man's stance
+        // allows (a prone man does not skate sideways at a sprint) so a crowd
+        // shuffle looks like men making room, not a teleport-bounce.
         const sepMag = Math.hypot(sepX, sepZ);
-        const maxSep = isMounted ? 2.4 : 4.5;
+        const maxSep = isMounted ? 2.4
+            : (unit.stance === 'prone' ? 1.2 : (unit.stance === 'crouch' ? 2.4 : 4.5));
         if (sepMag > maxSep) {
             sepX = (sepX / sepMag) * maxSep;
             sepZ = (sepZ / sepMag) * maxSep;
@@ -2425,13 +2462,20 @@ Game.towUnit = (tower, target, quiet = false) => {
 // and the gun works again.
 Game.GUN_CREW_KINDS_BY_TEAM = { french: 'fusilier', polish: 'rifleman', german: 'grenadier' };
 
-Game.dismountGunCrew = (gun) => {
-    if (!gun || !gun.alive || !(Game.GUN_CREWS && Game.GUN_CREWS[gun.kind])) return false;
-    if (gun._towed) { Game.pushMessage('Detach the gun from the truck first.', 1.6); return false; }
+// opts.threat: {x,z} (or a unit) the crew is bailing out FROM — they inherit it
+// as a live threat so the AI has them run for cover at once. opts.quiet: no HUD
+// line (the enemy's crews abandoning their guns is not the player's business).
+// Any deployable piece can be abandoned (the AI does it when a gun is wrecked,
+// dry or about to be overrun); the visual crew figures only exist for the kinds
+// in Game.GUN_CREWS, so the others simply stop firing until re-manned.
+Game.dismountGunCrew = (gun, opts = {}) => {
+    if (!gun || !gun.alive || !gun.deployable || gun.kind === 'hmg') return false;
+    if (gun._towed) { if (!opts.quiet) Game.pushMessage('Detach the gun from the truck first.', 1.6); return false; }
     if (gun._unmanned) return false;
     const kind = Game.GUN_CREW_KINDS_BY_TEAM[gun.team] || 'fusilier';
     const men = gun._crewAboard ?? 2;
     const behind = gun.angle + Math.PI;
+    const threat = opts.threat || null;
     for (let i = 0; i < men; i++) {
         const side = i % 2 ? 1 : -1;
         const x = Game.clamp(gun.x + Math.cos(behind) * 1.5
@@ -2439,18 +2483,28 @@ Game.dismountGunCrew = (gun) => {
         const z = Game.clamp(gun.z + Math.sin(behind) * 1.5
             + Math.sin(gun.angle + Math.PI / 2) * side * 0.9, 1, Game.WORLD_H - 1);
         const man = Game.makeUnit(gun.team, kind, x, z, {
-            group: 'crew',
+            group: gun.group || 'crew',
             aiState: gun.team === Game.playerTeam ? 'player' : 'hold',
+            angle: gun.angle,
         });
-        if (man) man._crewOfGunId = gun.id;
+        if (!man) continue;
+        man._crewOfGunId = gun.id;
+        man._atGrenades = 0;                         // gunners carry no bundles
+        if (threat) {
+            man._lastThreat = { x: threat.x, z: threat.z };
+            man._threatTime = Game.gameClock;
+            if (threat.alive != null) man._threatUnit = threat;
+            man.underFire = 0.9;
+            man.suppressionValue = Game.clamp(Math.max(man.suppressionValue || 0, gun.suppressionValue || 0, 35), 0, 100);
+        }
     }
     gun._crewAboard = 0;
     gun._unmanned = true;
-    Game.pushMessage(`${gun.label}: crew dismounts.`, 1.8);
+    if (!opts.quiet) Game.pushMessage(`${gun.label}: crew dismounts.`, 1.8);
     return true;
 };
 
-Game.orderManGun = (gun, candidates) => {
+Game.orderManGun = (gun, candidates, quiet = false) => {
     if (!gun || !gun.alive || gun._towed) return false;
     const need = 2 - (gun._crewAboard || 0);
     if (need <= 0) return false;
@@ -2466,7 +2520,7 @@ Game.orderManGun = (gun, candidates) => {
         u.moving = true;
         u.orderDelay = Game.commandDelay ? Game.commandDelay(u) : 0;
     });
-    Game.pushMessage(`${takers.length} soldier${takers.length === 1 ? '' : 's'} moving to man ${gun.label}.`, 1.8);
+    if (!quiet) Game.pushMessage(`${takers.length} soldier${takers.length === 1 ? '' : 's'} moving to man ${gun.label}.`, 1.8);
     return true;
 };
 
@@ -2502,7 +2556,7 @@ Game.updateGunManning = () => {
             gun._crewAboard = (gun._crewAboard || 0) + 1;
             if (gun._unmanned) {
                 gun._unmanned = false;
-                Game.pushMessage(`${gun.label} is manned again.`, 1.8);
+                if (gun.team === Game.playerTeam) Game.pushMessage(`${gun.label} is manned again.`, 1.8);
             }
         }
     }

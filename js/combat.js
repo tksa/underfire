@@ -4,7 +4,8 @@
  * Uses Game.WEAPONS for detailed weapon stats and directional armor.
  */
 
-Game.nearestEnemy = (unit) => {
+// accept(other): optional filter (e.g. "only targets this weapon can hurt").
+Game.nearestEnemy = (unit, accept = null) => {
     let best = null;
     let bestD = Infinity;
     // Player units only AUTO-engage enemies the team has actually spotted (lit in
@@ -17,6 +18,7 @@ Game.nearestEnemy = (unit) => {
     for (const other of Game.units) {
         if (!other.alive || other.team === unit.team) continue;
         if (fogGated && !Game.isFogVisible(other.x, other.z)) continue;
+        if (accept && !accept(other)) continue;
         const d = Game.distSq(unit.x, unit.z, other.x, other.z);
         if (d < bestD && Game.unitCanSee(unit, other)) {
             bestD = d;
@@ -46,12 +48,36 @@ Game.unitCanHurt = (unit, target) => {
     return pen >= weakest - 10;
 };
 
+// Where has there been shooting lately? A short ring of recent shot positions
+// so idle logic can tell "quiet sector" from "the fight is sixty metres away".
+Game._recentShots = [];
+Game.noteCombatAt = (x, z) => {
+    const r = Game._recentShots;
+    const now = Game.gameClock || 0;
+    // Coalesce shots from roughly the same spot so a firing MG is one entry.
+    for (const e of r) {
+        if (Game.distSq(e.x, e.z, x, z) < 36) { e.t = now; return; }
+    }
+    r.push({ x, z, t: now });
+    if (r.length > 24) r.shift();
+};
+Game.recentCombatNear = (x, z, radius = 60, within = 25) => {
+    const now = Game.gameClock || 0;
+    const r2 = radius * radius;
+    for (const e of Game._recentShots) {
+        if (now - e.t <= within && Game.distSq(e.x, e.z, x, z) <= r2) return true;
+    }
+    return false;
+};
+
 Game.applyShot = (shooter, target) => {
     if (!shooter.alive || !target.alive) return;
 
     // Ammo check
     if (shooter.ammo === 0) return;
     if (shooter.ammo > 0) shooter.ammo--;
+    Game.noteCombatAt(target.x, target.z);
+    Game.noteCombatAt(shooter.x, shooter.z);
 
     const weapon = Game.WEAPONS[shooter.weaponKey] || {};
     const d = Game.dist(shooter.x, shooter.z, target.x, target.z);
@@ -239,9 +265,12 @@ Game.applyShot = (shooter, target) => {
 
     target.underFire = 0.9;
     // Record where the fire came from so the AI can react even when it can't
-    // see the shooter (incoming-fire direction, like real troops).
+    // see the shooter (incoming-fire direction, like real troops). The shooter
+    // itself is remembered too, so the AI can keep the memory on a MOVING tank
+    // instead of the spot it fired from.
     target._lastThreat = { x: shooter.x, z: shooter.z };
     target._threatTime = Game.gameClock;
+    target._threatUnit = shooter;
     target.suppressionValue = Game.clamp(
         target.suppressionValue + (weapon.suppression || shooter.suppression) * 0.7,
         0, 100
@@ -251,7 +280,7 @@ Game.applyShot = (shooter, target) => {
     // standing idle while a buddy is hit. Throttled to keep MG fire cheap.
     if (Game.alertAllies && (!target._alertSpread || Game.gameClock - target._alertSpread > 0.6)) {
         target._alertSpread = Game.gameClock;
-        Game.alertAllies(target, shooter.x, shooter.z);
+        Game.alertAllies(target, shooter.x, shooter.z, 16, shooter);
     }
 
     // HE blast damage (mortars, tank HE)
@@ -264,6 +293,15 @@ Game.applyShot = (shooter, target) => {
             if (bd < blastR) {
                 const falloff = 1 - (bd / blastR);
                 u.suppressionValue = Game.clamp(u.suppressionValue + weapon.suppression * falloff * 0.8, 0, 100);
+                // Shell splash tells the men where the fire is coming from too;
+                // without a bearing they lay in the barrage or dashed against an
+                // ancient threat point.
+                if (u.team !== shooter.team) {
+                    u._lastThreat = { x: shooter.x, z: shooter.z };
+                    u._threatTime = Game.gameClock;
+                    u._threatUnit = shooter;
+                    u.underFire = Math.max(u.underFire || 0, 0.6);
+                }
                 if (Math.random() < hitChance * falloff * 0.6) {
                     // More damage to unarmored targets
                     const splashMult = (typeof u.armor === 'number' && u.armor === 0) ? 0.7 : 0.3;
@@ -404,8 +442,11 @@ Game.applyShot = (shooter, target) => {
                 Game.pushMessage(`${target.label} crew bailed out!`, 2.0);
                 if (target.mesh) target.mesh.visible = false;
             } else {
-                // Infantry hits the dirt
-                target.stance = 'prone';
+                // Infantry hits the dirt: a posture FLOOR for a few seconds (the
+                // resolver in uMod.posture applies it). Writing the stance here on
+                // every hit strobed prone against the AI's run each time a round
+                // landed.
+                target._hitFloorUntil = Game.gameClock + 4.0;
             }
         }
 

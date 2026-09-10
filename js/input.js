@@ -162,13 +162,13 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false,
     const targetFor = new Map(targets.map(t => [t.unit.id, t]));
 
     // Group pace = the slowest member's EFFECTIVE speed, so armor/trucks wait for the
-    // infantry. Foot troops carry a hidden 0.6 base factor (+ stance) that vehicles
+    // infantry. Foot troops carry the FOOT_SPEED_FACTOR (+ stance) that vehicles
     // don't, so compare like-for-like here and let the move module cap to this.
     const effSpeed = (u) => {
         let s = u.speed || 0;
         if (!Game.isTank(u.kind) && !Game.isTruck(u.kind)) {
-            const stanceF = ({ prone: 0.28, crouch: 0.55, stand: 1.0, run: 1.5 })[u.stance] ?? 1.0;
-            s *= 0.6 * stanceF;
+            const stanceF = Game.STANCE_SPEED[u.stance] ?? 1.0;
+            s *= (u.deployable ? 0.6 : Game.FOOT_SPEED_FACTOR) * stanceF;
         }
         return s;
     };
@@ -353,6 +353,7 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false,
         // return fire on the move, but never halts/diverts). Hold = put-and-defend.
         if (mode === 'attack') {
             unit.orderMode = 'assault'; unit.holdFire = false;
+            unit._assaultHoldUntil = 0;
             // Remember WHERE the attack-move is headed. The engage module clears the
             // path to stop and fight when an enemy comes into range; without this the
             // unit would just sit where the last enemy fell. With it, once the local
@@ -584,7 +585,10 @@ Game.orderRetreat = (x, z) => {
         u.retreating = true;
         const threat = (u._engageId != null ? Game.getUnitById(u._engageId) : null) || Game.nearestEnemy(u);
         u._retreatThreat = (threat && threat.alive) ? { x: threat.x, z: threat.z } : null;
-        if (Game.isFootInfantry(u)) { u.stance = 'run'; u._autoStance = true; }
+        // Sprint is requested, not written: uMod.posture merges it with the
+        // suppression floors (a routing man runs through a crouch floor, but a
+        // man flattened by fire stays down).
+        if (Game.isFootInfantry(u) && Game.wantStance) Game.wantStance(u, 'run', 'retreat', 1.5);
         if (Game.cancelQueuedPath) Game.cancelQueuedPath(u);
         if ((Game.isTank(u.kind) || Game.isTruck(u.kind)) && Game.queueVehiclePath
             && Game.dist(u.x, u.z, tx, tz) > 20) {
@@ -1074,7 +1078,7 @@ Game.setStanceForSelection = () => {
     if (!selected.length) return;
     const idx = Game.STANCE_ORDER.indexOf(selected[0].stance);
     const next = Game.STANCE_ORDER[(idx + 1) % Game.STANCE_ORDER.length];
-    selected.forEach(u => { u.stance = next; u._autoStance = false; });
+    selected.forEach(u => Game.setManualStance(u, next));
     Game.pushMessage(`Movement mode: ${Game.STANCE_LABEL[next]}.`, 1.7);
 };
 
@@ -1083,7 +1087,7 @@ Game.toggleProneSelection = () => {
     const sel = Game.selectedPlayerUnits().filter(Game.isFootInfantry);
     if (!sel.length) return;
     const anyUp = sel.some(u => u.stance !== 'prone');
-    sel.forEach(u => { u.stance = anyUp ? 'prone' : 'stand'; u._autoStance = false; });
+    sel.forEach(u => Game.setManualStance(u, anyUp ? 'prone' : 'stand'));
     if (Game.Audio) Game.Audio.voice(anyUp ? 'f_sold_move' : 'f_sold_select');
     Game.pushMessage(anyUp ? 'Crawling (prone).' : 'Standing up.', 1.5);
 };
@@ -1961,7 +1965,7 @@ Game.handleInputEvents = () => {
             const inf = Game.selectedPlayerUnits().filter(Game.isFootInfantry);
             if (inf.length) {
                 const toRun = inf.some(u => u.stance !== 'run');
-                inf.forEach(u => { u.stance = toRun ? 'run' : 'stand'; u._autoStance = false; });
+                inf.forEach(u => Game.setManualStance(u, toRun ? 'run' : 'stand'));
                 Game.pushMessage(toRun ? 'Running!' : 'Walking.', 1.0);
             }
         }
