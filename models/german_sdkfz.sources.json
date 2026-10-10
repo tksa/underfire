@@ -1,0 +1,139 @@
+{
+  "output": "german_sdkfz.glb",
+  "bytes": 2533876,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/at1.ply",
+      "sha256": "70126ed979cd0968f66ffb2afdf20e3e70a6b91591ac5917d736054220a90c68"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/at2.ply",
+      "sha256": "35c306f82c7e1a9664086ac91572ada26231b0b68f72ee0978f3c5c45cb3bad2"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/at3.ply",
+      "sha256": "35f10f11ca36f0f36f431f045a8761d0365d373f00c7bd5c515949d8c84a24f9"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/at4.ply",
+      "sha256": "96d902dc56af369bf2f5c9d259411ef9e2b55f6dc9d64ec3b83da72757c204f0"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/base.mtl",
+      "sha256": "e6eb300e27202d503465850af88e6265e5b5803aabb3244fe7938cc5deccae15"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/body.ply",
+      "sha256": "0d1042b0133342a734903ab2859792a2574781473e1a103bec7a55e534a6ff7d"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/bucket.ply",
+      "sha256": "d6ed5e6e374fff13371ab12b2c415738b82543d4e71123e7e7b2907fde7b3e17"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/can.mtl",
+      "sha256": "4bceaf6d586798c7af6839299a1d7c2a5f9eee3468f1bc330f135b7ac99e1fbb"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/detail1.ply",
+      "sha256": "95373ddbcc9f65a2ed8fdc9d71a4e8b0f9d0d6bedf5594586a9e516fe7ef2627"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/detail2.ply",
+      "sha256": "f59ecd2635e7b94a5514a523d585ee90dc8ba933312a1ffc8ea41099b90b4a21"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/detail3.ply",
+      "sha256": "c3401b8876b56efbefec7cfa1283d6de82e74840c6cc2deb436453e9e764e7bf"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/detail5.ply",
+      "sha256": "32b7c43a3c274b6dfa7aec540d286aa7db2ccdc65c30c729e65151ab3236e07b"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/detail6.ply",
+      "sha256": "5106d1ddebd927b50e92d9f56f0e955cde6d936a7e1283f81d7439fd630ff21a"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/doorleft.ply",
+      "sha256": "a5b5b03ca6cd189a0bec6cfd1aaaf62d32a8fcc027988b13b99332ebd08d5fc5"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/doorright.ply",
+      "sha256": "071302168bf68af2cfe1f0e8ee1b6162b58452584523bf786f0bcf282bca67bd"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/engine.ply",
+      "sha256": "7d67310731afabd99cb6246c1015eb2947dbf5cfc9bc72ed87f4b9b818aad487"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/enumerator.ply",
+      "sha256": "c8cd84033463ce32803ee5953b43eab73e3702a9d3e1a10b79e9f2f63c473485"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/gun.ply",
+      "sha256": "0fffabc3a94c734baedbe183162f07c13e69f1f34cd69a48e3e66426f9e3708f"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/gun_rot.ply",
+      "sha256": "e7c45ca09e5b51971e4e27a32db224d2d58e56b42ea2a776623c42336ca7bdd6"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/number1.mtl",
+      "sha256": "7e9a8d40fa9c032ad0e2668cadb518bdf7f01846763dc9e33a275cc920301fa5"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/number2.mtl",
+      "sha256": "ed773f58ae7054eb9ca576100f2de4264f8aed9d7e2b4edbba00e2dc52816b47"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/number3.mtl",
+      "sha256": "74d9b179ff28e8a59e619f5e689991d217f4caa276f319f4814ab2dd6091dbf7"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/sdkfz222.mdl",
+      "sha256": "1bf4c8e78517612bc304156b6d2ecf00058735ebb8d5e04f4070e39a27a407a9"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/sdkfz_222.dds",
+      "sha256": "cbb976933488940db9b5702e3e12cf37cdee305ac29f60dcf74f3a562f57d1f4"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/turret.ply",
+      "sha256": "3dc26b464e4509ab68604a19f606dbd51b90d7d4364af041d3dc162b5820a41b"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/wheell1.ply",
+      "sha256": "88f4bc4d4e5685b1d2d34fc26b405f4ee4c29d270789fe6ce8e1192b0724b6c3"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/wheelr1.ply",
+      "sha256": "c778aa4c93281ae0c76486608944c4f95ad38bbae5936cf4e2d20a7ce94911b7"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/wl.ply",
+      "sha256": "2671a67724500748efbbfb088a7bec8ae6c4d9f17a2f1f60187ba89e18c9860f"
+    },
+    {
+      "path": "entity/-vehicle/btr/sdkfz222/wr.ply",
+      "sha256": "fd86979214c772c5101faf40ad5c3cd2b9b911878080ee3b33f9dfdff43f1c9d"
+    },
+    {
+      "path": "texture/common/inventory/fuel_can.dds",
+      "sha256": "d0bb8480fe6612d7d5278d720e50e3be157dddf4ed5717ff7c43e0503f6132c7"
+    },
+    {
+      "path": "texture/common/model/enumerator/1.dds",
+      "sha256": "50ca677af655d805b6c73af93e98c299f735a713200fd2ab53ebe43b75f93307"
+    },
+    {
+      "path": "texture/common/model/enumerator/2.dds",
+      "sha256": "01ad140bfd40f6a4ca5434d0ecef557e89a495ce624e108d818868cff1882b27"
+    },
+    {
+      "path": "texture/common/model/enumerator/3.dds",
+      "sha256": "46ce16c97de0fd9438730463bc2db01e20edd78aca0e9e1678ea61dc74609241"
+    }
+  ]
+}

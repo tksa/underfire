@@ -128,6 +128,9 @@ Game.setPlayerSide = (side) => {
     Game.selectedFighter = null;
     Game.groups = {};
     Game.squads = {};
+    Game._coverReservations?.clear();
+    Game._friendlyFireCues = [];
+    Game._vehRouteQueue = [];
     Game._cmd = {};
     (Game.buildingRecords || []).forEach(rec => { if (rec.occupants) rec.occupants.length = 0; });
     while (Game.fighters && Game.fighters.length) Game._removeFighter(0);

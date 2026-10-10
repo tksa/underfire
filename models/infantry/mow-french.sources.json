@@ -1,0 +1,386 @@
+{
+  "output": "mow-french.glb",
+  "bytes": 6784356,
+  "animations": [
+    "idle",
+    "walk",
+    "run",
+    "crawl",
+    "crouch_walk",
+    "aim_stand",
+    "aim_crouch",
+    "crouch",
+    "prone_idle",
+    "fire_stand",
+    "fire_crouch",
+    "fire_prone",
+    "reload_stand",
+    "reload_crouch",
+    "reload_prone",
+    "death",
+    "death2",
+    "death3",
+    "crew_idle",
+    "crew_load",
+    "crew_push",
+    "hmg_idle",
+    "hmg_load",
+    "unarmed_idle",
+    "unarmed_walk",
+    "unarmed_run",
+    "unarmed_crouch",
+    "throw_stand",
+    "pistol_reload_stand",
+    "throw_crouch",
+    "pistol_reload_crouch",
+    "throw_prone",
+    "pistol_reload_prone",
+    "getup_crouch",
+    "getup_stand",
+    "mortar_idle",
+    "mortar_load",
+    "treat",
+    "repair",
+    "mortar_walk",
+    "pistol_walk",
+    "pistol_run",
+    "pistol_idle",
+    "pistol_aim_stand",
+    "pistol_aim_crouch",
+    "pistol_prone_idle",
+    "mg_aim_stand",
+    "mg_prone_idle",
+    "mg_reload_stand",
+    "mg_reload_prone"
+  ],
+  "sources": [
+    {
+      "path": "entity/humanskin/eng_t1/eng_t1.dds",
+      "sha256": "bda47403a6fa6e7a31149191c212ca23c2a48288d484c75cad8f133c171e9b11"
+    },
+    {
+      "path": "entity/humanskin/eng_t1/eng_t1.mdl",
+      "sha256": "5b5637975a734e04136e7664c9652af8f39ffd33fcca85e58fc092001c9ca197"
+    },
+    {
+      "path": "entity/humanskin/eng_t1/skin.mtl",
+      "sha256": "82266d9b1fee4a566cd29f7efc23e9e88846c6f1cf05228e586145702a62b66f"
+    },
+    {
+      "path": "entity/humanskin/eng_t1/skin.ply",
+      "sha256": "9d884ed9d6566ae2d65b99b6abf64d348d975f9c5d86594a03ff15b9d60329ce"
+    },
+    {
+      "path": "entity/inventory/-equipment/head/helmet1_ger/base.mtl",
+      "sha256": "b215144c77780cb1766a5d54c7d3be6c4b7edfb703bb9190e86b7a16510fa553"
+    },
+    {
+      "path": "entity/inventory/-equipment/head/helmet1_ger/helmet m40.dds",
+      "sha256": "3fc6710a5675a26e6998eea6c728d5f36d4ccb4900d088db9c8b05777c2456b9"
+    },
+    {
+      "path": "entity/inventory/-equipment/head/helmet1_ger/helmet.ply",
+      "sha256": "a51019f4c22739ed04016e1d1bd6e8ede410573009ca4287c6ff6ffb5792b6fb"
+    },
+    {
+      "path": "entity/inventory/-equipment/head/helmet1_ger/helmet1_ger.mdl",
+      "sha256": "1964c8222e23a112e42e507a9e99a9162ebe0162844dfe72aeaca7dc305fbd9b"
+    },
+    {
+      "path": "entity/inventory/-weapon/bar/bar.dds",
+      "sha256": "ff243e6ecd589b5528a1b7cd9dadc47d8c8888dc61bc74e06621fdeab1e9f5f2"
+    },
+    {
+      "path": "entity/inventory/-weapon/bar/bar.mdl",
+      "sha256": "960af59be2b3a9b0d2cd3e11fe7d2d6ccd2406a14e175d5e75f284a1bf3de6b7"
+    },
+    {
+      "path": "entity/inventory/-weapon/bar/bar.mtl",
+      "sha256": "9160fbcd97b07e0fafb755a58a5c99b9e40aa409c7f6d470c1b88e6fdecdfce1"
+    },
+    {
+      "path": "entity/inventory/-weapon/bar/bar.ply",
+      "sha256": "0679a2a8a0ca40e4cbb25c445f259b0151b277f0d191af18564a419a720dbfce"
+    },
+    {
+      "path": "entity/inventory/-weapon/luger/luger.dds",
+      "sha256": "bef4cea6a5e941fcbc7e78b245a194746d5a90d0560b4168760bc15954ceb73d"
+    },
+    {
+      "path": "entity/inventory/-weapon/luger/luger.mdl",
+      "sha256": "ef1b76f1a663331a33b964cf0287789a5a53b8b8a43627c2519eac9dcd8f3ab3"
+    },
+    {
+      "path": "entity/inventory/-weapon/luger/luger.mtl",
+      "sha256": "aa24a19b1aae6be56eec2391969c329f049f93cd955784152a4ecf41673c62c4"
+    },
+    {
+      "path": "entity/inventory/-weapon/luger/parabellum.ply",
+      "sha256": "efe2a00e471c7598397d36ad5e95e0aa54ca08f0e47a6173ed197c3f86c02a73"
+    },
+    {
+      "path": "entity/inventory/-weapon/mauzer/k98 mauser.dds",
+      "sha256": "807ef410ea57d1186e4f7420dfd930fc39c69f9872c03011a3cc7fbef3fc9fb9"
+    },
+    {
+      "path": "entity/inventory/-weapon/mauzer/k98_mauser.ply",
+      "sha256": "22d7992fb4ea3c311f0de86ce10323fcfdcb738d9e90c3cae44d7021bf3ae58c"
+    },
+    {
+      "path": "entity/inventory/-weapon/mauzer/k_98.mtl",
+      "sha256": "3f38a3228af27c4c228a9d8889f8aebc8c9d7a68745c35b01478453b1aa9abe6"
+    },
+    {
+      "path": "entity/inventory/-weapon/mauzer/mauzer.mdl",
+      "sha256": "bc9e79052d628af34c48df677a0c44bbe633deb90a57017f51b3eaef1159fff2"
+    },
+    {
+      "path": "entity/inventory/-weapon/mg34/mg34.dds",
+      "sha256": "4a2d6747d8534f5bb9b427d67a6dab57e281ffba21abdd7c8036b055b9abfc7f"
+    },
+    {
+      "path": "entity/inventory/-weapon/mg34/mg34.mdl",
+      "sha256": "adcc8c00b42f6038fdd05a8c37a167287eb4a92ff400e341ef25e613fc95925a"
+    },
+    {
+      "path": "entity/inventory/-weapon/mg34/mg34.mtl",
+      "sha256": "d95a3c4a9ee4b22adc64a55a44ce18ff9550323cbad8321756ae33af5104d25d"
+    },
+    {
+      "path": "entity/inventory/-weapon/mg34/mg34.ply",
+      "sha256": "8547deed05d3f4cd3afcdc931c8d18334b877adb9e37bb49151171d824409270"
+    },
+    {
+      "path": "entity/inventory/-weapon/mg34/mg34_2-sided.mtl",
+      "sha256": "d95a3c4a9ee4b22adc64a55a44ce18ff9550323cbad8321756ae33af5104d25d"
+    },
+    {
+      "path": "entity/inventory/-weapon/mp40/mp40.dds",
+      "sha256": "4dded7df89127335fde3e49f481ace1e990097eec049d8ca1f043f895f713ca0"
+    },
+    {
+      "path": "entity/inventory/-weapon/mp40/mp40.mdl",
+      "sha256": "676f208dfd8c55b42fe908ad1b807c8877da2771df041164d3ae1729f0d29924"
+    },
+    {
+      "path": "entity/inventory/-weapon/mp40/mp40.mtl",
+      "sha256": "6b6e65ecc3c67164657f43110d9cd48adf7cc580db8753192728aa07969a9097"
+    },
+    {
+      "path": "entity/inventory/-weapon/mp40/mp40.ply",
+      "sha256": "b522f6a05b26cc51f760afe645fc4611efae65dcae82a7d45f9f970f47f704f1"
+    },
+    {
+      "path": "properties/animation/human/cannon_pak40_charger.anm",
+      "sha256": "0d6a5ef25c5530a2a080e524c22bf1b4ebae565972cd9b3a6190ef6da28e8492"
+    },
+    {
+      "path": "properties/animation/human/cannon_pak40_gunlayer.anm",
+      "sha256": "9f44fbbc943dd8b09fa708e0325229f019fc16bbd835f0ee1a0b4c2e4c42b05a"
+    },
+    {
+      "path": "properties/animation/human/cannon_pak40_pusher_left.anm",
+      "sha256": "6b442dac34812ee9ea9a829e7c787a2f00262a4b788cfadb946286ed94de6cd6"
+    },
+    {
+      "path": "properties/animation/human/crawl_gun.anm",
+      "sha256": "aa912db19609cae0c60fd1e0156c9ad8732c8f7135d7e10b442567134908b2dc"
+    },
+    {
+      "path": "properties/animation/human/lie_fire_gun.anm",
+      "sha256": "d8292a1b6eb5769ab0922f6e96581909819ccde89c2ca56fabe77d4fabf9a810"
+    },
+    {
+      "path": "properties/animation/human/lie_fire_mgun.anm",
+      "sha256": "0e7b2fe1731565450213001361ea0e56d6ec14b766c3868d3b42325a2f7cc6cf"
+    },
+    {
+      "path": "properties/animation/human/lie_fire_pistol.anm",
+      "sha256": "bf60eec3f634ecacff8857cdddd8c430dc3c838b563f34ba5ee3dfbb6a6452aa"
+    },
+    {
+      "path": "properties/animation/human/lie_from_squat_gun.anm",
+      "sha256": "367a8c45883c42ad2a9a9cdd20c288c7e566203691656a33699e8a8571e1b469"
+    },
+    {
+      "path": "properties/animation/human/lie_reload_gun.anm",
+      "sha256": "8e8c2b39c2b68420de96b6b771bbf4e095c5a01519b762180aa36a919bfd847b"
+    },
+    {
+      "path": "properties/animation/human/lie_reload_mgun.anm",
+      "sha256": "864fb6378950323f3c20160ab3dc17b890b848cd1509ec7eae369263e80e2e25"
+    },
+    {
+      "path": "properties/animation/human/lie_reload_pistol.anm",
+      "sha256": "6dd78d5e74e1a0ff0ece7a34c14abbd0f712715e24ac9ea08be9da18dd83cd7b"
+    },
+    {
+      "path": "properties/animation/human/lie_throw_grenade_begin.anm",
+      "sha256": "2e0416e7c1a7eba221f698b910326aaf14fe33209d63885baee7058ef9f20ea5"
+    },
+    {
+      "path": "properties/animation/human/lie_throw_grenade_end.anm",
+      "sha256": "5dc8cc15211cf35fab96b4e8f6038cf69dd3999c250e7567eb48e905752ff119"
+    },
+    {
+      "path": "properties/animation/human/mgun_stan_charger.anm",
+      "sha256": "c5bd94a9362fd6dcef468c0c0e6ee423c463927ba475096971bc79a9b635f292"
+    },
+    {
+      "path": "properties/animation/human/mgun_stan_down.anm",
+      "sha256": "6fcd39348236131cfa19a1a548373bac02a75bf1586876129fe9ea19f11be9ad"
+    },
+    {
+      "path": "properties/animation/human/run_bow_gun_down.anm",
+      "sha256": "c2b936116a457155166ea3b18de8a58709203ffbf6125f9d083fa0f540ef16d0"
+    },
+    {
+      "path": "properties/animation/human/run_bow_gun_up.anm",
+      "sha256": "1baef8155a38d5ce1b89e863750ad5f9be6221fd0eed35fd993e0fee88e5b9a2"
+    },
+    {
+      "path": "properties/animation/human/run_down.anm",
+      "sha256": "ad1fb8ccf7766a6ba077e0a9af4fc0669d31782e7faab8885f21ac463ff4ab81"
+    },
+    {
+      "path": "properties/animation/human/run_empty_up.anm",
+      "sha256": "99d3ed6354041b51413323a8d46ad573adb9b3dd7e35c9fcc4741dc4753cd8d0"
+    },
+    {
+      "path": "properties/animation/human/run_gun_up.anm",
+      "sha256": "114ba239a436a1ad65200fa5a8e69ba05195de113081d5f47b5c63308e5f5c1b"
+    },
+    {
+      "path": "properties/animation/human/squat_fire_pistol.anm",
+      "sha256": "a884d442d84f43e2a9756135cd4227141dcc41ea3d8519eb625ed2942b76cb2d"
+    },
+    {
+      "path": "properties/animation/human/squat_fire_rifle.anm",
+      "sha256": "f67eb1f5594deb7ed663d5423863eb4f8c58992e37808483d769a35604626ab9"
+    },
+    {
+      "path": "properties/animation/human/squat_from_stand_empty.anm",
+      "sha256": "4c77b83bf059a392b82238554df90cdd9f709fe5e14cff66dfec138b62f2eb49"
+    },
+    {
+      "path": "properties/animation/human/squat_from_stand_gun.anm",
+      "sha256": "14ae079ee071c8fa0a35f1baf4225117003f5828bf535ae30e8ea71501375eeb"
+    },
+    {
+      "path": "properties/animation/human/squat_load_mortar.anm",
+      "sha256": "39b610280a16f010fdcd3094182982e503f69a8c6b36dae433b10e8a0da5341a"
+    },
+    {
+      "path": "properties/animation/human/squat_reload_gun.anm",
+      "sha256": "26c70daf03becd12833dafa97bbda34c59ea927fd39128023889612b5e3b952e"
+    },
+    {
+      "path": "properties/animation/human/squat_reload_pistol.anm",
+      "sha256": "0d3b27be59b9b25a496caa413a148f7f367ab73b87316a70412948dd72e6456c"
+    },
+    {
+      "path": "properties/animation/human/squat_repair_1.anm",
+      "sha256": "95845d47e8349102a6b514145f8475cf9496d7f764b8c5b5a86e27ff31537778"
+    },
+    {
+      "path": "properties/animation/human/squat_repair_2.anm",
+      "sha256": "112f6bedb4a46014a7b27f2ba3eeaf53faba892ae140fd1532b8bf7461757f61"
+    },
+    {
+      "path": "properties/animation/human/squat_throw_grenade_begin.anm",
+      "sha256": "5672a2b03e92e7fd7950abbacadf2717152139e5aee9edd7302065c44a9581f5"
+    },
+    {
+      "path": "properties/animation/human/squat_throw_grenade_end.anm",
+      "sha256": "1ec0fcda79124d9fb0333bb5dec549c273f3e37ea9ac66243d50f8282014162c"
+    },
+    {
+      "path": "properties/animation/human/stand_die_back_1.anm",
+      "sha256": "c0950dbb051a029195bb0829128f64bdecc033ed9ad47d479a73e84670cdbcb3"
+    },
+    {
+      "path": "properties/animation/human/stand_die_front_1.anm",
+      "sha256": "e813e51682a7020f385a70b791fca1dbdd0b349423a81c0c7c396483d91c386d"
+    },
+    {
+      "path": "properties/animation/human/stand_die_front_2.anm",
+      "sha256": "750cced0cb277633a603e4aee9cb90a7f30b9606946b36a3a7accf72f39a2bb8"
+    },
+    {
+      "path": "properties/animation/human/stand_fire_mgun_down.anm",
+      "sha256": "59a601a4544c3ff466009c75dcfa10e3a17f6153e585590c135bca3813880b39"
+    },
+    {
+      "path": "properties/animation/human/stand_fire_mgun_up.anm",
+      "sha256": "42bec4eebcb49eaa1b3d4d87de39686d96564af197ad83ac46ddb0242b1f953e"
+    },
+    {
+      "path": "properties/animation/human/stand_fire_pistol_down.anm",
+      "sha256": "39086fcba5f15b41e94b0ce2323b33caef8ab217ec212bbe1b99316cc95bc878"
+    },
+    {
+      "path": "properties/animation/human/stand_fire_pistol_up.anm",
+      "sha256": "2d7d26296134dd12b18e91769ee791f7a3528bf3f5507df2fda0bf99965eae79"
+    },
+    {
+      "path": "properties/animation/human/stand_fire_rifle_down.anm",
+      "sha256": "34beaee4d7c4bbf51c0cae6ac540ddedfb806ee1f0fb79362e500d846aa4ea23"
+    },
+    {
+      "path": "properties/animation/human/stand_fire_rifle_up.anm",
+      "sha256": "097826b8835eadc6feb655a19952d9f73396e1e4535355e8e2dcd8b0476e46fd"
+    },
+    {
+      "path": "properties/animation/human/stand_holdback_pistol_down.anm",
+      "sha256": "7323655c737f781597461d11766ed985dd6c797db870dbb0552c912c5bb1eead"
+    },
+    {
+      "path": "properties/animation/human/stand_holdback_pistol_up.anm",
+      "sha256": "d77b416490970d4e4c73811e087e63d953c0f362889b502856bf5c87176432b5"
+    },
+    {
+      "path": "properties/animation/human/stand_idle_empty_1.anm",
+      "sha256": "fb55c598d2443ee38ece5559b3de4b11c55de673c137f49092407ef11a7d5440"
+    },
+    {
+      "path": "properties/animation/human/stand_reload_gun.anm",
+      "sha256": "af5d73f560ea5ecec8cecae832a83668ddb01be62ac8d2eb766174a46b4bdc0f"
+    },
+    {
+      "path": "properties/animation/human/stand_reload_mgun.anm",
+      "sha256": "4ebd4410a704cf495a47d3143a0af58a039aa38d770a72a2510e317458f74bcf"
+    },
+    {
+      "path": "properties/animation/human/stand_reload_pistol.anm",
+      "sha256": "3798581335606cb9fd409bd0585a8d7b2554996402aae4c0ba9497cf8b04e692"
+    },
+    {
+      "path": "properties/animation/human/stand_take_gun_down.anm",
+      "sha256": "068460579d5304cae12c4c93dfff37644e0b0496cad7551d27afdbc0e2e9cfaa"
+    },
+    {
+      "path": "properties/animation/human/stand_take_gun_up.anm",
+      "sha256": "b80b2dd4ae46520fd6da674a0f4ffbffc7d61ba773533d7bf9a4be89b1d98fce"
+    },
+    {
+      "path": "properties/animation/human/stand_throw_grenade_begin.anm",
+      "sha256": "a91f90b8918421ea270c6012e4c3d9467f1ba7e175fdcea83bd797c103a90259"
+    },
+    {
+      "path": "properties/animation/human/stand_throw_grenade_end.anm",
+      "sha256": "b71735e9499d82d788988ccc81c115b270bc34d0fcbbd9bf3a9366f4b125d8f9"
+    },
+    {
+      "path": "properties/animation/human/walk_empty_up.anm",
+      "sha256": "f5e8d2c03c9a5f57d797e88420dd2c364053af11f072bcf222484cccdf7131e0"
+    },
+    {
+      "path": "properties/animation/human/walk_gun_up.anm",
+      "sha256": "158d67004e938e4c74461a30f896727ef98fe7b9ecb074fce04119e9d2abae57"
+    },
+    {
+      "path": "properties/animation/human/walk_normal_gun_down.anm",
+      "sha256": "2a481f84a06c890e71c1985b644419508224990a53a311c99d16f0fce9b4bb37"
+    }
+  ]
+}

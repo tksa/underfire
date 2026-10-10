@@ -1,6 +1,7 @@
 /**
  * Under Fire — soldier_model.js
- * Shared skinned WW2 soldier model for foot infantry.
+ * Legacy soldier timeline helpers and shared animation/debug utilities.
+ * The default runtime rig is configured by mow_soldier_model.js, loaded next.
  *
  * One GLB (models/soldier.glb) is loaded once and cloned per unit (SkeletonUtils,
  * via Game.loadModel). The source ships a SINGLE baked "Take 001" clip (~46.6s)
@@ -145,7 +146,21 @@ Game.splitSoldierAnim = (sourceClips) => {
         if (c) out.push(c);
     }
     // Posture freezes (stand=idle already; prone=fire_prone already).
-    const cr = Game._freezeClip(src, 'crouch', Game.SOLDIER_CROUCH_FREEZE); if (cr) out.push(cr);
+    const kneel = Game._freezeClip(src, 'kneel_base', Game.SOLDIER_CROUCH_FREEZE);
+    // The kneeling frame belongs to the grenade take: it turns the root back
+    // and lifts the throwing arm. Keep its legs, remove only the root's yaw,
+    // and borrow the calm upper body. Heading belongs to the unit, not a take.
+    if (kneel) for (const track of kneel.tracks) {
+        if (track.name !== 'GermanSoldierRig_01.quaternion') continue;
+        const q = new Game.THREE.Quaternion(), e = new Game.THREE.Euler(0, 0, 0, 'YXZ');
+        for (let i = 0; i < track.values.length; i += 4) {
+            q.fromArray(track.values, i); e.setFromQuaternion(q, 'YXZ'); e.y = 0;
+            q.setFromEuler(e).toArray(track.values, i);
+        }
+    }
+    const idle = out.find(c => c.name === 'idle');
+    const cr = kneel && idle ? Game._composeClip('crouch', kneel, idle, Game.SOLDIER_LOWER_BONES) : kneel;
+    if (cr) out.push(cr);
     const si = Game._freezeClip(src, 'sit', Game.SOLDIER_SIT_FREEZE); if (si) out.push(si);
     // Kneeling fire: the source has no crouched firing take, so a crouched man
     // used to borrow the STANDING fire clip and pop upright every time he shot,
@@ -155,6 +170,19 @@ Game.splitSoldierAnim = (sourceClips) => {
     if (cr && fs && Game._composeClip) {
         const fc = Game._composeClip('fire_crouch', cr, fs, Game.SOLDIER_LOWER_BONES);
         if (fc) out.push(fc);
+    }
+    // Aiming is a held sight picture, not the source's repeated discharge.
+    // Recoil/weapon handling below are driven by successful simulation shots.
+    const aim = Game._freezeClip(src, 'aim_stand', 3.0);
+    const prone = Game._freezeClip(src, 'prone_idle', 31.0);
+    if (aim) out.push(aim);
+    if (cr && aim) out.push(Game._composeClip('aim_crouch', cr, aim, Game.SOLDIER_LOWER_BONES));
+    if (prone) {
+        out.push(prone);
+        const crawl = prone.clone(); crawl.name = 'crawl'; out.push(crawl);
+    }
+    if (cr) {
+        const lowWalk = cr.clone(); lowWalk.name = 'crouch_walk'; out.push(lowWalk);
     }
     // Keep the full baked timeline as '_raw' so the debug panel can scrub it to
     // find clip boundaries.
@@ -570,8 +598,32 @@ Game._soldierLegBones = (unit) => {
     const m = ud.soldierModel;
     if (!m) { ud._legBones = null; return null; }
     const find = (n) => { let r = null; m.traverse(o => { if (o.name === n) r = o; }); return r; };
-    ud._legBones = { hipL: find('hip_left_06'), kneeL: find('knee_left_07'), hipR: find('hip_right_02'), kneeR: find('knee_right_03'), torso: find('torso_010') };
+    ud._legBones = { hipL: find('hip_left_06'), kneeL: find('knee_left_07'), hipR: find('hip_right_02'), kneeR: find('knee_right_03'), torso: find('torso_010'),
+        shoulderL: find('shoulder_left_011'), armL: find('arm_left_012'),
+        shoulderR: find('shoulder_right_014'), armR: find('arm_right_015') };
     return ud._legBones;
+};
+
+// Three's mixer may skip writing an unchanged static track. Restore last
+// frame's base before evaluating it, otherwise additive crawl/recoil offsets
+// accumulate and bend a limb farther on every frame of a frozen aiming pose.
+Game._restoreSoldierMotion = (unit) => {
+    for (const pose of unit.mesh.userData._motionPose || []) {
+        pose.bone.quaternion.copy(pose.quaternion);
+        pose.bone.position.copy(pose.position);
+    }
+};
+Game._captureSoldierMotion = (unit) => {
+    const ud = unit.mesh.userData;
+    const bones = Game._soldierLegBones(unit);
+    if (!bones) return;
+    if (!ud._motionPose) ud._motionPose = Object.values(bones).filter(Boolean).map(bone => ({
+        bone, quaternion: bone.quaternion.clone(), position: bone.position.clone(),
+    }));
+    for (const pose of ud._motionPose) {
+        pose.quaternion.copy(pose.bone.quaternion);
+        pose.position.copy(pose.bone.position);
+    }
 };
 
 // Called AFTER mixer.update so it drives the legs over the clip's (static) legs.
@@ -591,6 +643,28 @@ Game._soldierProceduralLegs = (unit, dt) => {
     // scrambles then animate the legs too, so a pushed man visibly steps aside
     // instead of ice-skating, and a blocked man never treadmills on the spot.
     const spd = (unit._dispSpeed != null) ? unit._dispSpeed : (unit.currentSpeed || 0);
+    const low = unit.stance === 'prone' || unit.stance === 'crouch';
+    if (low && !Game.SOLDIER_FORCE_CLIP) {
+        // Low locomotion stays on the authored low pose. Alternating elbow
+        // pulls and knee recovery replace the former frozen prone slide; the
+        // crouch cycle never resets its bent legs to the standing bind pose.
+        ud._gaitBlend = 0;
+        if (spd < 0.12) return;
+        const crawl = unit.stance === 'prone';
+        const stride = crawl ? 0.85 : 1.45;
+        ud._gaitPhase = (ud._gaitPhase || 0) + spd * dt * Math.PI * 2 / stride;
+        const p = ud._gaitPhase, amp = crawl ? 0.18 : 0.22;
+        for (const [hip, knee, phase] of [[b.hipL, b.kneeL, p], [b.hipR, b.kneeR, p + Math.PI]]) {
+            if (hip) hip.rotation.x += amp * Math.sin(phase);
+            if (knee) knee.rotation.x += amp * 1.4 * Math.max(0, Math.sin(phase));
+        }
+        if (crawl) {
+            if (b.shoulderL) b.shoulderL.rotation.x += 0.16 * Math.sin(p + Math.PI);
+            if (b.armL) b.armL.rotation.x += 0.20 * Math.sin(p);
+            if (b.torso) b.torso.rotation.z += 0.035 * Math.sin(p);
+        }
+        return;
+    }
     // Debug: a forced walk/run clip strides in place even when the unit is parked.
     const forcedLoco = Game.SOLDIER_FORCE_CLIP === 'walk' || Game.SOLDIER_FORCE_CLIP === 'run';
     // A man on his belly does not swing his legs like a walker (the crawl is
@@ -650,6 +724,26 @@ Game._soldierProceduralLegs = (unit, dt) => {
         b.torso.rotation.y = Game.lerp(b.torso.rotation.y, r.y, bl);
         b.torso.rotation.z = Game.lerp(b.torso.rotation.z, r.z, bl);
         b.torso.rotation[ax] = r[ax] + lean;
+    }
+};
+
+// Small additive motions over a stable aiming pose. The bolt/handling cycle
+// finishes within the actual cooldown; empty weapons never animate firing.
+Game._soldierWeaponMotion = (unit) => {
+    if (Game.SOLDIER_FORCE_CLIP || unit._lastShotAt == null || !unit.alive
+        || (unit._dispSpeed || unit.currentSpeed || 0) > 0.25) return;
+    const b = Game._soldierLegBones(unit);
+    if (!b) return;
+    const age = Math.max(0, unit._shotAge ?? Game.gameClock - unit._lastShotAt);
+    const recoil = age < 0.22 ? Math.sin(Math.PI * age / 0.22) * Math.exp(-age * 10) : 0;
+    if (b.torso) b.torso.rotation.x -= recoil * 0.055;
+    if (b.shoulderR) b.shoulderR.rotation.x -= recoil * 0.09;
+    const duration = Math.min(1.4, Math.max(0.35, (unit.cooldown || 1) * 0.7));
+    const phase = (age - 0.2) / duration;
+    if (phase > 0 && phase < 1 && unit.cooldownLeft > 0) {
+        const handle = Math.sin(Math.PI * phase) ** 2;
+        if (b.armR) b.armR.rotation.x += handle * 0.24;
+        if (b.shoulderR) b.shoulderR.rotation.z += handle * 0.08;
     }
 };
 

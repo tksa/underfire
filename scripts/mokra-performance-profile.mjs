@@ -36,15 +36,15 @@ await page.evaluate(profileRender => {
   const perf = Game._perfProfile = {
     stats: {}, frames: [], longTasks: [], lastFrame: null,
   };
-  const wrap = name => {
-    const original = Game[name];
+  const wrap = (name, owner = Game, label = name) => {
+    const original = owner[name];
     if (typeof original !== 'function' || original._perfWrapped) return;
     const wrapped = function (...args) {
       const start = performance.now();
       try { return original.apply(this, args); }
       finally {
         const elapsed = performance.now() - start;
-        const stat = perf.stats[name] || (perf.stats[name] = { calls: 0, total: 0, max: 0 });
+        const stat = perf.stats[label] || (perf.stats[label] = { calls: 0, total: 0, max: 0 });
         stat.calls++;
         stat.total += elapsed;
         if (elapsed > stat.max) stat.max = elapsed;
@@ -52,7 +52,7 @@ await page.evaluate(profileRender => {
     };
     wrapped._perfWrapped = true;
     wrapped._perfOriginal = original;
-    Game[name] = wrapped;
+    owner[name] = wrapped;
   };
   [
     'updateUnit', 'nearestEnemy', 'unitCanSee', 'lineOfSight', 'findPath',
@@ -61,8 +61,10 @@ await page.evaluate(profileRender => {
     'updateHUD', 'updateMinimap', 'renderScene',
     'spawnMokraGermanWave', '_sendMokraAttackers', '_processMokraRouteQueue',
     '_buildMokraVehicleRoute', '_recoverMokraVehicleRoute',
-    'segmentPassable', 'updateMokraMission',
-  ].forEach(wrap);
+    'segmentPassable', 'updateMokraMission', 'applySeparation', '_infantryFollow',
+    'updateAI', 'updateSmoke3D', 'getWeaponMuzzle', 'updateFieldGunCrew',
+  ].forEach(name => wrap(name));
+  Object.keys(Game.uMod).forEach(name => wrap(name, Game.uMod, `uMod.${name}`));
 
   const frame = now => {
     if (perf.lastFrame != null) perf.frames.push(now - perf.lastFrame);

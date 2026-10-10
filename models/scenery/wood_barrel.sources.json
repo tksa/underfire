@@ -1,0 +1,27 @@
+{
+  "output": "wood_barrel.glb",
+  "bytes": 30576,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/construction/entourage/barrel_woods/barrel.ply",
+      "sha256": "85c1ca4c047dc45763a9978523f0333f630f4155f73834564960c1688c1493df"
+    },
+    {
+      "path": "entity/construction/entourage/barrel_woods/barrel_woods.def",
+      "sha256": "7305ff46f67ba93d94fca8dc485728cd0cf60a5bbacfb3497a8e85f8be590c68"
+    },
+    {
+      "path": "entity/construction/entourage/barrel_woods/barrel_woods.mdl",
+      "sha256": "3e952c9b1038d87b2d5e4c009881d3a38d35a2975de27525dd9900d7e13a2db9"
+    },
+    {
+      "path": "entity/construction/entourage/barrel_woods/material1.mtl",
+      "sha256": "1e3be9861e44321c41b76c0448d0ad5a6be24ccddc5728386e7dfde7daebbaf6"
+    },
+    {
+      "path": "texture/common/entourage/barrelwood.dds",
+      "sha256": "058a3c673490c5831a8b4e1bbf1e84dcd4a1d6f8e4a6881767ebec3b53d0d2a9"
+    }
+  ]
+}

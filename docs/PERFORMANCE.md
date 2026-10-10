@@ -1,173 +1,187 @@
-# Mokra performance investigation
+# Attack-move performance audit
 
-This document records the v0.13 Mokra freeze investigation, the baseline evidence gathered during the audit, the mitigations now present in the working tree, and the remaining performance work. The measurements below are headless or static instrumentation results; they are not production GPU frame-rate measurements.
+## Follow-up audit (7 October 2026)
 
-## Baseline evidence
+The current pass preserves model, texture, animation and effect appearance.
+Reports and test logs are in `tmp/performance-2026-10/`.
 
-| Area | Observed baseline |
-| --- | --- |
-| Reinforcement waves | The synchronous spawn-and-route path stalled for about **5.03 s**, **3.25 s**, and **1.40 s** at the first, second, and final timed wave commits respectively. |
-| Unit targeting and sight | In a controlled five-frame, 121-unit sample, the core frames took about **153 ms total** (**30.7 ms/frame**). `nearestEnemy` ran 737 times for about 92 ms cumulative; LOS ran 25,410 evaluations for about 71 ms cumulative. These timings are inclusive/nested and must not be added on top of the 153 ms total. |
-| Grass | The old Mokra terrain configuration produced about **636,700 grass blades** across legacy undergrowth and fluffy grass. |
-| Craters | The terrain contains **66,049 vertices**. Every old crater impact scanned the full geometry and ran a full `computeVertexNormals`; several impacts could do this in one frame. |
-| Tracks | A stress/wave audit found more than **1,000 track-mark groups**, representing more than **2,000 tread meshes**, under the old 15-second, two-mesh-per-mark design. |
-| Fog of war | A 300 x 300 map at `FOG_RES = 2` uses a 600 x 600, **360,000-cell** Float32 visibility grid. The old 0.12-second update swept the full grid and recreated a 256 x 256 `ImageData`, temporary canvas, and context before the 65,536-pixel render pass. |
-| Audio | v0.12 created 216 `HTMLAudioElement`s for 56 URLs. The v0.13 baseline created **520 elements for 132 URLs**. Seventy-five active Polish voice files alone became 300 elements at pool size four. Unique compressed audio was about 3.733 MiB, with worst-case element-weighted fetch exposure about 14.412 MiB and a decoded Float32 upper bound about 54.195 MiB. |
-| Movement recorder | When enabled, the old recorder stored every living unit on every frame, capped at 400,000 records by repeatedly shifting 8,000 entries from the front. Stopping it then stringified and downloaded the large JSON capture. When disabled, it only incurred its null guard. |
+- **Collision prediction:** Mokra's 130-unit final-wave sample spent about
+  2.9 ms per frame in `applySeparation`, within 6.4 ms of movement work. Vehicle
+  pairs previously constructed and tested up to seven pairs of oriented boxes,
+  including parked vehicles and vehicles far beyond their prediction horizon.
+  Parked pairs now leave that advisory yield check early; the existing swept
+  movement gate still enforces their physical collision. A conservative bound
+  from hull diagonals, speed, clearance and the full 1.5-second prediction
+  horizon rejects distant moving pairs before detailed testing. Infantry hull
+  contact also rejects points outside the expanded hull's bounding circle.
+  `collision-performance.mjs` verifies identical results against release
+  `3c238a7` in 20,000 seeded movement/contact cases. A 48-vehicle spread-out
+  sample eliminates 1,722,240 detailed OBB tests over 120 frames. This is a
+  component workload, not a whole-game FPS claim.
+- **Smoke and flash lifetime:** every expired effect disposed Three.js's shared
+  sprite geometry and its own material. Effects now reuse independent sprite
+  materials, with idle pools capped at 256 smoke and 128 flash sprites. Visible
+  effect counts, tint, fade curves, scale and blending are unchanged. The
+  100-burst resource test drops sprite/material creations from 6,400 to 64;
+  shared-geometry disposal drops to zero. Overflow disposes only its material.
+- **No duplicated loaders found:** the Dyle audit found no repeated script URLs
+  or duplicate model requests. Its 182 referenced textures use 152 sources;
+  shared sources are expected, not evidence of duplicate downloads. The RGBA
+  estimate remains 659.9 MiB and must not be reported as measured VRAM.
+- **Animation regression found during verification:** short traffic stops
+  reset locomotion immediately, letting aim/crouch poses interrupt the existing
+  brief-pause clip hold. The selector now retains locomotion through up to
+  0.7 seconds of a commanded movement pause; stride playback still stops with
+  actual ground speed. The focused locomotion suite passes 122 checks, including
+  repeated crouched pauses with a target present. The full animation audit also
+  passes after this correction.
 
-The five-frame targeting/LOS figures came from static/headless instrumentation performed during this audit, not from `scripts/mokra-performance-profile.mjs`. The audio audit found startup allocation pressure, not a per-command listener or timer leak.
+Final Dyle native sample on Apple M4 Max / ANGLE Metal, 1280×800, DPR 1:
+480 rendered frames averaged **10.40 ms (96.2 FPS)**, with **16.8 ms p95**;
+attack-move dispatch took **2.7 ms**. Rendering submitted 1,480 calls and
+2.38 million triangles across all passes. This is an observed short-run result,
+not a guaranteed frame rate or a controlled FPS improvement percentage. Earlier
+and later battle states differ because loading and random effect creation can
+change simulation timing. The unchanged-algorithm collision comparison and
+effect resource counts isolate the specific optimizations more reliably.
 
-## Post-fix headless verification
+Remaining opportunities, in priority order:
 
-The final integrated three-second-per-phase sampler (rendering disabled) produced the following results:
+1. Profile and stage cold shader compilation/texture uploads before play. The
+   first isolated render varied from 459 ms to 5.14 seconds, while subsequent
+   rendered samples were much smoother. Loading/shader-cache state makes these
+   cold numbers unsuitable as an optimization speedup comparison.
+2. Audit compression and mip chains for the remaining 2048px model maps and
+   4096px terrain map. Preserve authored color/normal detail; validate actual GPU
+   allocations and screenshots before changing asset formats or resolution.
+3. Reduce static-scene submissions without changing visibility or silhouette.
+   The Dyle sample submitted roughly 1,500 calls and 2.38 million triangles
+   across all render passes. Profile shadows separately before merging meshes.
+4. Continue moving synchronous recovery/cover routes onto the existing bounded
+   route queue. The main attack-move dispatch is already small, but individual
+   route searches still produce occasional spikes in larger battles.
 
-| Check | Result |
-| --- | --- |
-| Timed wave commit | About **3.9 ms**, **4.3 ms**, and **3.0 ms**, down from 5.03 s, 3.25 s, and 1.40 s. |
-| Authored armour routes | All **14/14** vehicles routed; zero lane fallbacks, route failures, or empty infantry/support paths. |
-| In-motion vehicle recovery | One recovery was exercised in **0.3 ms** with no failure. The same generic recovery had taken about 966 ms before it was moved onto the authored corridor. |
-| Remaining `findPath` work | Infantry/support only in the sample, with a **3.9 ms** maximum call. All 52 queued routes completed. |
-| Grass | 139,970 combined blades across 72 chunks, within the 140,000 budget (about 78% below the old allocation). |
-| Tracks | Peak held at the 240-mark cap; overflow retired instead of accumulating. |
-| Audio | 17 pooled sources and 72 elements at startup; one event voice raised this to 18 sources/74 elements. |
-| Peak-force simulation | At 121 living units, `updateUnit` averaged about **4.67 ms per sampled loop**; target acquisition averaged about **0.08 ms per loop**. No browser long-task entry was reported. |
+`mokra-performance-profile.mjs` now reports individual `uMod` stages, separation,
+crew animation and smoke alongside whole-unit timing. Parent and child timings
+are inclusive and must not be added together. Run native GPU profiles alone;
+asynchronous asset completion and frame-budgeted routing can vary the later
+simulation even when map generation is seeded.
 
-The full nonvisual Mokra mission contract and the default Dyle smoke test passed. Targeted isolated checks also passed for fog-reset cache safety, recorder ring chronology, local crater deformation/bounds, hidden-track cap priority, and deferred-track fading. These are software-rendered/headless CPU results, not a promise of production GPU frame rate.
+Measured locally on 11 September 2026, using the default Dyle battle (76 units).
+The reproducible audit is `scripts/attack-move-performance.mjs`. It records CPU
+costs, loaded resources, duplicate requests, scene submission counts and optional
+native GPU frame intervals. Run browser tests and profiles individually.
 
-## Implemented mitigations
+## Findings and changes
 
-These changes remove or bound the identified worst cases. They still require browser and real-hardware validation; their presence is not itself proof of a particular post-fix frame rate.
+- Mass orders ran complete A* searches in the input handler and route queue.
+  The baseline order took 270 ms; a queued search occupied 737 ms of one frame.
+  Orders now enqueue large infantry selections as well as vehicles. A* expansion
+  and path smoothing yield; the queue works toward a 3 ms frame budget, sharing
+  it between units. Full body clearance, ordered stops and route cancellation
+  remain authoritative. No partial search result is installed as a route.
+- World-wide hedge/tree instance batches drew distant geometry whenever any
+  part of the batch was visible. Foliage now uses 48-unit spatial batches;
+  undergrowth uses 32-unit batches, and fluffy grass uses eight-tile batches.
+  Bounds include wind and knockdown motion. Every tree/hedge placement remains,
+  including its instance-specific tank knockdown record.
+- Field cover previously allowed 600,000 blades per species on ordinary maps.
+  A combined 240,000-instance budget now includes the legacy undergrowth;
+  Mokra retains its existing 140,000 combined limit. Editable density and brush
+  masks remain intact. Small grass receives shadows without casting its own.
+- The default baked terrain uploaded an 8192-square texture: approximately
+  341 MiB as RGBA plus mipmaps. Its GPU copy is now at most 4096 square (85 MiB).
+  The full-resolution source stays available for map edits and export; region
+  edits refresh the same display texture. Source model atlases remain intact.
+- Each infantry clone retained meshes for every possible weapon. Inactive
+  equipment is removed from each spawned figure, while the cached source keeps
+  all roles. Materials are reused within one figure, with independent clones
+  between units. The measured scene dropped from 5,809 to 742 material objects.
+  Skeletons, animation clips, real muzzle sockets and animated visibility rules
+  are preserved. Wreck tinting visits each material once.
+- Entry and towing hints performed two identical unit-mesh raycasts per frame.
+  They now share one pick; a stationary cursor caches it for 80 ms. Camera,
+  cursor, selection and command-mode changes invalidate the cache. Clicks still
+  perform fresh picks. Hidden/dead unit roots are rejected before raycasting,
+  and unchanged garrison labels do not rebuild their DOM.
+- High-density displays multiplied all HDR and postprocessing targets by four.
+  The 3D buffer now uses at most 1.5 device pixels per CSS pixel and a three-million
+  pixel budget, recalculated on resize. DOM text stays at native resolution.
+  Two-sample MSAA plus SMAA replaces four-sample MSAA plus SMAA.
+- No duplicate script tags or model downloads appeared in the baseline audit.
+  There is one gameplay animation-frame loop; the other frame callbacks are
+  one-shot setup/capture helpers. The audit adds no runtime profiling loop.
 
-### Reinforcement routing
+- Direct-fire trails now share one instanced ribbon batch (256 visual slots),
+  with no per-shot geometry/material allocations. Ordinary rounds are often
+  invisible or faint; occasional warm glints have varied brightness and short
+  world-space lengths. Mortars preserve real shell flight time and arcs. Visual
+  overflow never skips terrain impacts, and presentation randomness has its own
+  generator so it cannot change combat accuracy rolls.
+- The command panel reuses card DOM nodes while health/ammo change. Unit-type
+  silhouettes are inline vectors, without an extra renderer, loop or textures.
+  Conflicting legacy letter-key actions now require Shift for their secondary
+  meaning; F/Q/N cannot silently trigger first aid/garrison/entrench as well.
 
-- Mokra vehicles use parallel authored field corridors south of Mokra II's asynchronously sealed building footprints. Each segment is checked for full-footprint clearance, while connectors and final fan-out remain individualized.
-- Wave spawning no longer runs full heading-state vehicle A* synchronously for every new vehicle.
-- Tagged German armour also reuses the forward or reversed authored corridor for AI repositioning and stuck/blocker recovery, rather than launching a late 80,000-state vehicle search.
-- Infantry and support routes enter a queue, and Mokra dispatches at most one A* job per update frame.
-- `Game._mokraRouteStats` records authored routes, recoveries, lane/recovery failures, infantry queue/routing failures, and maximum queue depth.
-
-### Targeting, LOS, and lookup work
-
-- Unforced target acquisition is staggered over roughly 0.14-0.20 seconds by unit ID, retaining a valid cached target between scans.
-- Squad AI reuses cached unit sightings instead of repeating nearest-enemy work for each member.
-- LOS performs a squared-distance range rejection before tile walking.
-- Unit ID lookup uses a map index, and officer lists are cached per team for 0.35 seconds.
-- Firing still validates relevant current-frame LOS; the throttling applies to acquisition scans.
-
-### Grass and foliage
-
-- Mokra has a combined **140,000-blade** budget for legacy undergrowth and fluffy grass, down from the roughly 636,700-blade baseline.
-- Eligible tiles are counted before construction and density is scaled to the budget.
-- Grass is split into 16-tile spatial chunks so frustum culling can reject off-screen chunks.
-- Rebuilds dispose instance-owned buffers/materials and clear stale mesh references.
-- Tank foliage knockdown uses 8-unit spatial cells, checks nearby buckets at 10 Hz, and keeps an active list only for foliage that is currently falling.
-- Grass remains enabled by default. `Game._fluffStats` exposes the actual budget, counts, chunks, and species breakdown.
-
-### Tracks and craters
-
-- Track marks are capped at 240 and live for at most eight seconds. Overflow is disposed, and unseen enemy tracks defer GPU allocation unless they become visible before expiry.
-- Both treads are stored in one geometry and one mesh instead of a group containing two meshes.
-- Crater impacts enter a bounded 48-item queue, nearby queued impacts are merged, and deformation is batched every 0.35 seconds.
-- A crater batch touches local terrain windows and runs `computeVertexNormals` once after the batch, rather than once per impact.
-- `Game._trackPerf` and `Game._craterPerf` expose drop, peak, queue, and batching information.
-
-### Main loop, fog, and animation
-
-- Fog updates run at 5 Hz, reuse `ImageData` and the blur canvas/context, and decay only the cells visible in the preceding update except when a debug-mode transition requires a reset.
-- Camouflage runs at 4 Hz, the HUD at 10 Hz, and the minimap at 8 Hz instead of all three running every animation frame.
-- Dead skeletal mixers stop after the death animation. Fog-hidden and off-map enemy units skip animation mixer/bone updates.
-
-### Audio and movement recording
-
-- Audio startup eagerly creates only the battlefield sounds, four utility sounds, and four loops. Command voice pools are created on first use and contain two elements instead of four.
-- Immediately after `Game.Audio.init()`, before any voice is heard, the current design has 17 pooled sources and 72 audio elements. Each newly heard unique voice adds one source and two elements. `Game.Audio.resourceStats` reports the live counts.
-- Mokra siren playback is temporarily disabled during testing, so starting the scenario does not allocate its lazy audio source. The siren asset and helper remain available for a later re-enable; Dyle never allocates that source.
-- The movement recorder samples at 15 Hz into a 240,000-record circular buffer, avoiding repeated front-of-array shifts. At 121 living units this is about 1,815 records/second and fills in about 132 seconds.
-- Recording remains intentionally expensive and should stay disabled during performance sampling.
-
-## Running the Mokra profiler
-
-The sampler requires Playwright's Chromium and a local static server:
+## Measurement method
 
 ```sh
-python3 -m http.server 8741
+node scripts/attack-move-performance.mjs tmp/performance/report.json
+PROFILE_GPU=metal PROFILE_RENDER_FRAMES=240 node scripts/attack-move-performance.mjs tmp/performance/native.json
+PROFILE_GPU=metal PROFILE_DPR=2 PROFILE_RENDER_FRAMES=240 node scripts/attack-move-performance.mjs tmp/performance/retina.json
 ```
 
-In another terminal:
+The CPU phases step the game at 30 Hz with rendering disabled. Each reports
+mean, 95th percentile and maximum frame cost. These numbers are not FPS. A
+separate render records geometry across all passes, including shadows. Native
+frame sampling restores uninstrumented functions and includes actual rendering,
+with ten warm-up frames. The profiler reports the GPU backend; SwiftShader frame
+rates must not be presented as native hardware performance.
 
-```sh
-node scripts/mokra-performance-profile.mjs
-```
+Texture estimates sum uncompressed RGBA plus mipmaps for referenced texture
+objects. Sources and samplers may share GPU allocations, so this is a resource
+estimate, not a measurement of actual VRAM use. Seeded initialization makes the
+battle repeatable, but asynchronous loading and time-budgeted searches can
+change the precise later simulation state. Compare the same viewport/backend.
 
-Useful options:
+## Limits
 
-```sh
-PROFILE_MS=8000 node scripts/mokra-performance-profile.mjs
-SMOKE_URL=http://localhost:8741 node scripts/mokra-performance-profile.mjs
-PROFILE_RENDER=1 node scripts/mokra-performance-profile.mjs
-```
+The queue budget is cooperative: one expansion/smoothing segment can overrun
+it. Small immediate routes, Shift-appended legs and compound truck recovery
+still have synchronous callers. Cold shader compilation, texture uploads and
+garbage collection can cause occasional stalls; the optimization does not
+promise a locked frame rate on every map or GPU. Geometry reduction is mainly
+from scenery culling and grass density, not removing units or their animations.
 
-The default five-second samples disable `Game.renderScene` because headless Chromium normally uses SwiftShader, whose software-rendering load can drown out simulation timings. The script samples the opening deployment, then fast-forwards the remainder of the three-minute countdown before sampling the three combat-relative wave thresholds, and prints JSON containing:
+## Regression coverage
 
-- JavaScript/console errors plus a count of optional missing-resource warnings;
-- wrapped-function call count, cumulative time, mean, and maximum;
-- animation-frame gap count, mean, p95, maximum, and count over 50 ms;
-- long-task count/maximum, JS heap, and browser task duration;
-- unit/effect counts, terrain vertices, and audio resource counts.
+`performance-regression-test.mjs` checks terrain source/display ownership,
+texture refresh, vegetation budgets, knockdown references, issued equipment,
+animation visibility, cursor picking, high-density buffer limits and queued
+route completion/cancellation/obstacle clearance. The existing transport,
+tactical, weapon and animation tests cover gameplay behavior.
 
-`PROFILE_RENDER=1` includes the render path for comparative smoke checks. Its headless frame time/FPS must not be presented as production GPU performance. This script is a nonvisual profiler, not a gameplay or visual-correctness test, and the movement recorder should remain off while it runs.
+Scenery uses 48-unit instance chunks, a cap of 84 farm props and textures of
+512px or smaller. Contact debris shares a single bounded 128-instance mesh.
 
-The profiler exits nonzero for real page errors, route/recovery failures, an undrained route queue, grass/track/audio budget violations, or any Mokra wave/path call exceeding 50 ms. Optional missing model/texture warnings are counted separately because the game already has procedural fallbacks for those assets.
+The rejected faction palette/noise shader was removed during visual recovery;
+authored texture detail now remains intact with a bounded exposure correction.
 
-## Built-in counters
+## Verified recovery run (11 September 2026)
 
-Inspect these in the browser console during a Mokra run:
+`tmp/performance/recovery-native.json`, run alone on Apple M4 Max / ANGLE Metal,
+1280×800, DPR 1, with all farm/building/fence models loaded:
 
-```js
-Game._mokraRouteStats
-Game._fluffStats
-Game._trackPerf
-Game._craterPerf
-Game.Audio.resourceStats
-Game.trackMarks?.length
-Game._craterQueue?.length
-```
+| Measurement | Result |
+|---|---:|
+| Attack-move order dispatch | 2.8 ms |
+| 240 rendered frames, mean interval | 10.28 ms |
+| 95th-percentile frame interval | 17.1 ms |
+| Sample average frame rate | 97.3 FPS |
+| Estimated referenced textures | 659.9 MiB |
+| Submitted triangles, all passes | 2.38 million |
+| Duplicate script URLs / runtime errors | 0 / 0 |
 
-The counters are cumulative from the relevant scenario construction/rebuild or page load. Reload the page to begin a clean comparison. `Game._perfProfile` exists only while the external sampler is running.
-
-## Remaining work
-
-- Validate authored vehicle corridors against all reinforcement compositions. For larger arbitrary waves, consider hierarchical, flow-field, or shared routes and a hard per-frame routing time budget.
-- Spatially partition enemy candidates and consider cell/pair LOS caching. Move route calculation to workers or asynchronous jobs where the architecture permits.
-- Replace the remaining full `computeVertexNormals` crater batch with partial normal updates or shader/decal displacement, and reduce or defer terrain attribute uploads.
-- Batch or instance track decals, share geometry/materials, or use an atlas/ring buffer to reduce the remaining maximum of 240 track drawables.
-- Reduce the remaining 65,536-pixel fog canvas pass/texture upload with dirty regions, a lower-resolution path, or worker/offscreen processing.
-- Consider a fixed small voice-channel pool, selected-faction-only preload, and explicit audio teardown disposal.
-- Use HUD state signatures to avoid rebuilding unchanged markup even at 10 Hz, and throttle animation when the page/menu is hidden.
-- For long recorder captures, use chunked/typed storage and revoke the download Blob URL after export.
-- Confirm results in a hardware-accelerated browser with Chrome Performance, Memory, and WebGL tooling. Use user-supplied screenshots for visual validation.
-
-## v0.16.x Dyle mass-order investigation (2026-07-14)
-
-`scripts/dyle-assault-profile.mjs` (a Dyle-map sibling of the Mokra sampler) stages a doubled French force (104 units) and attack-moves everyone into the village, sampling idle / advance / assault phases headlessly.
-
-### Baseline evidence
-
-A mass attack-move with ~9 vehicles froze the main thread for about **58 seconds** in a single long task: one synchronous full-hull heading-A* per selected vehicle in the input handler, up to **10.3 s per search**, with **1.9 million** `segmentPassable` sweeps. During the town fight, the assault-resume branch re-planned pathless vehicles **every frame** with no throttle, and truck stall recovery rebuilt multi-leg routes synchronously — together holding frames at ~600 ms.
-
-### Mitigations
-
-- **Open-region fast path** (`Game._regionClear`): when no static solid or parked-vehicle tile lies within hull reach of an A* node or edge, the full hull-sample test is skipped. Reads live tile flags, so no cache invalidation is needed when walls fall or buildings collapse.
-- **Distance-scaled search cap**: vehicle A* is bounded by `6000 + 300·distTiles` states instead of the full grid×8-heading space (720k states on a 300² map), so unreachable goals cost bounded work. `findPath` accepts an optional node budget.
-- **Vehicle route queue** (`Game.queueVehiclePath` / `Game.queueRouteJob` / `Game.processVehicleRouteQueue`): long-haul player orders (move, retreat, attack approach), assault resumes, stall recoveries, and truck multi-leg restores enqueue; the game loop drains at least one job per frame within a ~6 ms budget. Pending vehicles hold via `unit._routePending` (the move module treats an empty pending path as "waiting", never "arrived"), and a failed recovery search backs the unit off for 4-8 s instead of retrying each stall tick.
-
-### Post-fix verification (same scenario)
-
-| Phase | Before | After |
-| --- | --- | --- |
-| Order issue | one 58,240 ms long task, zero frames | no freeze; frames continue |
-| Advance | no frames rendered | 12.1 ms mean frame, p95 9.3 ms |
-| Assault | no frames rendered | 9.8 ms mean frame, p95 9.0 ms |
-| Worst single `findPath` | 10,347 ms | ~150 ms (queued, ≤1 per frame) |
-
-Remaining tail: a queued cross-map vehicle search can still hold one frame for 100-180 ms (9-26 such frames per 8 s under the stress scenario). If that reads as micro-stutter in real play, the next step is a resumable/time-sliced A* inside the queue rather than lower caps.
+This is a short controlled sample, not a guaranteed frame rate. The first
+uncached render submitted in 489 ms, so cold uploads/compilation remain a stall
+source even when the subsequent battle sample is smooth.

@@ -1,0 +1,71 @@
+{
+  "output": "german_hmg.glb",
+  "bytes": 467936,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/-vehicle/cannon/mg34_stan/body.ply",
+      "sha256": "e8a454ea3c7f1742e02f95a568c9715c270baff9f3a87213c7be437ad250a718"
+    },
+    {
+      "path": "entity/-vehicle/cannon/mg34_stan/cartridge_belt.ply",
+      "sha256": "d0a1339b17130f0525c7cf08aec92f84c923d7c0f3fbfa7adf1eced61f675975"
+    },
+    {
+      "path": "entity/-vehicle/cannon/mg34_stan/gun_rot.ply",
+      "sha256": "20ffc2692d105c5bdf09dcb29eb1c0000f094ae1d7fc81c7861d06b3c4d7953a"
+    },
+    {
+      "path": "entity/-vehicle/cannon/mg34_stan/material1.mtl",
+      "sha256": "57a59da8c6857d53308077f0270020d84979aff30858fc7c64cd0ca2c18d2f8f"
+    },
+    {
+      "path": "entity/-vehicle/cannon/mg34_stan/material2.mtl",
+      "sha256": "33988e981d0b8a744183e76645cb2395f15230d16fb70b8bb06314c486e78ad5"
+    },
+    {
+      "path": "entity/-vehicle/cannon/mg34_stan/material3.mtl",
+      "sha256": "6c0e9218cd27d8541fc0f3cdf65c404aad5bec00ac1c9e9e7cada92793e47d30"
+    },
+    {
+      "path": "entity/-vehicle/cannon/mg34_stan/mg34_stan.mdl",
+      "sha256": "3260b92f8aa2ee3867f3c90248dcb1ebe24878fe7ad0067f0a7e4d26e2506945"
+    },
+    {
+      "path": "entity/-vehicle/cannon/mg34_stan/shield.ply",
+      "sha256": "81c49a77bb099f7868254057ee9461d59c6cdbd3c3b51bc271c9678a2cca8d95"
+    },
+    {
+      "path": "entity/inventory/-weapon/mg34/mg34.dds",
+      "sha256": "4a2d6747d8534f5bb9b427d67a6dab57e281ffba21abdd7c8036b055b9abfc7f"
+    },
+    {
+      "path": "entity/inventory/-weapon/mg34/mg34.mdl",
+      "sha256": "adcc8c00b42f6038fdd05a8c37a167287eb4a92ff400e341ef25e613fc95925a"
+    },
+    {
+      "path": "entity/inventory/-weapon/mg34/mg34.mtl",
+      "sha256": "d95a3c4a9ee4b22adc64a55a44ce18ff9550323cbad8321756ae33af5104d25d"
+    },
+    {
+      "path": "entity/inventory/-weapon/mg34/mg34.ply",
+      "sha256": "8547deed05d3f4cd3afcdc931c8d18334b877adb9e37bb49151171d824409270"
+    },
+    {
+      "path": "entity/inventory/-weapon/mg34/mg34_2-sided.mtl",
+      "sha256": "d95a3c4a9ee4b22adc64a55a44ce18ff9550323cbad8321756ae33af5104d25d"
+    },
+    {
+      "path": "texture/common/model/mg34_stan_shield.dds",
+      "sha256": "a0a85cafcd0b191315e4be2c0d2de86d56ae07c2f3ab6808a9529e2397425bc6"
+    },
+    {
+      "path": "texture/common/model/mg34stan.dds",
+      "sha256": "c6c1a4cf4952975402e6fa48893c77f757a26a34e1eb4a21452c6a3f5b426562"
+    },
+    {
+      "path": "texture/common/model/patrons.dds",
+      "sha256": "d97d7c9e6c984f9266bb98bb64157215ee3f25c8f4afa46a3bad069b61fcd97f"
+    }
+  ]
+}

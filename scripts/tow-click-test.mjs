@@ -26,6 +26,7 @@ await page.waitForFunction(() => window.Game && Game.units.length > 0 && !Game._
 // screen-space raycast (unit picking) — the exact thing this test exists
 // to exercise.
 await page.evaluate(() => {
+  Game._towTestRender = Game.renderScene;
   Game.renderScene = () => { Game.scene.updateMatrixWorld(true); };
 });
 await page.waitForTimeout(1500);
@@ -38,6 +39,7 @@ const stage = await page.evaluate(() => {
   if (gun._towed) Game.untowUnit(gun);
   const rider = Game.towedBy(truck);
   if (rider) { Game.untowUnit(rider); rider.x = truck.x + 30; rider.z = truck.z + 30; }
+  Game.updateGunManning();
   for (const u of [gun, truck]) {
     u._towApproachGunId = null; u._towApproachTruckId = null; u._towProg = null;
     u.path = []; u.moving = false;
@@ -165,6 +167,53 @@ const attach2 = await page.evaluate(async () => {
   });
 });
 report('detach then instant re-attach couples', attach2.ok === true, JSON.stringify(attach2));
+
+// 5) Dismount the crew, then re-man the gun through the real pick and mouse
+// dispatch path. This catches entry-cursor / terrain-order disagreements.
+await page.evaluate(() => {
+  const gun = Game.units.find(u => u.kind === 'at47' && u.alive);
+  const truck = Game.units.find(u => u.alive && u.supportType === 'transport');
+  Game.untowUnit(gun); Game.updateGunManning();
+  truck.x = 70; truck.z = 85; truck.path = []; truck.moving = false;
+  Game.dismountGunCrew(gun, { quiet: true });
+  Game.selection.clear();
+  Game.units.filter(u => u.alive && u._crewOfGunId === gun.id && u._inVehicle == null)
+    .forEach((u, i) => {
+      u.x = gun.x - 6; u.z = gun.z + i * 1.5; u.path = []; u.moving = false;
+      u._enterGunId = null; u._enterCarrierId = null;
+      Game.selection.add(u.id);
+    });
+  Game.orderStance = 'move'; Game._commandMode = null;
+});
+await page.waitForTimeout(400);
+p = await screenOf('gun');
+await page.mouse.move(p.x, p.y);
+await page.waitForTimeout(150);
+const enter = await page.evaluate(() => ({
+  cursor: document.getElementById('viewport').classList.contains('cmd-enter'),
+  hint: Game._garrisonUI.gunHint?.textContent,
+  gun: Game.units.filter(u => u.kind === 'at47' && u.alive).map(u => ({
+    id: u.id, crew: u._crewAboard, unmanned: u._unmanned, vacancies: Game.gunCrewVacancies(u),
+  })),
+  picked: Game.unitAtScreen(Game.mouse.screenX, Game.mouse.screenY)?.kind,
+}));
+report('gun hover advertises enter / man gun', enter.cursor && /man gun/.test(enter.hint || ''), JSON.stringify(enter));
+if (process.env.CREW_SCREENSHOT) {
+  await page.evaluate(() => Game._towTestRender());
+  await page.screenshot({ path: process.env.CREW_SCREENSHOT });
+}
+await page.mouse.click(p.x, p.y, { button: 'right' });
+await page.waitForTimeout(150);
+report('right-click assigns gun entry, not terrain move', await page.evaluate(() => {
+  const gun = Game.units.find(u => u.kind === 'at47' && u.alive);
+  return Game.units.some(u => u.alive && u._enterGunId === gun.id) || gun._crewAboard === 2;
+}));
+await page.waitForFunction(() => Game.units.find(u => u.kind === 'at47' && u.alive)?._crewAboard === 2,
+  null, { timeout: 20000 }).catch(() => {});
+report('right-click crew fully remans gun', await page.evaluate(() => {
+  const gun = Game.units.find(u => u.kind === 'at47' && u.alive);
+  return gun._crewAboard === 2 && !gun._unmanned;
+}));
 
 await browser.close();
 const fails = results.filter(r => !r.ok);

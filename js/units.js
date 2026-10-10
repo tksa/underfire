@@ -506,6 +506,14 @@ Game.UNIT_STATS = {
         sight: 16, rotationSpeed: 2,
         color: '#6b8b6b', cost: 2,
     },
+    german_officer: {
+        label: 'Offizier', kind: 'officer', class: 'support', supportType: 'officer',
+        weapon: 'pistol_de',
+        speed: 4.6, hp: 70, size: 0.45,
+        armor: { front: 0, side: 0, rear: 0 },
+        sight: 20, rotationSpeed: 8,
+        color: '#757a70', cost: 2,
+    },
     french_officer: {
         label: 'Officer', kind: 'officer', class: 'support', supportType: 'officer',
         weapon: 'pistol_fr',
@@ -922,12 +930,7 @@ Game._createUnitMesh = (unit) => {
         const metalMat = std(gunmetal, { roughness: 0.7, flatShading: false });
 
         if (unit.kind.includes('mortar')) {
-            // baseplate + angled tube + bipod
-            addMesh(new THREE.CylinderGeometry(0.32, 0.38, 0.08, 8), gunMat, 0, 0.06, -0.1);
-            const tube = addMesh(new THREE.CylinderGeometry(0.05, 0.07, 0.75, 8), metalMat, 0, 0.4, 0.05);
-            tube.rotation.x = -0.65;
-            const leg = addMesh(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 4), metalMat, 0, 0.3, 0.3);
-            leg.rotation.x = 0.5;
+            Game.buildMortarModel(unit, group);
         } else if (unit.kind === 'hmg') {
             // Hotchkiss M1914: low tripod, finned air-cooled barrel, metallic
             // strip feed, rear spade grips, and a crouched gunner. (+Z forward.)
@@ -956,7 +959,8 @@ Game._createUnitMesh = (unit) => {
             // Slim barrel beyond the jacket + muzzle.
             const barrelGeo = new THREE.CylinderGeometry(0.022, 0.026, 0.5, 8);
             barrelGeo.rotateX(Math.PI / 2);
-            addMesh(barrelGeo, metalMat, 0, barrelY, 0.72);
+            group.userData.gunNode = addMesh(barrelGeo, metalMat, 0, barrelY, 0.72);
+            group.userData.gunNode.name = 'MG_barrel';
             addMesh(new THREE.BoxGeometry(0.016, 0.06, 0.02), metalMat, 0, barrelY + 0.05, 0.92); // front sight
             // Metallic feed strip jutting from the right side.
             const strip = addMesh(new THREE.BoxGeometry(0.26, 0.018, 0.05), brass, 0.15, barrelY + 0.01, 0.16);
@@ -983,36 +987,7 @@ Game._createUnitMesh = (unit) => {
             addMesh(new THREE.SphereGeometry(0.112, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
                 std(helmetCol, { roughness: 0.6 }), 0, 0.64, 0.13, gnr);                            // helmet
         } else {
-            // AT gun: carriage + wheels + shield + barrel + trail legs.
-            // Barrel/trails/breech are painted carriage colour, not bare
-            // gunmetal — real AT guns were camouflage-painted all over, and the
-            // near-black metalMat made the whole gun read as a dark blob.
-            const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.1, 10);
-            wheelGeo.rotateZ(Math.PI / 2);
-            const darkMat = std(0x2a2520, { roughness: 0.95 });
-            const hubMat = std(baseColor.clone().multiplyScalar(1.1), { roughness: 0.75 });
-            addMesh(wheelGeo, darkMat, -0.42, 0.3, 0);
-            addMesh(wheelGeo, darkMat, 0.42, 0.3, 0);
-            // painted hub caps lift the wheels out of the shadow
-            const hubGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.12, 10);
-            hubGeo.rotateZ(Math.PI / 2);
-            addMesh(hubGeo, hubMat, -0.42, 0.3, 0);
-            addMesh(hubGeo, hubMat, 0.42, 0.3, 0);
-            addMesh(new THREE.BoxGeometry(0.5, 0.12, 0.5), gunMat, 0, 0.34, 0);
-            // shield (angled)
-            const shield = addMesh(new THREE.BoxGeometry(0.85, 0.5, 0.04), gunMat, 0, 0.55, 0.18);
-            shield.rotation.x = -0.18;
-            const bLen = unit.kind === 'fieldgun75' ? 1.5 : (unit.kind === 'at47' ? 1.3 : 1.0);
-            const barrelGeo2 = new THREE.CylinderGeometry(0.03, 0.045, bLen, 8);
-            barrelGeo2.rotateX(Math.PI / 2);
-            addMesh(barrelGeo2, gunMat, 0, 0.5, 0.25 + bLen / 2);
-            // breech block behind the shield
-            addMesh(new THREE.BoxGeometry(0.14, 0.16, 0.3), gunMat, 0, 0.48, 0.02);
-            // split trail legs
-            [-1, 1].forEach(side => {
-                const trail = addMesh(new THREE.BoxGeometry(0.06, 0.06, 1.0), gunMat, side * 0.18, 0.18, -0.55);
-                trail.rotation.y = side * 0.25;
-            });
+            Game.buildGunCarriage(unit, group, baseColor);
         }
     } else {
         // Infantry — posable low-poly soldier rig (procedural animation; +Z forward).
@@ -1074,6 +1049,7 @@ Game._createUnitMesh = (unit) => {
                 : (weaponDef.type === 'lmg' || weaponDef.type === 'hmg' ? 0.58
                     : (weaponDef.type === 'smg' ? 0.36 : 0.5));
             const gun = addMesh(box(0.04, 0.055, gunLen), gunMat, 0.1, 0.2, 0.18, upper);
+            group.userData.gunNode = gun;
             gun.rotation.x = -0.18;
             if (weaponDef.type === 'rifle' || weaponDef.type === 'sniper') {
                 const stock = addMesh(box(0.05, 0.07, 0.16), std(0x5a3d24, { roughness: 0.9 }), 0.1, 0.19, 0.05, upper);
@@ -1151,11 +1127,6 @@ Game._loadUnitModel = (unit, mesh) => {
     const isVeh = Game.isTank(unit.kind);
     const isSup = Game.isSupport(unit.kind);
 
-    // The heavy MG (incl. the former french_hmg "Hotchkiss M1914" GLB) is fully
-    // procedural now — the bundled model didn't read well at game scale, so it
-    // was removed in favour of the built mesh in _createUnitMesh.
-    if (unit.kind === 'hmg') return;
-
     // Prefer a team-specific model, then a generic per-kind model. No cross-kind
     // fallback — the procedural mesh looks better than a wrong model. Probe once.
     const teamKind = `${unit.team}_${unit.kind}`;
@@ -1170,23 +1141,22 @@ Game._loadUnitModel = (unit, mesh) => {
     const MODEL_ALIAS = { polish_tks: 'polish_tks20' };
     let paths = [`models/${teamKind}.glb`, `models/${unit.kind}.glb`];
     if (MODEL_ALIAS[teamKind]) paths.unshift(`models/${MODEL_ALIAS[teamKind]}.glb`);
-    // Foot infantry share one skinned soldier model (per-faction skin + named
-    // sub-clips split from its baked animation). A team/kind-specific GLB still
-    // wins if present; otherwise every rifleman falls back to the soldier.
-    // French and Polish support PERSONNEL (medic/mechanic/sapper/officer) use
+    if (['mortar46', 'mortar50', 'mortar60', 'mortar81'].includes(unit.kind)) paths = [`models/${unit.kind}.glb`];
+    // Foot infantry use faction rigs with canonical motion clips and role
+    // equipment. A team/kind-specific GLB still wins when one is supplied.
+    // Support PERSONNEL (medic/mechanic/sapper/officer) across teams use
     // the shared soldier body too. Polish roles deliberately use tint-only
     // materials until dedicated painted textures are supplied.
-    const soldierSupport = (unit.team === Game.TEAM.FRENCH || unit.team === Game.TEAM.POLISH)
-        && ['medic', 'mechanic', 'sapper', 'officer'].includes(unit.kind);
+    const soldierSupport = ['medic', 'mechanic', 'sapper', 'officer'].includes(unit.kind);
     if (Game.USE_SOLDIER_MODEL && !isVeh
         && ((!isSup && unit.class === 'infantry') || soldierSupport)) {
-        paths = [`models/${teamKind}.glb`, Game.SOLDIER_MODEL_PATH || 'models/soldier.glb'];
+        paths = [`models/${teamKind}.glb`, Game.soldierModelPath?.(unit.team) || Game.SOLDIER_MODEL_PATH || 'models/soldier.glb'];
     }
     // The unmounted half of a cavalry reserve deliberately reuses the existing
     // Polish Ułan soldier. Skip a nonexistent per-kind probe during a state
     // transition so the swap resolves immediately from the shared model cache.
     if (unit._cavalryCanMount && !unit._cavalryMounted) {
-        paths = [Game.SOLDIER_MODEL_PATH || 'models/soldier.glb'];
+        paths = [Game.soldierModelPath?.(unit.team) || Game.SOLDIER_MODEL_PATH || 'models/soldier.glb'];
     }
 
     // Per-model placement corrections, kept as live Game.* globals so the debug
@@ -1212,7 +1182,7 @@ Game._loadUnitModel = (unit, mesh) => {
         polish_mounted_ulan: Math.PI,
     };
     Game.MODEL_Y_TRIM = Game.MODEL_Y_TRIM || {};
-    Game.MODEL_WRAPPER_Y = Game.MODEL_WRAPPER_Y || { french_r35: 0.80 };
+    Game.MODEL_WRAPPER_Y = Game.MODEL_WRAPPER_Y || {};
     // STEER_PIVOT offsets the body from the unit's rotation centre. That makes a
     // turning truck's body swing sideways ("skid"), so it's left empty: the
     // kinematic bicycle model (uMod.move) already gives realistic front-wheel
@@ -1265,7 +1235,8 @@ Game._loadUnitModel = (unit, mesh) => {
         // Somua S35 has a TALL hull with a small cast turret on top; the old yFrac
         // 0.50 swept the whole upper deck into the "turret" so the entire top span
         // rotated. Lift the cut so only the turret proper (top ~third) traverses.
-        french_s35: { yFrac: 0.72, zFracCut: 0.62, bodyYFrac: 0.82 },
+        french_s35: { yFrac: 0.72, zFracCut: 0.62, bodyYFrac: 0.82,
+            barrelBox: { x: [-0.92, -0.50], y: [0.20, 0.28], z: [-0.06, 0.005] } },
         // Panzer III Ausf. J (fused single mesh, hull along +Z = front): explicit
         // BOX split — the fraction heuristic can't separate this layout (barrel
         // rides high along the hull axis; the front superstructure is as tall as
@@ -1279,19 +1250,6 @@ Game._loadUnitModel = (unit, mesh) => {
             pivot: { x: 0, z: -0.15 },
         },
     };
-    // Models whose own textures are broken/placeholder: repaint with a realistic
-    // weathered paint job. `body` colour on hull/turret/gun, `running` (dark
-    // gunmetal) on tracks/wheels/suspension matched by name keyword.
-    const MODEL_RECOLOR = {
-        french_r35: {
-            body: 0x6e8070, running: 0x27292b,   // fallback colours if no texture
-            runningKeywords: ['rueda', 'track', 'suspenc', 'spring', 'gear', 'cylinder', 'wheel'],
-            // Hand-painted texture mapped to the R35's OWN UVs (exported via the UV
-            // layout), so it maps correctly. Applied to every mesh as baseColor.
-            texture: 'textures/r35_paint.jpg',
-        },
-    };
-
     // Try each path sequentially until one works
     const tryLoad = (idx) => {
         if (idx >= paths.length) {
@@ -1301,6 +1259,22 @@ Game._loadUnitModel = (unit, mesh) => {
             return;
         }
         Game.loadModel(paths[idx]).then(model => {
+            if (mesh.userData.fieldGunCrew && Game.detachFieldGunCrew) Game.detachFieldGunCrew(mesh);
+            mesh.userData.gunMechanism = null;
+            mesh.userData.proceduralGun = null;
+            mesh.userData.gunNode = null;
+            mesh.userData.headNode = null;
+            mesh.userData.turret = null;
+            mesh.userData.turretMirrors = null;
+            mesh.userData.weaponMuzzles = [];
+            mesh.userData.weaponRecoil = null;
+            mesh.userData.vehicleRig = null;
+            mesh.userData.fieldGunWheels = undefined;
+            mesh.userData.fieldGunWheelScan = -1;
+            mesh.userData.mortar = null;
+            mesh.userData.mortarTube = null;
+            mesh.userData.mortarTubeEnd = null;
+            unit._headBaseRotX = undefined;
             // Remove placeholder children (keep selection ring, indicators, health bar)
             const keep = new Set();
             if (mesh.userData.selectionRing) keep.add(mesh.userData.selectionRing);
@@ -1317,10 +1291,14 @@ Game._loadUnitModel = (unit, mesh) => {
             //      consistent in-world size regardless of its native units. ──
             model.scale.set(1, 1, 1);
             model.updateMatrixWorld(true);
-            const nb = new THREE.Box3().setFromObject(model);
+            const nb = new THREE.Box3().setFromObject(model, !Game.isSoldierPath?.(paths[idx]));
             const nativeLong = Math.max(nb.max.x - nb.min.x, nb.max.z - nb.min.z) || 1;
             const targetLong = isVeh ? unit.size * 2.6 : (isSup ? unit.size * 2.0 : unit.size * 1.9);
             let sizeScale = (targetLong / nativeLong) * (MODEL_SCALE[teamKind] || 1);
+
+            // Mortar dimensions are authored beside the shared crew. Footprint
+            // fitting would inflate a narrow light weapon to heavy-mortar size.
+            if (Game.isAuthoredMortar?.(model)) sizeScale = MODEL_SCALE[teamKind] || 1;
             // The soldier is a person: scale to a target HEIGHT, not the horizontal
             // footprint (a standing man is narrow, so footprint-fit would shrink him).
             if (Game.isSoldierPath && Game.isSoldierPath(paths[idx])) {
@@ -1364,7 +1342,7 @@ Game._loadUnitModel = (unit, mesh) => {
 
             // Measure bounding box to determine which horizontal axis is "forward" (longest)
             model.updateMatrixWorld(true);
-            const rawBox = new THREE.Box3().setFromObject(model);
+            const rawBox = new THREE.Box3().setFromObject(model, !Game.isSoldierPath?.(paths[idx]));
             const sizeX = rawBox.max.x - rawBox.min.x;
             const sizeY = rawBox.max.y - rawBox.min.y;
             const sizeZ = rawBox.max.z - rawBox.min.z;
@@ -1372,7 +1350,11 @@ Game._loadUnitModel = (unit, mesh) => {
 
             // Game expects forward = +Z in local space.
             // If model is significantly longer along X than Z, it faces +X → rotate to face +Z
-            if (sizeX > sizeZ * 1.3) {
+            if (Game.isMowSoldier?.(model) || Game.isAuthoredVehicle?.(model) || Game.isAuthoredMortar?.(model)) {
+                // The exported rig declares +Z forward. A bind-pose arm span
+                // must not be mistaken for the length of a vehicle hull.
+                modelWrapper.rotation.y = 0;
+            } else if (sizeX > sizeZ * 1.3) {
                 modelWrapper.rotation.y = -Math.PI / 2;
                 console.log(`Model forward detected as +X, rotating -90° to align with +Z`);
             } else if (sizeZ > sizeX * 1.3) {
@@ -1391,16 +1373,17 @@ Game._loadUnitModel = (unit, mesh) => {
             const centerZ = (rawBox.min.z + rawBox.max.z) / 2;
             model.position.x = -centerX;
             model.position.z = -centerZ;
+            if (Game.isMowSoldier?.(model) || Game.isAuthoredMortar?.(model)) model.position.set(0, 0, 0);
 
             // Store auto-center offsets for debug adjustment
-            mesh.userData.modelCenterOffset = { x: -centerX, y: 0, z: -centerZ };
+            mesh.userData.modelCenterOffset = { x: model.position.x, y: 0, z: model.position.z };
             mesh.userData.modelWrapper = null; // will be set after add
 
             modelWrapper.add(model);
 
             // ── 5. Ground-snap: shift wrapper so bottom sits at y=0 ──
             modelWrapper.updateMatrixWorld(true);
-            const finalBox = new THREE.Box3().setFromObject(modelWrapper);
+            const finalBox = new THREE.Box3().setFromObject(modelWrapper, !Game.isSoldierPath?.(paths[idx]));
             modelWrapper.position.y = -finalBox.min.y;
             if (MODEL_Y_TRIM[teamKind]) modelWrapper.position.y += MODEL_Y_TRIM[teamKind];
             // Absolute wrapper-Y override (debug "Scan Nodes → Wrapper Y"). Wins over
@@ -1440,7 +1423,9 @@ Game._loadUnitModel = (unit, mesh) => {
 
             // ── 7. Wire turret rotation ──
             const turretGroupCfg = MODEL_TURRET_GROUP[teamKind];
-            if (isVeh && turretGroupCfg) {
+            if (Game.isAuthoredVehicle?.(model)) {
+                Game.bindVehicleModel(unit, model);
+            } else if (isVeh && turretGroupCfg) {
                 // Group named meshes into a pivot so the real turret traverses.
                 const byName = {};
                 model.traverse(c => { if (c.name) byName[c.name] = c; });
@@ -1540,9 +1525,12 @@ Game._loadUnitModel = (unit, mesh) => {
                         // Two classification modes: explicit local-space BOXES
                         // (measured per model — robust for awkward layouts), or
                         // the legacy height/width fraction heuristic.
+                        const B = cfg.barrelBox;
+                        const isBarrel = B && cxv >= B.x[0] && cxv <= B.x[1]
+                            && cy >= B.y[0] && cy <= B.y[1] && tzc >= B.z[0] && tzc <= B.z[1];
                         const isTurret = cfg.boxes
                             ? inBoxes(cxv, cy, tzc)
-                            : (cy > yThresh && Math.abs(tzc - cz) < zCut);
+                            : (isBarrel || (cy > yThresh && Math.abs(tzc - cz) < zCut));
                         if (isTurret) {
                             turretTris.push(a, b, c);
                             if (cfg.boxes ? true : cy > bodyY) { bx += cxv; bz += tzc; bn++; }
@@ -1653,42 +1641,12 @@ Game._loadUnitModel = (unit, mesh) => {
                 console.warn(`No turret node found for ${unit.label}!`);
             }
 
-            // ── 8. Enable shadows on all meshes (+ optional repaint) ──
-            const recolor = MODEL_RECOLOR[teamKind];
+            // Preserve source material sides, UVs and maps, then unify campaign paint.
+            Game.applyArmyMaterials?.(unit, model);
             model.traverse(child => {
-                if (child.isMesh) {
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                    if (recolor) {
-                        if (recolor.texture) {
-                            // Hand-painted texture mapped to the model's OWN UVs —
-                            // apply to every mesh as baseColor (no weathering, so the
-                            // painted art shows as-is). Cached + GLB UV convention.
-                            if (!Game._borrowTexCache) Game._borrowTexCache = {};
-                            let tex = Game._borrowTexCache[recolor.texture];
-                            if (!tex) {
-                                tex = new THREE.TextureLoader().load(Game.assetUrl(recolor.texture));
-                                tex.flipY = false;
-                                tex.colorSpace = THREE.SRGBColorSpace;
-                                Game._borrowTexCache[recolor.texture] = tex;
-                            }
-                            child.material = new THREE.MeshStandardMaterial({ color: 0xffffff, map: tex, roughness: 0.78, metalness: 0.08 });
-                        } else {
-                            // Decide paint by ancestor names (mesh nodes are "Object_N",
-                            // the descriptive name is on the parent).
-                            let nm = ''; let n = child;
-                            while (n && n !== model) { nm += ' ' + (n.name || '').toLowerCase(); n = n.parent; }
-                            const run = recolor.runningKeywords.some(k => nm.includes(k));
-                            const m = new THREE.MeshStandardMaterial({
-                                color: run ? recolor.running : recolor.body,
-                                roughness: run ? 0.82 : 0.72, metalness: run ? 0.35 : 0.12,
-                            });
-                            if (Game._addWeathering) Game._addWeathering(m, run ? 0.16 : 0.20);
-                            child.material = m;
-                        }
-                    }
-                    child._originalMaterial = child.material;
-                }
+                if (!child.isMesh) return;
+                child.castShadow = child.receiveShadow = true;
+                child._originalMaterial = child.material;
             });
 
             // ── 8b. Soldier model: per-faction skin + capture rest leg pose ──
@@ -1714,10 +1672,10 @@ Game._loadUnitModel = (unit, mesh) => {
             mesh.userData.mixer = new THREE.AnimationMixer(model);
             let clips = (model.animations && model.animations.length) ? model.animations
                 : (modelWrapper.animations || []);
-            // Soldier ships one baked "Take 001" clip — split into named sub-clips
-            // (idle/walk/run/fire_stand/...) that Game._chooseClip drives by name.
+            // Preserve authored replacement clips and select role variants;
+            // the compatibility helper only splits the legacy single timeline.
             if (Game.isSoldierPath && Game.isSoldierPath(paths[idx]) && Game.splitSoldierAnim) {
-                clips = Game.splitSoldierAnim(clips);
+                clips = Game.prepareInfantryClips ? Game.prepareInfantryClips(model, unit.kind) : Game.splitSoldierAnim(clips);
             }
             // The supplied cavalry GLB uses descriptive source names. Convert
             // them once to the canonical names consumed by the shared animator;
@@ -1758,6 +1716,7 @@ Game._loadUnitModel = (unit, mesh) => {
             // ── 10. Add wrapper to unit mesh group ──
             mesh.add(modelWrapper);
             mesh.userData.modelWrapper = modelWrapper;
+            if (Game.isAuthoredMortar?.(model)) Game.bindMortarModel(unit, model);
             if (Game.GUN_CREWS && Game.GUN_CREWS[unit.kind] && Game.attachFieldGunCrew) {
                 Game.attachFieldGunCrew(unit, mesh);
             }
@@ -1766,6 +1725,8 @@ Game._loadUnitModel = (unit, mesh) => {
             if (Game.isSoldierPath && Game.isSoldierPath(paths[idx])) {
                 mesh.userData.isSoldier = true;
                 mesh.userData.soldierModel = model;
+                mesh.userData._legBones = undefined;
+                mesh.userData._motionPose = null;
                 mesh.userData.soldierBaseYaw = modelWrapper.rotation.y;
                 mesh.userData.soldierBaseY = modelWrapper.position.y;
                 mesh.userData.soldierBaseModelX = model.position.x;
@@ -1785,6 +1746,7 @@ Game._loadUnitModel = (unit, mesh) => {
                 mesh.userData.isMountedCavalry = false;
                 mesh.userData.cavalryModel = null;
             }
+            if (Game.bindWeaponMuzzles) Game.bindWeaponMuzzles(unit);
             if (unit._cavalryCanMount && Game.onCavalryModelLoaded) {
                 Game.onCavalryModelLoaded(unit, paths[idx]);
             }
@@ -1877,11 +1839,11 @@ Game.makeUnit = (team, kind, x, z, opts = {}) => {
         // Artillery (indirect fire) reaches much farther — longer min + a boost.
         range: weaponDef.fireType === 'indirect'
             ? Math.max((weaponDef.gameRange || 0) * 1.5, 240)
-            : (weaponDef.gameRange || 12),
-        damage: weaponDef.damage || 10,
-        cooldown: weaponDef.cooldown || 1.0,
-        accuracy: (weaponDef.accuracy?.medium) || 0.5,
-        suppression: weaponDef.suppression || 5,
+            : (weaponDef.gameRange ?? 12),
+        damage: weaponDef.damage ?? 10,
+        cooldown: weaponDef.cooldown ?? 1.0,
+        accuracy: weaponDef.accuracy?.medium ?? 0.5,
+        suppression: weaponDef.suppression ?? 5,
         penetration: typeof weaponDef.penetration === 'object'
             ? weaponDef.penetration.medium || 0
             : (weaponDef.penetration || 0),
@@ -1917,8 +1879,9 @@ Game.makeUnit = (team, kind, x, z, opts = {}) => {
         // Sudden Strike systems
         experience: 0,
         behavior: 'defensive',  // aggressive, defensive, cautious
-        ammo: isVehClass ? 24 : (weaponDef.type === 'lmg' || weaponDef.type === 'hmg' ? 50 : 30),
-        maxAmmo: isVehClass ? 24 : (weaponDef.type === 'lmg' || weaponDef.type === 'hmg' ? 50 : 30),
+        // Supply trucks use this reservoir as cargo; it never grants a weapon.
+        ammo: weaponDef.type === 'none' ? (base.supportType === 'supply' ? 30 : 0) : isVehClass ? 24 : (weaponDef.type === 'lmg' || weaponDef.type === 'hmg' ? 50 : 30),
+        maxAmmo: weaponDef.type === 'none' ? (base.supportType === 'supply' ? 30 : 0) : isVehClass ? 24 : (weaponDef.type === 'lmg' || weaponDef.type === 'hmg' ? 50 : 30),
         fuel: isVehClass ? 100 : -1,  // -1 = no fuel (infantry)
         maxFuel: isVehClass ? 100 : -1,
         tracksDisabled: false,
@@ -1953,6 +1916,8 @@ Game.makeUnit = (team, kind, x, z, opts = {}) => {
 
     // Create 3D mesh
     unit.mesh = Game._createUnitMesh(unit);
+    if (Game.bindWeaponMuzzles) Game.bindWeaponMuzzles(unit);
+    if (Game.GUN_CREWS?.[unit.kind] && Game.attachFieldGunCrew) Game.attachFieldGunCrew(unit, unit.mesh);
     unit.mesh.position.set(x, unit.y, z);
     unit.mesh.rotation.y = -unit.angle;
     Game.unitsGroup.add(unit.mesh);
@@ -2071,7 +2036,7 @@ Game.MODEL_YAW = Game.MODEL_YAW || {
     polish_mounted_ulan: Math.PI,
 };
 Game.MODEL_Y_TRIM = Game.MODEL_Y_TRIM || {};
-Game.MODEL_WRAPPER_Y = Game.MODEL_WRAPPER_Y || { french_r35: 0.80 };
+Game.MODEL_WRAPPER_Y = Game.MODEL_WRAPPER_Y || {};
 Game.MODEL_STEER_PIVOT = Game.MODEL_STEER_PIVOT || {};
 Game.MODEL_SCALE = Game.MODEL_SCALE || {
     french_b1: 1.6, french_panhard: 1.52, french_s35: 1.365, french_h35: 1.35,
@@ -2089,6 +2054,9 @@ Game.MODEL_SCALE = Game.MODEL_SCALE || {
     polish_7tp: 1.2, polish_7tp_dw: 1.2, polish_7tp_dwr: 1.2,
     german_panzer1: 1.3, german_panzer2: 1.3, german_panzer3: 1.35,
     german_panzer4: 1.35, german_sdkfz: 1.35,
+    german_pak36: 1.75, // full split-trail length relative to the 1.24-high crew
+    german_supply: 2.1, german_fuel: 2.0,
+    polish_supply: 2.1, polish_transport: 2.1, polish_bofors37: 1.9,
 };
 
 // Rebuild the loaded model for every live unit of a teamKind, re-reading the

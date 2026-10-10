@@ -1,0 +1,31 @@
+{
+  "output": "barn_annex.glb",
+  "bytes": 138824,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/construction/village/barn_annex/barn1.mtl",
+      "sha256": "75f50728f01031c8606fe62bd11514f1f2de803c29e7081d123d1dc273b4f0d8"
+    },
+    {
+      "path": "entity/construction/village/barn_annex/barn1a.mtl",
+      "sha256": "86b0688939dacea186d1aa53e0b01d77b2a64afc2723256bfcc07b2bf9977775"
+    },
+    {
+      "path": "entity/construction/village/barn_annex/barn_annex.def",
+      "sha256": "2fb0c83f4542285a960386f9ebc261b84708038d760bf48eb6ee6dce41d83a70"
+    },
+    {
+      "path": "entity/construction/village/barn_annex/barn_annex.mdl",
+      "sha256": "29f362d5be9e1cee0a75ab648480e0907557e93f98e2802e11656e66303582a2"
+    },
+    {
+      "path": "entity/construction/village/barn_annex/barn_annex.ply",
+      "sha256": "8cbfe06003804525b62a40a466cf16a20980cb0d6e7fad7f646e11a0a89f4bb6"
+    },
+    {
+      "path": "texture/common/wall/shed_facade.dds",
+      "sha256": "3ce88fbcb46e5d9a8bd689f8c9bc7635cb8ba2386e3cb83491ef3c86d404dc8e"
+    }
+  ]
+}

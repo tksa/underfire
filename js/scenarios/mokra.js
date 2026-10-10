@@ -754,7 +754,7 @@ Game.spawnMokraScenario = () => {
         // Later phases (vision.md): armoured train support, the Polish
         // counterattack, and the protected withdrawal east over the railway.
         trainArrived: false, counterattackStarted: false,
-        withdrawalStarted: false, extracted: 0,
+        withdrawalStarted: false, extracted: 0, holdSucceeded: false, withdrawalComplete: false,
         endTime: 500,
     });
     if (Game._mokraTrain && Game._mokraTrain.mesh && Game.scene) {
@@ -816,7 +816,12 @@ Game._buildMokraTrainMesh = () => {
         barrel.position.set(-0.95, 1.4, off);
         barrel.castShadow = true;
         train.add(barrel);
-        wagons.push({ turret, barrel, off, cooldown: Game.rand(1.0, 2.4) });
+        const mount = new THREE.Group(); mount.position.set(0, 1.35, off); train.add(mount);
+        train.updateMatrixWorld(true); mount.attach(turret); mount.attach(barrel);
+        const muzzle = new THREE.Object3D(); muzzle.name = 'weapon_muzzle';
+        muzzle.position.y = 0.75; barrel.add(muzzle);
+        wagons.push({ turret, barrel, mount, muzzle, off, cooldown: Game.rand(1.0, 2.4),
+            barrelRestX: barrel.position.x, shotAge: 100 });
     });
     train.userData.wagons = wagons;
     return train;
@@ -852,8 +857,9 @@ Game.updateMokraTrain = (dt) => {
         }
         for (const wagon of train.mesh.userData.wagons) {
             wagon.cooldown -= dt;
-            if (wagon.cooldown > 0) continue;
-            wagon.cooldown = Game.rand(2.2, 3.4);
+            wagon.shotAge += dt;
+            wagon.barrel.position.x = wagon.barrelRestX
+                + 0.13 * Math.exp(-8 * wagon.shotAge) * Math.sin(19 * wagon.shotAge);
             const wz = train.z + wagon.off;
             let target = null, bd = 75 * 75;
             for (const u of Game.units) {
@@ -862,12 +868,21 @@ Game.updateMokraTrain = (dt) => {
                 if (d < bd && Game.lineOfSight({ x: train.x, z: wz }, u)) { bd = d; target = u; }
             }
             if (!target) continue;
+            const bearing = Math.PI - Game.angleTo(train.x, wz, target.x, target.z);
+            wagon.mount.rotation.y = Game.rotateTo(wagon.mount.rotation.y, bearing, dt * 0.9);
+            if (wagon.cooldown > 0 || Math.abs(Game.angleDiff(wagon.mount.rotation.y, bearing)) > 0.08) continue;
+            wagon.cooldown = Game.rand(2.2, 3.4); wagon.shotAge = 0;
             const ix = target.x + Game.rand(-1.6, 1.6);
             const iz = target.z + Game.rand(-1.6, 1.6);
-            Game.tracers.push({
-                x: train.x - 1.0, z: wz, tx: ix, tz: iz,
+            wagon.muzzle.updateWorldMatrix(true, false);
+            const muzzle = wagon.muzzle.getWorldPosition(new Game.THREE.Vector3());
+            Game.addTracer({
+                x: muzzle.x, z: muzzle.z, y0: muzzle.y,
+                tx: ix, tz: iz, y1: (Game.getHeight?.(ix, iz) || 0) + 0.1,
                 life: 0.16, total: 0.16, team: Game.TEAM.POLISH, big: true, mesh: null,
             });
+            (Game.muzzleFlashes ||= []).push({ x: muzzle.x, y: muzzle.y, z: muzzle.z,
+                life: 0.1, total: 0.1, r: 0.8, mesh: null });
             if (Game.Audio && Game.Audio.cannon) Game.Audio.cannon(train.x, wz);
             const blastR = 2.8;
             for (const u of Game.units) {
@@ -1020,6 +1035,7 @@ Game.updateMokraMission = (dt) => {
     // ── Later phases (vision.md): the hold succeeds, then Śmiały arrives,
     // the brigade counterattacks, and finally withdraws under protection. ──
     if (!ms.trainArrived && ms.timer >= ms.holdDuration) {
+        ms.holdSucceeded = true;
         ms.trainArrived = true;
         ms.phase = 5;
         ms.phaseName = 'Śmiały on the line';
@@ -1058,14 +1074,7 @@ Game.updateMokraMission = (dt) => {
         for (const u of Game.units) {
             if (!u.alive || u.team !== Game.TEAM.POLISH || u._inVehicle) continue;
             if (u.x >= Game.WORLD_W - 8) {
-                u.alive = false;
-                u._extracted = true;
-                u._deathHandled = true;   // saved, not killed: no corpse
-                u._noRemnant = true;
-                u.hp = Math.max(1, u.hp);
-                if (u.mesh) u.mesh.visible = false;
-                Game.selection.delete(u.id);
-                ms.extracted++;
+                Game.extractMokraUnit(u);
             }
         }
         const remaining = Game.getTeamUnits(Game.TEAM.POLISH).length;
@@ -1080,10 +1089,27 @@ Game.updateMokraMission = (dt) => {
                 const u = Game.getUnitById(id); return u && (u.alive || u._extracted);
             });
             const secondary = boforsSurvives && commandSurvives ? ' Secondary objective complete.' : '';
-            const saved = ms.extracted + remaining;
-            Game.pushMessage(`The German timetable is broken. Mokra held — ${saved} of ${ms.initialPolishStrength} units saved (${ms.extracted} extracted east).${secondary}`, 25);
+            ms.withdrawalComplete = ms.extracted > 0;
+            Game.pushMessage(`The German timetable is broken. ${ms.extracted} units withdrew east; ${remaining} survivors remain on the battlefield.${secondary}`, 25);
         }
     }
+};
+
+// A carrier and its occupants cross the extraction boundary together. The same
+// transaction handles a towed gun, and is idempotent for nested cargo links.
+Game.extractMokraUnit = unit => {
+    if (!unit?.alive || unit._extracted) return;
+    unit._extracted = true; unit.alive = false;
+    for (const id of [...(unit._passengers || []), unit._towedUnitId].filter(id => id != null)) {
+        const carried = Game.getUnitById(id);
+        if (carried?.team === unit.team) Game.extractMokraUnit(carried);
+    }
+    unit._deathHandled = true; unit._noRemnant = true;
+    unit._inVehicle = null; unit._towed = false; unit._towedBy = null;
+    unit.path = []; unit.moving = false;
+    if (unit.mesh) unit.mesh.visible = false;
+    Game.selection.delete(unit.id);
+    Game.missionState.extracted++;
 };
 
 // Scenario dispatch. Mokra is intentionally Polish-only for its first mission

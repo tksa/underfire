@@ -17,7 +17,7 @@ Game.nearestEnemy = (unit, accept = null) => {
     const fogGated = unit.team === Game.playerTeam && Game.isFogVisible;
     for (const other of Game.units) {
         if (!other.alive || other.team === unit.team) continue;
-        if (fogGated && !Game.isFogVisible(other.x, other.z)) continue;
+        if (fogGated && !Game.isFogVisible(other.x, other.z) && Game.firingSignature(other) === 1) continue;
         if (accept && !accept(other)) continue;
         const d = Game.distSq(unit.x, unit.z, other.x, other.z);
         if (d < bestD && Game.unitCanSee(unit, other)) {
@@ -33,13 +33,14 @@ Game.nearestEnemy = (unit, accept = null) => {
 // never waste rounds on tanks. Soft targets (men, trucks, towed guns, supply
 // and fuel vehicles) are always valid.
 Game.unitCanHurt = (unit, target) => {
+    const weapon = Game.WEAPONS[unit.weaponKey] || {};
+    if (weapon.type === 'none') return false;
     const stats = Game.UNIT_STATS[target.statKey] || {};
     const armor = stats.armor;
     if (!armor) return true;
     const weakest = typeof armor === 'number'
         ? armor : Math.min(armor.front || 0, armor.side || 0, armor.rear || 0);
     if (weakest <= 0) return true;
-    const weapon = Game.WEAPONS[unit.weaponKey] || {};
     const pen = Game.getWeaponPenetration
         ? Game.getWeaponPenetration(weapon, Game.RANGE_BAND ? Game.RANGE_BAND.CLOSE : 5)
         : (weapon.penetration ?? unit.penetration ?? 0);
@@ -72,10 +73,12 @@ Game.recentCombatNear = (x, z, radius = 60, within = 25) => {
 
 Game.applyShot = (shooter, target) => {
     if (!shooter.alive || !target.alive) return;
+    if (Game.friendlyFireBlocker?.(shooter, target)) return;
 
     // Ammo check
-    if (shooter.ammo === 0) return;
-    if (shooter.ammo > 0) shooter.ammo--;
+    if (!Game.consumeWeaponRound(shooter)) return;
+    if (Game.noteWeaponShot) Game.noteWeaponShot(shooter);
+    Game.noteFriendlyFireDirection?.(shooter);
     Game.noteCombatAt(target.x, target.z);
     Game.noteCombatAt(shooter.x, shooter.z);
 
@@ -102,6 +105,7 @@ Game.applyShot = (shooter, target) => {
     else if (target.stance === 'crouch') hitChance *= 0.92;
     // A shooter sprinting flat-out can barely aim
     if (shooter.stance === 'run') hitChance *= 0.6;
+    if (Game.weaponMotionAccuracy) hitChance *= Game.weaponMotionAccuracy(shooter);
 
     const isHit = Math.random() <= hitChance;
 
@@ -118,47 +122,16 @@ Game.applyShot = (shooter, target) => {
         aimZ = target.z + Math.sin(randAngle) * missDist;
     }
 
-    // Barrel tip position — try to get from actual 3D gun mesh
+    // Use the weapon's local muzzle anchor after synchronizing this frame's
+    // pose. A world bounding-box corner is never a reliable barrel tip.
     const isTankShooter = Game.isTank(shooter.kind);
     const crewedGun = Game.GUN_CREWS && Game.GUN_CREWS[shooter.kind];
-    const isFieldGunShooter = shooter.kind === 'fieldgun75';
-    const isHeavyGunShooter = isTankShooter || isFieldGunShooter;
-    const fireAngle = isTankShooter ? (shooter.turretAngle || shooter.angle) : shooter.angle;
-    let muzzleX, muzzleZ;
-
-    if (isTankShooter && shooter.mesh?.userData?.turret) {
-        // Prefer the explicitly wired gun node; fall back to turret children
-        const turret = shooter.mesh.userData.turret;
-        const gunNode = shooter.mesh.userData.gunNode || turret.children?.[1] || turret.children?.[0];
-        if (gunNode) {
-            // Get gun's world bounding box, barrel tip is the farthest edge
-            const bbox = new Game.THREE.Box3().setFromObject(gunNode);
-            const center = new Game.THREE.Vector3(shooter.x, 0, shooter.z);
-            // Pick the corner of the bbox farthest from unit center
-            const corners = [
-                new Game.THREE.Vector3(bbox.min.x, 0, bbox.min.z),
-                new Game.THREE.Vector3(bbox.min.x, 0, bbox.max.z),
-                new Game.THREE.Vector3(bbox.max.x, 0, bbox.min.z),
-                new Game.THREE.Vector3(bbox.max.x, 0, bbox.max.z),
-            ];
-            let best = corners[0], bestDist = 0;
-            for (const c of corners) {
-                const dd = c.distanceTo(center);
-                if (dd > bestDist) { bestDist = dd; best = c; }
-            }
-            muzzleX = best.x;
-            muzzleZ = best.z;
-        } else {
-            muzzleX = shooter.x + Math.cos(fireAngle) * 4.0;
-            muzzleZ = shooter.z + Math.sin(fireAngle) * 4.0;
-        }
-    } else {
-        // Crewed guns carry their measured barrel-tip offset so muzzle flash
-        // and tracers leave the actual muzzle, not the carriage.
-        const barrelLen = isTankShooter ? 4.0 : (crewedGun && crewedGun.muzzle) || 0.6;
-        muzzleX = shooter.x + Math.cos(fireAngle) * barrelLen;
-        muzzleZ = shooter.z + Math.sin(fireAngle) * barrelLen;
-    }
+    const smallArms = ['rifle','sniper','pistol','smg','lmg','hmg','mg','machine','at_rifle'].includes(weapon.type);
+    const isHeavyGunShooter = !smallArms && (isTankShooter || (!!crewedGun && shooter.kind !== 'hmg'));
+    const fireAngle = shooter.hasTurret ? shooter.turretAngle : shooter.angle;
+    const muzzle = Game.getWeaponMuzzle(shooter);
+    let muzzleX = muzzle.x, muzzleZ = muzzle.z;
+    const muzzleY = muzzle.y;
 
     // Garrisoned shooter fires from a window: push the muzzle out to the building
     // edge toward the target so the tracer/flash isn't hidden inside the house.
@@ -174,26 +147,17 @@ Game.applyShot = (shooter, target) => {
         muzzleZ = rec.cz + s * tEdge;
     }
 
-    // Determine terrain damage: tanks cause craters, mortars/AT cause smaller ones, infantry/MG = 0
-    let terrainDmg = 0;
-    if (isTankShooter) {
-        terrainDmg = shooter.size >= 1.0 ? 1.0 : 0.7; // bigger tanks = bigger craters
-    } else if (weapon.heBlast && weapon.heBlast > 1.0) {
-        terrainDmg = 0.5; // mortars
-    } else if (weapon.penetration && weapon.penetration > 20) {
-        terrainDmg = 0.3; // AT guns
-    }
-    // Infantry, MG, HMG, SMG, snipers = 0 (no craters)
-
     // Tracer
-    Game.tracers.push({
-        x: muzzleX, z: muzzleZ,
+    Game.addTracer({
+        x: muzzleX, z: muzzleZ, y0: muzzleY,
+        y1: (target.y || 0) + (target.stance === 'prone' ? 0.22 : 0.65),
         tx: aimX, tz: aimZ,
         life: 0.12 + d / 80,
         total: 0.12 + d / 80,
         team: shooter.team,
-        big: isHeavyGunShooter,
-        terrainDamage: terrainDmg,
+        big: isHeavyGunShooter, weaponType: weapon.type,
+        impact: { ...Game.weaponImpactProfile(weapon), angle: fireAngle,
+            onArmor: isHit && (Game.isTank(target.kind) || Game.isTruck(target.kind)) },
         mesh: null,
     });
 
@@ -216,16 +180,14 @@ Game.applyShot = (shooter, target) => {
         } else if (wt !== 'mortar' && wt !== 'none') {
             Game.Audio.rifle(muzzleX, muzzleZ);
         }
-        if (weapon.heBlast && weapon.heBlast > 1.0) {
-            Game.Audio.explosion(aimX, aimZ);
-        }
+
     }
 
     // Muzzle smoke (at barrel tip)
     Game.smoke.push({
         x: muzzleX,
-        z: muzzleZ,
-        r: isTankShooter ? 0.6 : 0.3,
+        z: muzzleZ, baseY: muzzleY,
+        r: isHeavyGunShooter ? 0.6 : 0.16,
         life: 0.36, total: 0.36,
         vx: Game.rand(-0.6, 0.6), vz: Game.rand(-1, -0.5),
         mesh: null,
@@ -241,8 +203,7 @@ Game.applyShot = (shooter, target) => {
         // Bright muzzle flash at barrel tip
         Game.muzzleFlashes = Game.muzzleFlashes || [];
         Game.muzzleFlashes.push({
-            x: muzzleX + Math.cos(fireAngle) * 0.3,
-            z: muzzleZ + Math.sin(fireAngle) * 0.3,
+            x: muzzleX, z: muzzleZ, y: muzzleY,
             life: 0.1, total: 0.1,
             r: 0.9,
             mesh: null,
@@ -251,7 +212,7 @@ Game.applyShot = (shooter, target) => {
         for (let s = 0; s < 3; s++) {
             Game.smoke.push({
                 x: muzzleX + Game.rand(-0.3, 0.3),
-                z: muzzleZ + Game.rand(-0.3, 0.3),
+                z: muzzleZ + Game.rand(-0.3, 0.3), baseY: muzzleY,
                 r: Game.rand(0.4, 0.8),
                 life: Game.rand(0.5, 1.0), total: 1.0,
                 vx: Math.cos(fireAngle) * Game.rand(0.5, 1.5) + Game.rand(-0.3, 0.3),
@@ -261,6 +222,11 @@ Game.applyShot = (shooter, target) => {
         }
         // Subtle camera shake
         Game.cameraShake = Math.max(Game.cameraShake || 0, 1);
+    } else {
+        // Small arms retain a brief flash; a tripod MG does not throw the
+        // whole carriage backward or shake the camera like a field gun.
+        (Game.muzzleFlashes ||= []).push({ x: muzzleX, z: muzzleZ, y: muzzleY,
+            life: 0.07, total: 0.07, r: 0.14, mesh: null });
     }
 
     target.underFire = 0.9;
@@ -354,12 +320,12 @@ Game.applyShot = (shooter, target) => {
                 penetrated = false;
                 // Ricochet spark tracer
                 const ricoAngle = Math.atan2(target.z - shooter.z, target.x - shooter.x) + Game.rand(-1.0, 1.0);
-                Game.tracers.push({
+                Game.addTracer({
                     x: target.x, z: target.z,
                     tx: target.x + Math.cos(ricoAngle) * 3,
                     tz: target.z + Math.sin(ricoAngle) * 3,
                     life: 0.08, total: 0.08,
-                    team: shooter.team, big: false, mesh: null,
+                    team: shooter.team, big: false, mesh: null, ricochet: true,
                 });
                 // Still causes suppression
                 target.suppressionValue = Game.clamp(target.suppressionValue + 3, 0, 100);
@@ -456,14 +422,6 @@ Game.applyShot = (shooter, target) => {
             // XP bonus for kill
             shooter.experience = Math.min(100, (shooter.experience || 0) + 8);
             // Death effects
-            Game.smoke.push({
-                x: target.x, z: target.z,
-                r: target.size + 0.4,
-                life: 0.85, total: 0.85,
-                vx: Game.rand(-0.3, 0.3), vz: Game.rand(-1.2, -0.5),
-                mesh: null,
-            });
-            Game.craters.push({ x: target.x, z: target.z, r: Game.rand(0.5, 0.9) });
             if (Game.selection.has(target.id)) Game.selection.delete(target.id);
             Game.cameraShake = Math.max(Game.cameraShake, Game.isTank(target.kind) ? 6 : 2);
             if (Game.Audio && Game.isTank(target.kind)) Game.Audio.explosion(target.x, target.z);

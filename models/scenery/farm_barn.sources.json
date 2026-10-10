@@ -1,0 +1,307 @@
+{
+  "output": "farm_barn.glb",
+  "bytes": 2172164,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/construction/village/e_farm_112/common/11_-_default.mtl",
+      "sha256": "a2a451394e867ea839de9b14b295f75f80a3afb779282b707d5c4be54f89b81d"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/common/material10.mtl",
+      "sha256": "e02651ab6f4d4bfe003bc2d35b3444e5e16462025e87b7265836c6db07aada9f"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/common/material11.mtl",
+      "sha256": "598ba8831913c2859707de37e63fb45067d283549dc30ba571ef76bd3ce6c57a"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/common/material12.mtl",
+      "sha256": "3374a3baa9085f3139446cf5f819ccfd0c98825724cacb04090ef3fad1ce6061"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/common/material13.mtl",
+      "sha256": "464760c40d8b59d87b6105a09b617123cb90c04e6372595d103776b8f3b6e1af"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/common/material14.mtl",
+      "sha256": "ab8c3f5cb5c903ab540e73195f67bf25fb68e0acb46a7e1c3a14c955f62c0749"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/common/material22.mtl",
+      "sha256": "67f72107554d7d8edd0d9b4d8199833d8a8efc549401a5e85247d6acbba208df"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/common/material31.mtl",
+      "sha256": "31bbbe59caee947bcea8d08464a675034e36833a37bcf7f3a991238e04c6751e"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/common/material6.mtl",
+      "sha256": "c61cf84308fd2df826d4fc21f82d935796ca933ea8872c15889b9fa5a144e532"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/common/material8.mtl",
+      "sha256": "1110e03ea74611532a9dac156f45a1f95d165eacf50e0043a370e9e759b0b4fc"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/common/material_#3.mtl",
+      "sha256": "ec9a7fd62e914b251ac60f71c081021add80ca4caf5b8491ba0ddd7fb67d3e4c"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/common/material_#4.mtl",
+      "sha256": "a2a451394e867ea839de9b14b295f75f80a3afb779282b707d5c4be54f89b81d"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/common/material_#6.mtl",
+      "sha256": "63a6e577516170f5b9e52eb6e2c03b036d406a9953634f1df8d7debfd414ef14"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/common/window1.ply",
+      "sha256": "7bfe4c09784dd77b6383a558d2ad2be54c6a41d751fae499276da0f7b5542f88"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/common/window2.ply",
+      "sha256": "a38239cd8707c60d246b9f4f1b95835ebe3befcecd67ee9a97cc9978385dc7cb"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/e_farm_112.def",
+      "sha256": "fa5a443f4aea40d2bf83d0d59b7a7947c768c399c05d745bacaa854c29595bad"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/e_farm_112.mdl",
+      "sha256": "9a3f5ad092de8e5f20798b4d1b85d860f9d271b25a3e6049d62209f617ceabd2"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn1/exterior.ply",
+      "sha256": "2ab82539ebcc307e52bfb804ad0305d0080c4acba3fc5af8e1ab5766e123e4e9"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn1/farm_corn1.def",
+      "sha256": "63d1aaa83e7f25cabc5c9dca55b365f3be0bfa87b1f7c504e582d2f5b38d80c7"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn1/farm_corn1.mdl",
+      "sha256": "a265753003ae23e2583336b8d6924cdf2c51abc88b0008219d85f48904df728d"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn1/farm_corn1.ply",
+      "sha256": "4bc8835c5c0c04e523f8d68e1041abb30a3e549a66a7ba96600e34584c8297cd"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn2/exterior.ply",
+      "sha256": "43bd4c8c2a6eefa2d6aab62d9aa4dbd8f3e0b21c50165872f22447ed6fb5b64c"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn2/farm_corn2.def",
+      "sha256": "547118823050bf067cca1a516de2d7f41b590e42d099e4b649f8cc89be38e747"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn2/farm_corn2.mdl",
+      "sha256": "898c83b763db3d57a9369c7f58b4147dd542663ed1a9f6e0cff64f6d0a68bafe"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn2/farm_corn2.ply",
+      "sha256": "681911d2985feb0854ee01ad594b47294dc9787adeb5e89dec2bb994281099ef"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn2/window1.ply",
+      "sha256": "cfc586404b4902de44d6736b96fde1f1e9df1f801c4e3b6d32e5b69812d74030"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn2/window1_x.ply",
+      "sha256": "ecc3bb8968b53a663f67bc97aed3b1f0597861001ca2680b650b9286b42b4170"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn3/exterior.ply",
+      "sha256": "b2cb2b8935ae8722da42282ede0b1c1326854c87f99fcb894fc9065cced4c966"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn3/farm_corn3.def",
+      "sha256": "59f9989ffd7f999398b71c5f1132d714f225b7aeb002291a2d7a7d704687704e"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn3/farm_corn3.mdl",
+      "sha256": "3d3d9b629968f9ded0ea1b5cc5bce26c7b1cc8ae7852d8cc340bfabb87868b9f"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn3/farm_corn3.ply",
+      "sha256": "d8caec31222903e6080f6d944e45069d1bdd47afba0b262e085bf968d1be16a0"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn3/window1_x.ply",
+      "sha256": "ff54d56540ccc4a6be6039634081904194f00961c483e543a8bf8697558c0cae"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn3/window2_x.ply",
+      "sha256": "e394f84ace28a6582dc718c8f0e1afd7206a87358bed47d2be079d050c77e9ac"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn4/exterior.ply",
+      "sha256": "d99984d1f1f717a04d65295168f1d1a0637a4a804f5482992e0d381402100331"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn4/farm_corn4.def",
+      "sha256": "029eca91012b25daa8dc5ca7e4e7fcebedf572dc8117bf8cec4fcbdf7903efe8"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn4/farm_corn4.mdl",
+      "sha256": "48908254f60672d100de924ecff92055b4918359fc4930090f41c9864d2ea445"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn4/farm_corn4.ply",
+      "sha256": "57d10ca8f08f66c762e73e2a53f8aad6eccd572aff7f94f2aa3dffbfc0e47bd4"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn4/window1.ply",
+      "sha256": "f656db506ee3a357793b458e366647e79c0c747a0fcae0d63dd3add162cda472"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn4/window1_x.ply",
+      "sha256": "65599f17efac3c60567c2982be9bc6fc9e9d3e8bf7e38adb81bc2b736f1704a8"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn5/exterior.ply",
+      "sha256": "35615f4b3370d36817f1b16a6f70aa20b19347bfde37316010a435366ed93c28"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn5/farm_corn5.def",
+      "sha256": "ee031ad6ca6cd32d30b2fc0b7eaed4ada2d92479a5be632aa16d7de13cb26d65"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn5/farm_corn5.mdl",
+      "sha256": "905603778905c7ac536dbb10bda7d2b51cccc7f3c35f1d2567b6cdf574c8102a"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn5/farm_corn5.ply",
+      "sha256": "712a66e8eacb047d063db8c9c3958feb0c17ac6e26931a8c8e484e42f9748408"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn5/window1.ply",
+      "sha256": "58185a7138580283b7013b25dbacd6b4d435cba38e9f1109c2931d6e2a53d092"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn5/window1_x.ply",
+      "sha256": "9ff7d8c89e3d7a6df3b58e2a4322669a4c77b03d13961abf3abc962c2fe51887"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn5/window2_x.ply",
+      "sha256": "7fed9566282156e933f9c9671d496503a95537cdca475b07b06b559f3585b62b"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn6/exterior.ply",
+      "sha256": "cc58fe8d8d7615ba0a55695dc6ce43b9bef5d85c2f411a469bed19d058db131f"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn6/farm_corn6.def",
+      "sha256": "f84365b992686b4c263ac267a4df2482fa23d299e62ae5a27b58254f777387a9"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn6/farm_corn6.mdl",
+      "sha256": "d05d887fef1705be0db84c7d7f1bbe31e5be6ca266f1d290cec92dbc23aa5179"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn6/farm_corn6.ply",
+      "sha256": "de70c546ee6240e6181bf649be5889afc109aa65f02dd0b9f910460d1835a8a1"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn7/exterior.ply",
+      "sha256": "a63bd36fc536ec383a4460b5ad7774fe0ceab33b273e2383b911f3eb484b3361"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn7/farm_corn7.def",
+      "sha256": "5e796c3928d6805ef770fddf71800137b7a4101262be2df766adb67bfdc86b8d"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn7/farm_corn7.mdl",
+      "sha256": "975c44d5ef0b07128403018757da8aab8862c6254220713426544dc27fb02236"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn7/farm_corn7.ply",
+      "sha256": "c04a3b2988362eacfdefc7b40fabba3fc6f28aa44a928601c4cc7c6d2316dbcf"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn7/window1.ply",
+      "sha256": "698d68462874e1a3ee704cf6c21fe3f86d6c57cb9a7c4e7fc752560baa12396e"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn8/exterior.ply",
+      "sha256": "a21f6efbe90c2be0fdae202dc21b2bbee8ec8d2968542d32c7febc5d0c7477c0"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn8/farm_corn8.def",
+      "sha256": "8f5e54096990e7c41c7646ec1832fa5f7d122365ff140feccd9a7cae2447b24c"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn8/farm_corn8.mdl",
+      "sha256": "5a9e5d9f2882ab469b6693d57d0f40aa64dbf67e348309fd950b23fed814e3e3"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn8/farm_corn8.ply",
+      "sha256": "aa246352611ff6eb27dae9c83343c2b63ae5479dae582ffafec65911cfabaad9"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn9/exterior.ply",
+      "sha256": "c21b496b2f6a2b45714767afc1c90f5891928ff0067cbf759a8f0370d64eda33"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn9/farm_corn9.def",
+      "sha256": "5272c1334e26e087acc342b9450069f8890bfb072b5eced306a1e322462e73d4"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn9/farm_corn9.mdl",
+      "sha256": "3277cee4009a3893509c03650788aee1f23f94f5ac7e7e530b9d6b20a5559e8d"
+    },
+    {
+      "path": "entity/construction/village/e_farm_112/farm_corn9/farm_corn9.ply",
+      "sha256": "e4a827689776307b9c27f46cb5ccbb9d5f54ca1e406f3d03d95f6f24a5548658"
+    },
+    {
+      "path": "texture/common/decor/cut_sh10.dds",
+      "sha256": "2e5fe1924450e48cfc82f39f7c696a0a44a216b09c0346207515137103a45c6e"
+    },
+    {
+      "path": "texture/common/decor/wood_sh3.dds",
+      "sha256": "742ac8f084c4773f8e8f9a2483ce5bd044f474fc3679c45910698baf2628ef10"
+    },
+    {
+      "path": "texture/common/decor/woodfloor_01.dds",
+      "sha256": "5e23770af796a3d51b24cd564d049f1d95989f8335582d06351c2ad3eb8921bc"
+    },
+    {
+      "path": "texture/common/roof/roof_sh21.dds",
+      "sha256": "ad4e660f2a6f4714bcdb04482330012ed851d4f78a32baf7d1f43478d422a75b"
+    },
+    {
+      "path": "texture/common/roof/roof_sh21_x.dds",
+      "sha256": "78aa7d029778d19b031e70ccfe6ff1c185e6bb66038fd2d158bfb7f592f57f08"
+    },
+    {
+      "path": "texture/common/wall/farm_concrete.dds",
+      "sha256": "af88acf7511d6c8061e7590086d385f6323c42a7ff4ce426fc32752462893c38"
+    },
+    {
+      "path": "texture/common/wall/wall_euro_sh_21.dds",
+      "sha256": "7be090a28c686e99c5dae5a1498bd4a2a0360406eddbabe20364d413210ba0af"
+    },
+    {
+      "path": "texture/common/wall/wall_euro_sh_22.dds",
+      "sha256": "5375bb2e6ef0c3f7fd54f9334736888fcf51021f3fceca78ce6f651fa02bc592"
+    },
+    {
+      "path": "texture/common/window & door/door2.dds",
+      "sha256": "ad0d8d3aca7216956749c966b2897422a8e2fa18791ece101df1c63f194c3703"
+    },
+    {
+      "path": "texture/common/window & door/window_gr_sh1.dds",
+      "sha256": "7d44c52454c0a66c9af9fc435bd852b6f5903cfe0bb40207f7a533549f4966cc"
+    },
+    {
+      "path": "texture/common/window & door/window_sh15.dds",
+      "sha256": "3809b02c5f85d71545225ac6bec8dd330ee2706e008a17328cbc0560f00f6e55"
+    },
+    {
+      "path": "texture/common/window & door/window_sh15_x.dds",
+      "sha256": "1453ea2029b029edd2c7745734ae93df7ea90120f57d4ebbdc47f0c9e07a65c4"
+    }
+  ]
+}

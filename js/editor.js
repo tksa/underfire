@@ -618,10 +618,11 @@ Game._fluffMasks = {};   // per species Uint8: 255 auto, 1 painted on, 0 painted
 Game._fluffMats = {};
 Game._fluffGroups = Game._fluffGroups || [];
 // Runtime rendering limits do not alter the editable species density or masks.
-// Mokra reserves one combined budget for legacy undergrowth + fluffy field cover;
-// other maps retain the editor's historical per-species 600k safety cap.
+// Reserve one combined budget for legacy undergrowth + field cover on every map.
+// Spatial batches let the camera reject distant patches without thinning troops.
 Game.FLUFF_MOKRA_BLADE_BUDGET = 140000;
-Game.FLUFF_CHUNK_TILES = 16;
+Game.FLUFF_BLADE_BUDGET = 240000;
+Game.FLUFF_CHUNK_TILES = 8;
 
 Game._fluffMaskFor = (sp) => {
     const n = Game.MAP_COLS * Game.MAP_ROWS;
@@ -730,12 +731,10 @@ Game.buildFluffyGrass = () => {
     const isMokra = Game.currentScenario === 'mokra';
     // Count the legacy layer whether currently visible or not: toggling grass on
     // after an editor rebuild must still respect the same combined hard budget.
-    const legacy = isMokra
-        ? (Game._grassMeshes || []).reduce((sum, mesh) => sum + (mesh.count || 0), 0)
-        : 0;
+    const legacy = (Game._grassMeshes || []).reduce((sum, mesh) => sum + (mesh.count || 0), 0);
     if (!Game.FLUFF.enabled) {
         Game._fluffStats = {
-            budget: isMokra ? Game.FLUFF_MOKRA_BLADE_BUDGET : null,
+            budget: isMokra ? Game.FLUFF_MOKRA_BLADE_BUDGET : Game.FLUFF_BLADE_BUDGET,
             legacy, fluffy: 0, total: legacy, chunks: 0, species: {},
         };
         return;
@@ -789,12 +788,12 @@ Game.buildFluffyGrass = () => {
         plans.push({ sp, cfg, mask, auto, eligible, baseDensity, requested: eligible * baseDensity });
     }
 
-    const totalBudget = isMokra ? Game.FLUFF_MOKRA_BLADE_BUDGET : Infinity;
-    const fluffyBudget = isMokra ? Math.max(0, totalBudget - legacy) : Infinity;
+    const totalBudget = isMokra ? Game.FLUFF_MOKRA_BLADE_BUDGET : Game.FLUFF_BLADE_BUDGET;
+    const fluffyBudget = Math.max(0, totalBudget - legacy);
     const requested = plans.reduce((sum, plan) => sum + plan.requested, 0);
-    const runtimeScale = isMokra && requested > 0 ? Math.min(1, fluffyBudget / requested) : 1;
-    let remaining = isMokra ? Math.floor(fluffyBudget) : Infinity;
-    const chunkTiles = Math.max(4, Math.round(Game.FLUFF_CHUNK_TILES || 16));
+    const runtimeScale = requested > 0 ? Math.min(1, fluffyBudget / requested) : 1;
+    let remaining = Math.floor(fluffyBudget);
+    const chunkTiles = Math.max(4, Math.round(Game.FLUFF_CHUNK_TILES || 8));
     const stats = {
         budget: Number.isFinite(totalBudget) ? totalBudget : null,
         legacy, fluffy: 0, total: legacy, chunks: 0, species: {},
@@ -887,6 +886,7 @@ Game.buildFluffyGrass = () => {
             inst.instanceMatrix.needsUpdate = true;
             if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
             inst.computeBoundingSphere();
+            inst.boundingSphere.radius += Math.abs(cfg.swayAmp || 0) + Math.abs(cfg.wave || 0);
             inst.onBeforeRender = () => { U.uTime.value = performance.now() / 1000; };
             root.add(inst);
         });

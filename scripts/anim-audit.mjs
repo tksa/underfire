@@ -62,12 +62,13 @@ const report = await page.evaluate(async (seconds) => {
   let torsoName = null;
   if (rigged) {
     rigged.mesh.userData.soldierModel.traverse(o => { if (o.isBone) bones.push(o.name); });
-    torsoName = bones.find(n => /torso/i.test(n)) || bones.find(n => /spine|chest/i.test(n)) || null;
+    torsoName = bones.find(n => /torso/i.test(n)) || bones.find(n => /spine|chest/i.test(n))
+      || (rigged.mesh.userData.soldierModel.getObjectByName('ik_updown') ? 'ik_updown' : null);
   }
   const torsoHeight = (u) => {
     const ud = u.mesh && u.mesh.userData;
     if (!ud || !ud.soldierModel || !torsoName) return null;
-    let bone = null; ud.soldierModel.traverse(o => { if (!bone && o.isBone && o.name === torsoName) bone = o; });
+    const bone = ud.soldierModel.getObjectByName(torsoName);
     if (!bone) return null;
     u.mesh.updateMatrixWorld(true);
     const p = new Game.THREE.Vector3(); bone.getWorldPosition(p);
@@ -141,6 +142,10 @@ const report = await page.evaluate(async (seconds) => {
   }
   perUnit.sort((a, b) => b.pingPong - a.pingPong || b.switchesPerSec - a.switchesPerSec);
 
+  // Finish any fall begun during the last simulated frame before measuring
+  // the resting corpse. Advance the production renderer without more combat,
+  // so a newly killed soldier cannot be mistaken for a stuck upright body.
+  for (let i = 0; i < 120; i++) Game.syncUnitMeshes(1 / 30);
   // Corpses: pose check.
   const corpses = [];
   for (const u of Game.units) {

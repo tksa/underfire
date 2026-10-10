@@ -1,0 +1,142 @@
+[
+  {
+    "name": "haystack",
+    "dimensions": [
+      5.181,
+      3.677,
+      4.872
+    ],
+    "triangles": 207,
+    "materials": 3
+  },
+  {
+    "name": "hayrick",
+    "dimensions": [
+      3.577,
+      3.497,
+      3.625
+    ],
+    "triangles": 128,
+    "materials": 2
+  },
+  {
+    "name": "farm_cart",
+    "dimensions": [
+      1.959,
+      2.021,
+      3.92
+    ],
+    "triangles": 386,
+    "materials": 1
+  },
+  {
+    "name": "wood_barrel",
+    "dimensions": [
+      0.955,
+      1.265,
+      1.004
+    ],
+    "triangles": 56,
+    "materials": 1
+  },
+  {
+    "name": "firewood",
+    "dimensions": [
+      3.199,
+      1.579,
+      1.853
+    ],
+    "triangles": 232,
+    "materials": 2
+  },
+  {
+    "name": "sacks",
+    "dimensions": [
+      2.314,
+      0.47,
+      1.583
+    ],
+    "triangles": 72,
+    "materials": 1
+  },
+  {
+    "name": "well",
+    "dimensions": [
+      1.995,
+      4.755,
+      3.82
+    ],
+    "triangles": 516,
+    "materials": 3
+  },
+  {
+    "name": "plough",
+    "dimensions": [
+      3.077,
+      1.011,
+      5.275
+    ],
+    "triangles": 240,
+    "materials": 1
+  },
+  {
+    "name": "farmhouse",
+    "dimensions": [
+      8.2,
+      6.624,
+      9.61
+    ],
+    "triangles": 1768,
+    "materials": 13
+  },
+  {
+    "name": "farm_barn",
+    "dimensions": [
+      6.003,
+      8.807,
+      9.311
+    ],
+    "triangles": 1997,
+    "materials": 13
+  },
+  {
+    "name": "wood_shed",
+    "dimensions": [
+      5.709,
+      2.707,
+      7.406
+    ],
+    "triangles": 972,
+    "materials": 8
+  },
+  {
+    "name": "barn_annex",
+    "dimensions": [
+      5.825,
+      2.58,
+      2.133
+    ],
+    "triangles": 95,
+    "materials": 2
+  },
+  {
+    "name": "rail_fence",
+    "dimensions": [
+      0.25,
+      1.615,
+      4.919
+    ],
+    "triangles": 140,
+    "materials": 1
+  },
+  {
+    "name": "plank_fence",
+    "dimensions": [
+      11.617,
+      1.797,
+      0.63
+    ],
+    "triangles": 140,
+    "materials": 1
+  }
+]

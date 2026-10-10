@@ -1,0 +1,147 @@
+{
+  "output": "wood_shed.glb",
+  "bytes": 666620,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/construction/village/shed_wood125/common/cut.mtl",
+      "sha256": "ddfb14183661e0289eaad5b34321ff5d5dcaac8e6e4c591a842106dc815e0993"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/common/door.mtl",
+      "sha256": "353c79511122a81e372462e87162ae68036f10cd8a5f1c3b9c6726974b115b16"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/common/roof.mtl",
+      "sha256": "6cf615da2b2de424591efb152d7326bbe5e4a5f20719963f61c7cc7ac5b410b5"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/common/roof_x.mtl",
+      "sha256": "a440d44a2fa4955e4c661aa173fd746731094cfcd9c8909af5e066de04868fd8"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/common/wall.mtl",
+      "sha256": "965c23c92137dac7d638dad4a7b03514080bf46781b38f2e70d1ac063be99be3"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/common/wall_int.mtl",
+      "sha256": "cfedc071628b2d3600eb354e79ab8c49a6d5b63e4a5b44e65cbd0928330dcf39"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/common/window.mtl",
+      "sha256": "bf1cfda39c7e5dfa2e10260a8a10a1f0723c214068a0127551b68b5ef5d8d04f"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/common/window3.ply",
+      "sha256": "f742ddca11916e8a2dfa046933a5e3ecd98141736ee459ee87e4236c45df470f"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/common/wood.mtl",
+      "sha256": "1110e03ea74611532a9dac156f45a1f95d165eacf50e0043a370e9e759b0b4fc"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn1/exterior.ply",
+      "sha256": "63cc5c1ccaa1defdc2597345033cb515a727e78403edb51f39b04cd642cae6ce"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn1/shed125_corn1.def",
+      "sha256": "f8884b6d47e4c2e230a190805e789789d20913e66da24cd1d17c1332673c9114"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn1/shed125_corn1.mdl",
+      "sha256": "d4dd4934b108521bbd4603870387a0201f0c4e850e38b0dbaaeb01b54a2381c0"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn1/shed125_corn1.ply",
+      "sha256": "16a8ec41f1dee7b1a78f56fd5c3f4fb58a5d858625087221b0c7326fcbe5454a"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn2/exterior.ply",
+      "sha256": "323fcdd1b26515effecc2699c6808e3d008dbd571007f41ba88c72479d444cca"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn2/shed125_corn2.def",
+      "sha256": "3ec1d4efd09f59978fe9fadd592076a01fa0cc6646d6ec96a4e83035faa84eb8"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn2/shed125_corn2.mdl",
+      "sha256": "014d0f3376cdcf3f539dc8cd870b4fb416ee524007f80a44037bd010eeefa7d9"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn2/shed125_corn2.ply",
+      "sha256": "f9782ca1109c08e042cdf7de40cd51bee4a9773f4a6c2de054987188fb6a9656"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn3/exterior.ply",
+      "sha256": "de40a3c81b610ba51ed79bb4f7f1305bc3ee68da132126a5a316a3fee19e8078"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn3/shed125_corn3.def",
+      "sha256": "3634ee505255df2ba6180491f0e6dfae742596662f8856ded00c774178b1802c"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn3/shed125_corn3.mdl",
+      "sha256": "1080f067a7a471f0fa40235b817b6c356e3797a7193534d73baa020935557454"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn3/shed125_corn3.ply",
+      "sha256": "d0b69b90a890e5a4c5562b3b88fca156cf63a3d50275606449020cc64565896a"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn4/exterior.ply",
+      "sha256": "f3890ff23a66419825f919b784cde2ac122398c012bb293aa2344704cec1d80a"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn4/shed125_corn4.def",
+      "sha256": "6f7e7d9f90e438a2ea7498fd7697a74a7530a1bc6f0480aa77a2e026feeded35"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn4/shed125_corn4.mdl",
+      "sha256": "04584849477a83c4e74da5d13bc6ab2c774bdc95b6aba819a46ef98a05c8d208"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed125_corn4/shed125_corn4.ply",
+      "sha256": "c82177f6261137d200081776eef6fb75e7b27a55ee89a64245aaf2900dbb8b8f"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed_wood125.def",
+      "sha256": "594b2abc8d3918b50c86d5ff2500faca13fe9f0d32b6b63563bfb71a9bffc46c"
+    },
+    {
+      "path": "entity/construction/village/shed_wood125/shed_wood125.mdl",
+      "sha256": "ab7a657d9791bcb3edea7c330e70a57841a7a90ad6ef6c3fcf2aa15a1971cc9c"
+    },
+    {
+      "path": "texture/common/decor/cut001_4.dds",
+      "sha256": "11e3c196f75ddccfa7a5fda79e83642918c6436524ebc532907cc4358bb88318"
+    },
+    {
+      "path": "texture/common/decor/wood_sh3.dds",
+      "sha256": "742ac8f084c4773f8e8f9a2483ce5bd044f474fc3679c45910698baf2628ef10"
+    },
+    {
+      "path": "texture/common/roof/roof_sh32.dds",
+      "sha256": "682a089ded6eef683b8a08424b1af9e72787e5a537a8c18fa0986fa1e24b13f8"
+    },
+    {
+      "path": "texture/common/roof/roof_sh32_x.dds",
+      "sha256": "780a9d04732d5de1882113e97c1b4398293531327f639bb9a7c80ffcb51ed747"
+    },
+    {
+      "path": "texture/common/wall/wall_euro_sh_29.dds",
+      "sha256": "97c1960770fa0b00380f12d83590b7f71b7100d8c4fb908a46246ed21a856dd8"
+    },
+    {
+      "path": "texture/common/wall/wall_euro_sh_38.dds",
+      "sha256": "99667ee131abc3a5038b513d2853e94966e94679d714608649e3d285a582b8c2"
+    },
+    {
+      "path": "texture/common/window & door/door_sh17.dds",
+      "sha256": "7ebc4b6d5566b633aa997584e65ac3be7ab5b94734a052100bb5f613ca29a62f"
+    },
+    {
+      "path": "texture/common/window & door/window_sh6.dds",
+      "sha256": "eed6cce0118bf59862ad508c34034dab2689df95ecd98b77a9d74ac315e640c5"
+    }
+  ]
+}

@@ -41,6 +41,32 @@ jobs:
         run: npx --yes wait-on http://localhost:8741 || sleep 3
       - name: Run smoke test
         run: node scripts/smoke-test.mjs
+      - name: Run resource and queued-order regressions
+        run: node scripts/performance-regression-test.mjs
+      - name: Run command panel and projectile rendering regressions
+        run: |
+          node scripts/tactical-hud-test.mjs
+          node scripts/tracer-fx-test.mjs
+          node scripts/impact-fx-test.mjs
+          node scripts/scenery-test.mjs
+      - name: Run tactical behavior regressions
+        run: node scripts/tactical-behavior-test.mjs
+      - name: Run supporting fire and infantry visibility regressions
+        run: |
+          node scripts/infantry-actions-test.mjs
+          node scripts/squad-coordination-test.mjs
+          node scripts/infantry-asset-test.mjs
+          node scripts/supporting-fire-test.mjs
+          node scripts/mortar-fire-test.mjs
+          node scripts/infantry-locomotion-test.mjs
+          node scripts/infantry-visibility-test.mjs
+      - name: Run model weapon regressions
+        run: |
+          node scripts/model-coverage-test.mjs
+          node scripts/army-material-test.mjs
+          node scripts/fieldgun-model-test.mjs
+          node scripts/model-weapon-audit.mjs --assert --no-images
+          node scripts/weapon-actors-test.mjs
       - name: Run battle-selector regressions
         run: |
           node scripts/battle-selector-test.mjs

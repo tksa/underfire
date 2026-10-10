@@ -36,6 +36,7 @@ If you use Claude Code, `CLAUDE.md` and the task guides in `.claude/skills/` (ad
 | `js/units.js` | Unit factory (`makeUnit`), unit meshes, model loading, the infantry rig |
 | `js/weapons.js` | Weapon definitions (range, damage, penetration, suppression, accuracy) |
 | `js/combat.js` | `applyShot`, the damage/penetration model, hit effects |
+| `js/fire_control.js` | Weapon alignment, aim settling, motion-dependent steadiness and shot events |
 | `js/ai.js` | Enemy AI: per-unit state machine + squad coordination (fire-and-maneuver), armor-threat helpers shared with the player side |
 | `js/unit_modules.js` | The per-unit update loop (`Game.uMod`: frame, morale, health, supply, deploy, scan, bombard, engage, takeCover, fire, posture, move) and the `updateUnit` orchestrator |
 | `js/ai_tactics.js` | Idle / at-ease / guard postures (`Game.uMod.ambient`) |
@@ -48,6 +49,8 @@ If you use Claude Code, `CLAUDE.md` and the task guides in `.claude/skills/` (ad
 | `js/scenarios/mokra.js` | The Mokra: Hold the Railway scenario (authored map, waves, objectives) |
 | `js/buildings.js`, `js/garrison_ui.js` | Enterable buildings and the garrison UI |
 | `js/soldier_model.js`, `js/fieldgun_model.js`, `js/cavalry_model.js` | Rigged soldier, crewed gun and horse-and-rider model handling |
+| `js/gun_model.js` | Original procedural gun carriages, recoil and folding trails |
+| `js/weapon_mounts.js` | Geometry/bone muzzle anchors, model aim correction and recoil axes |
 | `js/aircraft.js` | Fighters, bombers, air strikes |
 | `js/valor.js` | The VALOR finishing post-process pass |
 | `js/editor.js`, `js/ruler.js` | In-game map maker and the debug ruler |
@@ -122,6 +125,15 @@ There is also a headless regression suite (the same one CI runs) built on Playwr
 npm install --no-save playwright && npx playwright install chromium
 python3 -m http.server 8741 &
 node scripts/smoke-test.mjs                 # boots the game, fails on runtime errors
+node scripts/tactical-behavior-test.mjs      # weapon handling, infantry paths, low poses, gun crews
+node scripts/supporting-fire-test.mjs        # observed friendly fire, small bursts, orders and obstruction
+node scripts/infantry-actions-test.mjs       # magazines, interrupted actions, pistols and mortar crews
+node scripts/squad-coordination-test.mjs    # bounds, occupied cover, friendly lanes and contact memory
+node scripts/infantry-asset-test.mjs         # skin palette, complete clips, safe crossfade scales
+node scripts/infantry-locomotion-test.mjs    # move orders, carry poses, gait selection and aim-to-move
+node scripts/infantry-visibility-test.mjs    # actual body pixels while running/turning near camera edges
+node scripts/model-weapon-audit.mjs --assert # every active ground weapon, muzzle markers and regression report
+node scripts/weapon-actors-test.mjs         # aircraft, cavalry aiming and railway artillery mounts
 node scripts/tank-approach-test.mjs --assert # infantry / AT-gun behaviour under armor
 node scripts/tow-move-test.mjs               # towed guns; see scripts/ for the rest
 ```

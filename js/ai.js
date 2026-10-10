@@ -67,6 +67,7 @@ Game.findCoverPosition = (unit, threatX, threatZ, opts = null) => {
             const cz = Game.clamp(unit.z + Math.sin(a) * r * T * 0.8, 1, Game.WORLD_H - 1);
             const tile = Game.getTileAtWorld(cx, cz);
             if (!tile || tile.blocked || (Game.isTank(unit.kind) && tile.vehicleBlocked)) continue;
+            if (!Game.coverSlotAvailable(unit, cx, cz)) continue;
             const cover = Game.coverAt(cx, cz);
             // Only spots that will COUNT as in-cover once reached (the AI's
             // inCover test is >0.32). Accepting 0.2-0.32 refuges sent men on a
@@ -97,7 +98,7 @@ Game.findCoverPosition = (unit, threatX, threatZ, opts = null) => {
  * comfortable stand-off range with line of sight, on the shooter's own side of
  * the target, spaced off other friendly armor, with a nod to covering terrain.
  * The core armor rule: a tank moves toward a firing position, never toward the
- * enemy itself. Returns {x, z} or null (caller falls back to a plain approach).
+ * enemy itself. Returns {x, z} or null when no safe candidate exists.
  * opts.standoff: preferred fraction of weapon range (default 0.72).
  */
 Game.findFiringPosition = (unit, target, opts = {}) => {
@@ -124,6 +125,10 @@ Game.findFiringPosition = (unit, target, opts = {}) => {
             if (cx < 3 || cx > Game.WORLD_W - 3 || cz < 3 || cz > Game.WORLD_H - 3) continue;
             const tile = Game.getTileAtWorld(cx, cz);
             if (!tile || tile.blocked || tile.vehicleBlocked) continue;
+            const facing = Game.angleTo(cx, cz, target.x, target.z);
+            if (Game._bodySolidCount && Game._bodySolidCount(unit, cx, cz, facing)) continue;
+            if (Game._vehiclePosePenetration
+                && Game._vehiclePosePenetration(unit, cx, cz, facing, 0.2, false).depth > 0.001) continue;
             if (Game.lineOfSight({ x: cx, z: cz }, target) === false) continue;  // must see to shoot
             let score = 40;
             score -= Math.abs(rf - 1.0) * 20;                // hold the stand-off band
@@ -418,6 +423,8 @@ Game.updateAI = (unit, dt, enemy) => {
     unit.thinking -= dt;
     if (unit.thinking > 0) return;
     unit.thinking = Game.rand(0.25, 0.5);
+    if (unit._infantryAction) return;
+    if (enemy && !Game.unitCanSee(unit, enemy)) enemy = null;
     unit.retreating = false; // re-asserted below only while actually falling back
 
     const now = Game.gameClock;
@@ -683,6 +690,7 @@ Game.updateAI = (unit, dt, enemy) => {
     // FOOT TROOPS ONLY: armor doesn't scurry for infantry cover. (Ungated, a
     // tank ran this branch, picked "the lee of the nearest friendly tank" —
     // which was ITSELF — and chased that moving point in circles on the spot.)
+    if (Game.followSquadBound(unit)) return;
     if (isFoot && threatPos && !inCover && role !== 'maneuver'
         && (enemy || supp > 15 || unit.underFire > 0)) {
         // Face the fire even from an unseen shooter — via the per-frame facing
@@ -770,14 +778,18 @@ Game.updateAI = (unit, dt, enemy) => {
             // last anchor — never every think tick.
             const shifted = !unit._fpAnchor
                 || Game.distSq(unit._fpAnchor.x, unit._fpAnchor.z, enemy.x, enemy.z) > 36;
-            if (!unit.path || !unit.path.length || shifted) {
+            if ((!unit.path || !unit.path.length || shifted) && now >= (unit._fpRetryAt || 0)) {
                 unit._fpAnchor = { x: enemy.x, z: enemy.z };
+                unit._fpRetryAt = now + 2.5;
                 // Maneuver element presses to a closer band; base of fire stands off.
                 const fp = Game.findFiringPosition
                     ? Game.findFiringPosition(unit, enemy, { standoff: role === 'maneuver' ? 0.55 : 0.75 })
                     : null;
-                const goal = fp || enemy;
-                unit.path = planPath(goal.x, goal.z);
+                // No safe firing position is not an instruction to charge the
+                // target's centre. Hold the last route and retry at a bounded
+                // cadence as sight lines and traffic change.
+                if (fp) unit.path = planPath(fp.x, fp.z);
+                if (!fp || !unit.path.length) unit._fpRetryAt = now + 5;
             }
             unit._ai = 'advance';
             return;
@@ -930,7 +942,7 @@ Game.updateSquadAI = (dt) => {
         let freshThreat = null, freshTime = -Infinity;
         mem.forEach(u => {
             const e = sightings.get(u.id);
-            if (e) { freshTime = Game.gameClock; freshThreat = { x: e.x, z: e.z }; }
+            if (e && Game.unitCanSee(u, e)) { freshTime = Game.gameClock; freshThreat = { x: e.x, z: e.z }; }
             else if (u._lastThreat && (u._threatTime || 0) > freshTime) {
                 freshTime = u._threatTime; freshThreat = u._lastThreat;
             }
@@ -1003,6 +1015,7 @@ Game.updateSquadAI = (dt) => {
             u._rally = sq.rally;
             u._role = (posture === 'attack' && (u.id & 1) === 1 && !u.deployable) ? 'maneuver' : 'fire';
         });
+        Game.updateSquadManeuver(sq, mem, sightings);
     }
 };
 

@@ -90,13 +90,14 @@ Game.TANK_BOX_WID = 1.0;        // half-width across the hull (× size)
 // ~3.4-3.6u long but collided as a 2.55u body, so their visible corners could be
 // well inside a tank before the old three-disc test noticed anything.
 Game.VEHICLE_FOOTPRINTS = {
-    // Team/model-specific procedural fallbacks.
-    german_supply_truck: { length: 2.21, width: 1.05 },
-    german_fuel_truck:   { length: 2.21, width: 1.05 },
-    german_panzer1:      { length: 2.03, width: 1.58 },
-    german_panzer2:      { length: 2.44, width: 1.89 },
-    german_panzer4:      { length: 2.71, width: 2.10 },
-    german_sdkfz:        { length: 2.30, width: 1.46 },
+    // Conservative chassis envelopes for the replacement core models. The
+    // old 2.21-long truck placeholders were shorter than the new cargo/tankers.
+    german_supply_truck: { length: 3.60, width: 1.65 },
+    german_fuel_truck:   { length: 3.50, width: 1.65 },
+    german_panzer1:      { length: 2.65, width: 1.58 },
+    german_panzer2:      { length: 3.15, width: 1.89 },
+    german_panzer4:      { length: 3.65, width: 2.10 },
+    german_sdkfz:        { length: 3.10, width: 1.50 },
 
     // Kind fallbacks and current French/modelled bodies.
     transport: { length: 3.60, width: 1.65 },
@@ -208,15 +209,18 @@ Game._vehiclePosePenetration = (unit, x, z, angle = unit.angle, margin = 0.02, p
  * a man slides squarely off the nearest flat side instead of off a circle.
  */
 Game._tankBoxPush = (ux, uz, tank, r, margin) => {
-    const c = Math.cos(tank.angle), s = Math.sin(tank.angle);
     const dx = ux - tank.x, dz = uz - tank.z;
-    const lx = dx * c + dz * s;        // local: along hull length (forward)
-    const lz = -dx * s + dz * c;       // local: across hull width (right)
     const ext = Game._vehicleHalfExtents
         ? Game._vehicleHalfExtents(tank)
         : { hl: tank.size * (Game.TANK_BOX_LEN || 1.5), hw: tank.size * (Game.TANK_BOX_WID || 1.0) };
     const hl = ext.hl + r + margin;
     const hw = ext.hw + r + margin;
+    // The expanded hull fits inside this circle at every heading. Most units
+    // are far apart; reject them before rotating into the hull's local frame.
+    if (dx * dx + dz * dz > hl * hl + hw * hw) return null;
+    const c = Math.cos(tank.angle), s = Math.sin(tank.angle);
+    const lx = dx * c + dz * s;
+    const lz = -dx * s + dz * c;
     const px = hl - Math.abs(lx);      // penetration along length
     const pz = hw - Math.abs(lz);      // penetration along width
     if (px <= 0 || pz <= 0) return null;            // outside the box
@@ -1053,6 +1057,16 @@ Game.applySeparation = (unit, dt) => {
         // rectangular unit as a radius. Look for an OBB conflict now or along a
         // short forward prediction, then yield; side-by-side clear hulls proceed.
         if (isVeh && otherVeh && Game._vehicleOBB && Game._obbPenetration) {
+            // Parked hulls are already handled by the swept movement gate. The
+            // yield below only acts on moving traffic; avoid six unused future
+            // OBB tests for each stationary or unreachable vehicle pair.
+            const otherMoving = (other.currentSpeed || 0) > 0.15;
+            if (!otherMoving) continue;
+            const me = Game._vehicleHalfExtents(unit), oe = Game._vehicleHalfExtents(other);
+            // Twice the SAT clearance also encloses diagonally expanded corners.
+            const reach = Math.hypot(me.hl, me.hw) + Math.hypot(oe.hl, oe.hw) + 0.40
+                + (Math.abs(unit.currentSpeed || 0) + Math.abs(other.currentSpeed || 0)) * 1.5;
+            if (distSq > reach * reach) continue;
             // Match the route planner's 0.20u stand-off. A larger circular-era
             // yield margin could veto a corridor that pathfinding had correctly
             // proved wide enough.
@@ -1078,16 +1092,9 @@ Game.applySeparation = (unit, dt) => {
 
             const dist = Math.sqrt(Math.max(distSq, 0.0001));
             const nx = dx / dist, nz = dz / dist;
-            const otherMoving = (other.currentSpeed || 0) > 0.15;
-            // A parked hull is owned by full-width A* plus the swept hard gate.
-            // Stopping on a straight-line heading prediction prevents a wheeled
-            // truck from rolling far enough to steer onto that safe bypass and
-            // deadlocks it forever at the margin. Moving traffic still yields.
-            if (!otherMoving) continue;
             const otherAhead = (-nx) * fwdX + (-nz) * fwdZ > 0.25;
             const following = otherMoving
                 && (Math.cos(other.angle) * fwdX + Math.sin(other.angle) * fwdZ) > 0.6;
-            const me = Game._vehicleHalfExtents(unit), oe = Game._vehicleHalfExtents(other);
             const myArea = me.hl * me.hw, otherArea = oe.hl * oe.hw;
             const yieldToOther = otherArea > myArea + 0.02
                 || (Math.abs(otherArea - myArea) <= 0.02 && other.id < unit.id);
@@ -1450,7 +1457,7 @@ Game.updateSupportUnits = (dt) => {
     Game.units.forEach(u => { if (u.alive) u._officerSightBonus = 0; });
 
     Game.units.forEach(unit => {
-        if (!unit.alive) return;
+        if (!unit.alive || unit._inVehicle != null || unit._infantryAction) return;
         const base = Game.UNIT_STATS[unit.statKey];
         if (!base || base.class !== 'support') return;
 
@@ -1476,41 +1483,16 @@ Game.updateSupportUnits = (dt) => {
             const d = Game.dist(unit.x, unit.z, other.x, other.z);
             if (d > range) continue;
 
-            if (sType === 'medic' && !Game.isTank(other.kind) && other.hp < other.maxHp) {
-                // Heal infantry
-                other.hp = Math.min(other.maxHp, other.hp + 8);
-                unit.experience = Math.min(100, (unit.experience || 0) + 1);
-                break;
+            if (sType === 'medic' && Game.isFootInfantry(other) && other.hp < other.maxHp) {
+                if (Game.beginSupportAction(unit, other, 'treat')) break;
             }
-            if (sType === 'mechanic' && Game.isTank(other.kind)) {
-                if (other.hp < other.maxHp) {
-                    other.hp = Math.min(other.maxHp, other.hp + 5);
-                    unit.experience = Math.min(100, (unit.experience || 0) + 1);
-                    break;
-                }
-                if (other.tracksDisabled) {
-                    other.tracksDisabled = false;
-                    const ob = Game.UNIT_STATS[other.statKey];
-                    if (ob) other.speed = ob.speed;
-                    Game.pushMessage(`${other.label} tracks repaired!`, 2.0);
-                    break;
-                }
-                if (other.engineDamaged) {
-                    other.engineDamaged = false;
-                    const ob2 = Game.UNIT_STATS[other.statKey];
-                    if (ob2) other.speed = ob2.speed;
-                    Game.pushMessage(`${other.label} engine repaired!`, 2.0);
-                    break;
-                }
-                if (other.turretDamaged) {
-                    other.turretDamaged = false;
-                    Game.pushMessage(`${other.label} turret repaired!`, 2.0);
-                    break;
-                }
+            if (sType === 'mechanic' && Game.isTank(other.kind)
+                && (other.hp < other.maxHp || other.tracksDisabled || other.engineDamaged || other.turretDamaged)) {
+                if (Game.beginSupportAction(unit, other, 'repair')) break;
             }
             if (sType === 'supply' && other.ammo < other.maxAmmo) {
                 // Supply trucks spend own ammo 1:1 when resupplying
-                const give = Math.min(5, unit.ammo);
+                const give = Math.min(5, unit.ammo, other.maxAmmo - other.ammo);
                 if (give > 0) {
                     other.ammo = Math.min(other.maxAmmo, other.ammo + give);
                     unit.ammo -= give;
@@ -1637,11 +1619,11 @@ Game.updateAirStrikes = (dt) => {
                 for (let t = 0; t < 5; t++) {
                     const approachX = strike.x + Game.rand(-3, 3);
                     const approachZ = strike.z - 15; // Planes come from north
-                    Game.tracers.push({
+                    Game.addTracer({
                         x: approachX, z: approachZ,
                         tx: strike.x + Game.rand(-5, 5), tz: strike.z + Game.rand(-5, 5),
                         life: 0.5, total: 0.5,
-                        team: Game.playerTeam, big: true, mesh: null,
+                        team: Game.playerTeam, big: true, mesh: null, preserveFlight: true,
                     });
                 }
                 Game.pushMessage('Air strike impact!', 2.0);
@@ -1716,57 +1698,21 @@ Game._dustModAt = (x, z) => {
     return m;
 };
 
-Game.addBlastFlash = (x, z, scale = 1) => {
-    Game.muzzleFlashes = Game.muzzleFlashes || [];
-    Game.muzzleFlashes.push({ x, z, r: 0.9 * scale, life: 0.2, total: 0.2, big: true, mesh: null });
-    // VALOR Stage 5: leave a persistent scorch scar for real explosions (skip the
-    // small muzzle/MG-hit flashes). Radius scales with the blast.
-    if (scale >= 0.6 && Game.addScorch) Game.addScorch(x, z, 1.1 * scale);
-    // Buildings take blast damage (tank HE, grenades, AT, mortars, air strikes
-    // all funnel through here) — steps their damage state and finally collapses.
-    if (scale >= 0.5 && Game.damageBuildingAt) Game.damageBuildingAt(x, z, 42 * scale, 2.2 * scale);
-
-    // FX §6.2 HE ground impact: a rising dirt column + a low shock ring + a few
-    // thrown clods, all scaled by blast size. Dust colour comes from the ground
-    // it was kicked up from (updateSmoke3D). Skip the tiny muzzle/MG flashes.
-    if (scale >= 0.6 && Game.smoke) {
-        const dustMul = (Game.fxImpactDust != null) ? Game.fxImpactDust : 1;
-        const mod = Game._dustModAt ? Game._dustModAt(x, z) : { amount: 1, life: 1, rise: 1, radius: 1 };
-        const n = Math.max(1, Math.round((3 + scale * 3) * dustMul * mod.amount));
-        for (let i = 0; i < n; i++) {
-            const rr = scale * (0.4 + Math.random() * 0.7);
-            const life = (1.6 + scale * 1.6) * mod.life;
-            Game.smoke.push({
-                x: x + Game.rand(-rr, rr), z: z + Game.rand(-rr, rr),
-                r: (0.6 + Math.random() * 0.8) * scale * mod.radius,
-                life, total: life,
-                vx: Game.rand(-0.3, 0.3) * scale, vz: Game.rand(-0.3, 0.3) * scale,
-                rise: (1.3 + scale * 1.4) * mod.rise, maxOpacity: 0.7, dust: true, mesh: null,
-            });
-        }
-        // wide, brief low shock ring hugging the ground
-        Game.smoke.push({ x, z, r: 1.3 * scale * mod.radius, life: 0.55, total: 0.55, rise: 0.25, maxOpacity: 0.5, dust: true, mesh: null });
-
-        // FX §18.1: large HE / bomb dust briefly obscures line of sight (reuses
-        // the LOS-only smokeClouds; the visible dust is the puffs above). Scales
-        // with caliber; off when fxDustLOS = 0.
-        const losMul = (Game.fxDustLOS != null) ? Game.fxDustLOS : 1;
-        if (scale >= 1.0 && losMul > 0 && Game.smokeClouds) {
-            Game.smokeClouds.push({ x, z, radius: scale * 1.6, life: Game.clamp(scale * 2.5, 1.5, 18) * losMul * mod.life });
-        }
-
-        // FX §12.1: a real blast on dry vegetation can start a ground fire.
-        if (scale >= 0.8 && Game.igniteFire) Game.igniteFire(x, z, scale);
+Game.addBlastFlash = (x, z, scale = 1, visual = true) => {
+    if (visual) Game.emitWeaponImpact(x,z,{kind:'he',scale:Game.clamp(scale,.25,1.8)});
+    // Environmental consequences stay in the simulation. Delayed tracer FX
+    // never call this function, avoiding repeated building/prop damage or fire.
+    if (scale >= .5) {
+        Game.damageFarmSceneryAt?.(x,z,2.2*scale,42*scale);
+        Game.damageBuildingAt?.(x,z,42*scale,2.2*scale);
     }
-
-    // FX §17: camera shake scaled by blast size AND distance to the view centre,
-    // so distant shells in a big battle don't rattle the whole screen.
-    if (Game.cam) {
-        const d = Math.hypot(x - Game.cam.x, z - Game.cam.z);
-        const reach = (Game.cam.zoom || 20) * 2.5;
-        const near = Game.clamp(1 - d / reach, 0, 1);
-        const shakeMul = (Game.fxShake != null) ? Game.fxShake : 1;
-        Game.cameraShake = Math.max(Game.cameraShake || 0, scale * 6 * near * shakeMul);
+    const mod=Game._dustModAt(x,z),losMul=Game.fxDustLOS ?? 1;
+    if(scale>=1&&losMul>0&&Game.smokeClouds)
+        Game.smokeClouds.push({x,z,radius:scale*1.6,life:Game.clamp(scale*2.5,1.5,18)*losMul*mod.life});
+    if(scale>=.8)Game.igniteFire?.(x,z,scale);
+    if(Game.cam){
+        const near=Game.clamp(1-Math.hypot(x-Game.cam.x,z-Game.cam.z)/((Game.cam.zoom||20)*2.5),0,1);
+        Game.cameraShake=Math.max(Game.cameraShake||0,scale*3*near*(Game.fxShake??1));
     }
 };
 
@@ -1832,9 +1778,10 @@ Game.updateBombard = (unit, dt, weapon) => {
     unit.path = [];
     unit.moving = false;
     unit.currentSpeed = 0;
-    unit.angle = Game.angleTo(unit.x, unit.z, tx, tz);
-    unit.turretAngle = unit.angle;
-    if (unit.cooldownLeft <= 0) {
+    unit._dispSpeed = 0;
+    const aimed = Game.aimWeaponAtPoint(unit, tx, tz, dt);
+    const prepared = !Game.isMortar(unit) || Game.prepareMortarFire(unit, dt, tx, tz);
+    if (aimed && prepared) {
         Game.fireBombard(unit, tx, tz, weapon);
         const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;
         unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
@@ -1878,11 +1825,8 @@ Game.updateGroundFire = (unit, dt, weapon) => {
     unit.path = [];
     unit.moving = false;
     unit.currentSpeed = 0;
-    const aim = Game.angleTo(unit.x, unit.z, tx, tz);
-    unit.angle = aim;
-    unit.turretAngle = aim;
-    if (unit.deployable && !unit._canFire) return; // still setting up
-    if (unit.cooldownLeft <= 0) {
+    unit._dispSpeed = 0;
+    if (Game.aimWeaponAtPoint(unit, tx, tz, dt)) {
         Game.fireAtGround(unit, tx, tz, weapon);
         const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;
         unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
@@ -1894,30 +1838,32 @@ Game.updateGroundFire = (unit, dt, weapon) => {
  * light wounding + a crater) to anything caught near the impact.
  */
 Game.fireAtGround = (unit, tx, tz, weapon) => {
+    if (Game.friendlyFireBlocker(unit, { x: tx, z: tz })) return;
     if (unit.ammo === 0) {
         unit.bombardX = null; unit.bombardZ = null; unit._bombarding = false;
         Game.pushMessage(`${unit.label} out of ammo.`, 1.5);
         return;
     }
-    if (unit.ammo > 0) unit.ammo--;
+    if (!Game.consumeWeaponRound(unit)) return;
+    Game.noteWeaponShot(unit);
+    Game.noteFriendlyFireDirection?.(unit);
 
     const isTank = Game.isTank(unit.kind);
-    const acc = (weapon.accuracy?.medium ?? 0.6) + (unit.experience || 0) / 600;
+    const acc = ((weapon.accuracy?.medium ?? 0.6) + (unit.experience || 0) / 600)
+        * Game.weaponMotionAccuracy(unit);
     const scatter = Game.clamp((1 - acc) * 2.0, 0.3, 2.5);
     const ix = tx + Game.rand(-scatter, scatter);
     const iz = tz + Game.rand(-scatter, scatter);
-    const mx = unit.x + Math.cos(unit.angle) * (unit.size || 1);
-    const mz = unit.z + Math.sin(unit.angle) * (unit.size || 1);
+    const muzzle = Game.getWeaponMuzzle(unit);
+    const mx = muzzle.x, mz = muzzle.z;
     const d = Game.dist(mx, mz, ix, iz);
 
-    Game.tracers.push({
+    Game.addTracer({
         x: mx, z: mz, tx: ix, tz: iz,
+        y0: muzzle.y, y1: (Game.getHeight ? Game.getHeight(ix, iz) : 0) + 0.1,
         life: 0.1 + d / 90, total: 0.1 + d / 90,
-        team: unit.team, big: isTank, mesh: null,
-    });
-    Game.smoke.push({
-        x: ix, z: iz, r: 0.6, life: 0.5, total: 0.5,
-        vx: Game.rand(-0.3, 0.3), vz: Game.rand(-0.5, -0.2), mesh: null,
+        team: unit.team, big: isTank, mesh: null, weaponType: weapon.type,
+        impact: {...Game.weaponImpactProfile(weapon),angle:Math.atan2(iz-mz,ix-mx)},
     });
 
     // Area effect: suppress (HE also lightly wounds) enemies near the impact.
@@ -1944,15 +1890,11 @@ Game.fireAtGround = (unit, tx, tz, weapon) => {
         // HE: round crater + dust column, both scaled by caliber (heBlast size).
         const cal = Game.clamp(weapon.heBlast / 2.2, 0.7, 2.2);
         Game.craters.push({ x: ix, z: iz, r: 0.4 * cal + Game.rand(0, 0.4 * cal) });
-        if (Game.addBlastFlash) Game.addBlastFlash(ix, iz, cal);   // HE impact also damages buildings
+        if (Game.addBlastFlash) Game.addBlastFlash(ix, iz, cal, false);   // HE impact also damages buildings
     } else {
         // AP / kinetic: directional gouge + spark, no crater. Only penetrators
         // (tanks, AT guns) throw a visible dirt lance; small arms just chip.
         const ap = isTank || (weapon.penetration || 0) >= 2;
-        if (ap && Game._apGroundImpact) {
-            const ang = Math.atan2(iz - mz, ix - mx);
-            Game._apGroundImpact(ix, iz, ang, isTank ? 1.0 : 0.7);
-        }
         if (Game.damageBuildingAt) {
             // Light arms (infantry rifles/MGs) only ever scuff a building to light
             // damage; AP guns and tanks can wreck it.
@@ -1963,34 +1905,47 @@ Game.fireAtGround = (unit, tx, tz, weapon) => {
     }
     // Muzzle flash is purely visual — keep it below the blast thresholds so a
     // unit firing next to a building doesn't damage it from its own muzzle.
-    if (Game.addBlastFlash) Game.addBlastFlash(mx, mz, isTank ? 0.45 : 0.3);
+    Game.muzzleFlashes.push({ x: mx, z: mz, y: muzzle.y, r: isTank ? 0.45 : 0.2,
+        life: 0.1, total: 0.1, mesh: null });
     Game.cameraShake = Math.max(Game.cameraShake || 0, 0.3);
 };
 
 Game.fireBombard = (unit, tx, tz, weapon) => {
+    if (!unit.alive || unit.holdFire || unit._unmanned || unit._towed || unit._inVehicle != null) return false;
     if (unit.ammo === 0) {
         unit.bombardX = null; unit.bombardZ = null;
         Game.pushMessage(`${unit.label} out of ammo.`, 1.5);
         return;
     }
-    if (unit.ammo > 0) unit.ammo--;
+    if (!Game.consumeWeaponRound(unit)) return;
+    Game.noteWeaponShot(unit);
 
     // Scatter shrinks with crew skill; first rounds land wider
-    const acc = (weapon.accuracy?.medium ?? 0.5) + (unit.veterancy || 0) * 0.2 + (unit.experience || 0) / 600;
+    const acc = ((weapon.accuracy?.medium ?? 0.5) + (unit.veterancy || 0) * 0.2 + (unit.experience || 0) / 600)
+        * Game.weaponMotionAccuracy(unit);
     const scatter = Game.clamp((1 - acc) * 3.0, 0.5, 4.0);
-    const sx = tx + Game.rand(-scatter, scatter);
-    const sz = tz + Game.rand(-scatter, scatter);
+    const point = Game.isMortar(unit) ? Game.mortarImpactPoint(unit, tx, tz) : null;
+    const sx = point ? point.x : tx + Game.rand(-scatter, scatter);
+    const sz = point ? point.z : tz + Game.rand(-scatter, scatter);
     const d = Game.dist(unit.x, unit.z, tx, tz);
 
     // Muzzle puff + faint kick
+    const muzzle = Game.getWeaponMuzzle(unit);
     Game.smoke.push({
-        x: unit.x, z: unit.z, r: 0.5, life: 0.4, total: 0.4,
+        x: muzzle.x, z: muzzle.z, baseY: muzzle.y, r: 0.5, life: 0.4, total: 0.4,
         vx: Game.rand(-0.3, 0.3), vz: Game.rand(-0.9, -0.4), mesh: null,
     });
     Game.cameraShake = Math.max(Game.cameraShake || 0, 0.5);
 
+    const flight = 1.0 + d / 140;
+    Game.noteCombatAt(unit.x, unit.z);
+    Game.addTracer({ x: muzzle.x, z: muzzle.z, y0: muzzle.y, tx: sx, tz: sz,
+        y1: (Game.getHeight?.(sx, sz) || 0) + .05,
+        life: flight, total: flight, arc: Math.min(55, Math.max(8, d * .28)),
+        team: unit.team, big: true, mortar: true, mesh: null });
     Game.indirectShells.push({
-        sx, sz, t: 1.0 + d / 140,
+        sx, sz, t: flight,
+        shooterId: unit.id, mission: point?.mission, error: point?.error,
         blast: weapon.heBlast || 3,
         dmg: weapon.damage || 30,
         supp: weapon.suppression || 15,
@@ -2003,6 +1958,7 @@ Game.updateIndirectShells = (dt) => {
         const s = Game.indirectShells[i];
         s.t -= dt;
         if (s.t > 0) continue;
+        Game.observeMortarImpact?.(s);
         const blastR = s.blast;
         Game.units.forEach(u => {
             if (!u.alive) return;
@@ -2016,13 +1972,9 @@ Game.updateIndirectShells = (dt) => {
             u.shaken = 0.4;
             if (u.hp <= 0) {
                 u.alive = false; u.hp = 0;
-                if (u.mesh) u.mesh.visible = false;
+                u.isDeadBody = true; u.currentSpeed = 0;
                 if (Game.selection.has(u.id)) Game.selection.delete(u.id);
             }
-        });
-        Game.smoke.push({
-            x: s.sx, z: s.sz, r: blastR * 0.7, life: 1.0, total: 1.0,
-            vx: Game.rand(-0.4, 0.4), vz: Game.rand(-1.0, -0.4), mesh: null,
         });
         Game.craters.push({ x: s.sx, z: s.sz, r: Game.rand(0.5, 1.0) });
         Game.cameraShake = Math.max(Game.cameraShake || 0, 3);
@@ -2060,7 +2012,8 @@ Game.spawnThrownGrenade = (fromX, fromZ, tx, tz, opts = {}) => {
     const dur = opts.dur || (0.35 + Game.dist(x0, z0, tx, tz) * 0.045);
     Game.thrownGrenades.push({
         x0, z0, tx, tz, x: x0, z: z0,
-        y: (Game.getHeight ? Game.getHeight(x0, z0) : 0) + 0.6,
+        y0: opts.y0 ?? (Game.getHeight ? Game.getHeight(x0, z0) : 0) + 0.6,
+        y: opts.y0 ?? (Game.getHeight ? Game.getHeight(x0, z0) : 0) + 0.6,
         t: 0, dur,
         type: opts.type || 'frag',                 // 'frag' | 'smoke' | 'at'
         dmg: opts.dmg ?? 25,
@@ -2121,7 +2074,7 @@ Game.updateThrownGrenades = (dt) => {
         g.x = Game.lerp(g.x0, g.tx, p);
         g.z = Game.lerp(g.z0, g.tz, p);
         const ground = Game.getHeight ? Game.getHeight(g.x, g.z) : 0;
-        g.y = ground + 0.5 + Math.sin(p * Math.PI) * g.arc;
+        g.y = Game.lerp(g.y0 ?? ground + 0.5, ground + 0.1, p) + Math.sin(p * Math.PI) * g.arc;
         if (g.mesh) g.mesh.position.set(g.x, g.y, g.z);
         if (p >= 1) {
             Game._detonateThrown(g);
@@ -2149,10 +2102,8 @@ Game.throwGrenade = (unit, x, z) => {
         x = unit.x + Math.cos(a) * Game.MAX_THROW;
         z = unit.z + Math.sin(a) * Game.MAX_THROW;
     }
-    unit._grenades--;
-    unit.angle = Game.angleTo(unit.x, unit.z, x, z);
-    Game.spawnThrownGrenade(unit.x, unit.z, x, z, { type: 'frag', dmg: 28, blastR: 2.6, supp: 40 });
-    Game.pushMessage(`Grenade out! (${unit._grenades} left)`, 1.2);
+    if (!Game.beginGrenadeThrow(unit, x, z, { type: 'frag', dmg: 28, blastR: 2.6, supp: 40 })) return;
+    Game.pushMessage('Preparing grenade.', 1.2);
     if (Game.Audio) Game.Audio.voice('f_sold_attack');
 };
 
@@ -2175,10 +2126,8 @@ Game.throwSmoke = (unit, x, z) => {
         x = unit.x + Math.cos(a) * Game.MAX_THROW;
         z = unit.z + Math.sin(a) * Game.MAX_THROW;
     }
-    unit._smokeGrenades--;
-    unit.angle = Game.angleTo(unit.x, unit.z, x, z);
-    Game.spawnThrownGrenade(unit.x, unit.z, x, z, { type: 'smoke', arc: 1.6 });
-    Game.pushMessage(`Smoke thrown! (${unit._smokeGrenades} left)`, 1.4);
+    if (!Game.beginGrenadeThrow(unit, x, z, { type: 'smoke', arc: 1.6 })) return;
+    Game.pushMessage('Preparing smoke grenade.', 1.4);
     if (Game.Audio) Game.Audio.voice('f_sold_move');
 };
 
@@ -2408,13 +2357,32 @@ Game.nearTowTarget = (tower, radius = 2.8) => {
     return best;
 };
 
+// Entry/transport orders replace the old tactical destination. Otherwise an
+// emptied path resumes an earlier assault as soon as a passenger dismounts.
+Game.clearTransportOrders = (unit) => {
+    Game.cancelQueuedPath?.(unit);
+    Game.cancelHorseMountOrder?.(unit);
+    Game.clearArrivalFacing?.(unit);
+    Game.AI?.clearPosture?.(unit);
+    unit.path = []; unit.moving = false; unit.currentSpeed = 0;
+    unit.forcedTargetId = null; unit.fireTargetId = null; unit._engageId = null;
+    unit._assaultGoal = null; unit._inFiringPos = false;
+    unit.bombardX = null; unit.bombardZ = null; unit._bombarding = false;
+    unit._faceAngle = null; unit._faceUntil = 0;
+    unit._enterRec = null; unit._enterCarrierId = null; unit._enterGunId = null;
+    unit._grenadeChargeId = null; unit._infantryAction = null; unit._squadBound = null;
+    unit.retreating = false; unit._retreatThreat = null; unit._unloading = false;
+    Game._coverReservations?.delete(unit.id);
+};
+
 Game.towUnit = (tower, target, quiet = false) => {
     if (!tower.alive || !target.alive) return;
     if (!Game.canTow(tower)) return;
     if (!Game.isTowableAT(target)) { Game.pushMessage('Only anti-tank guns can be towed.', 1.5); return; }
     if (Game.towedBy(tower)) { Game.pushMessage(`${tower.label} is already towing a gun.`, 1.5); return; }
     if (target._towed) return;
-    if (Game.clearArrivalFacing) Game.clearArrivalFacing(target);
+    Game.clearTransportOrders(target);
+    target.orderMode = 'hold';
     target._towed = true;
     target._towedBy = tower.id;
     tower._towedUnitId = target.id;
@@ -2504,62 +2472,81 @@ Game.dismountGunCrew = (gun, opts = {}) => {
     return true;
 };
 
+Game.gunCrewCapacity = (gun) => Game.GUN_CREWS?.[gun.kind]?.placements.length || 2;
+Game.gunCrewVacancies = (gun) => {
+    if (!gun?.alive || !gun.deployable || gun.kind === 'hmg' || gun._towed) return 0;
+    const aboard = gun._crewAboard ?? (gun._unmanned ? 0 : Game.gunCrewCapacity(gun));
+    const inbound = Game.units.filter(u => u.alive && u._enterGunId === gun.id).length;
+    return Math.max(0, Game.gunCrewCapacity(gun) - aboard - inbound);
+};
+Game.canManGun = (gun, u) => !!gun && !!u && u.alive && u.team === gun.team
+    && Game.isFootInfantry(u) && !u.deployable && !u._garrisoned && u._inVehicle == null
+    && Game.gunCrewVacancies(gun) > 0;
+
 Game.orderManGun = (gun, candidates, quiet = false) => {
-    if (!gun || !gun.alive || gun._towed) return false;
-    const need = 2 - (gun._crewAboard || 0);
+    const need = Game.gunCrewVacancies(gun);
     if (need <= 0) return false;
-    const takers = candidates.slice(0, need);
+    const takers = [...new Set(candidates)].filter(u => Game.canManGun(gun, u) && u._enterGunId !== gun.id)
+        .sort((a, b) => Game.distSq(a.x, a.z, gun.x, gun.z) - Game.distSq(b.x, b.z, gun.x, gun.z))
+        .slice(0, need);
     if (!takers.length) return false;
     takers.forEach(u => {
+        Game.clearTransportOrders(u);
         u._enterGunId = gun.id;
-        u.forcedTargetId = null;
-        u._enterRec = null;
-        u._enterCarrierId = null;
-        if (Game.cancelQueuedPath) Game.cancelQueuedPath(u);
-        u.path = Game.findPath(u, u.x, u.z, gun.x, gun.z);
-        u.moving = true;
+        u.orderMode = 'move';
+        if (u.stance === 'rest') u.stance = 'stand';
+        u.path = Game.findCarrierEntryPath(u, gun.x, gun.z);
+        u.moving = u.path.length > 0;
         u.orderDelay = Game.commandDelay ? Game.commandDelay(u) : 0;
     });
     if (!quiet) Game.pushMessage(`${takers.length} soldier${takers.length === 1 ? '' : 's'} moving to man ${gun.label}.`, 1.8);
     return true;
 };
 
-Game.updateGunManning = () => {
-    for (const u of Game.units) {
-        if (!u.alive || u._enterGunId == null) continue;
-        const gun = Game.getUnitById(u._enterGunId);
-        if (!gun || !gun.alive || gun._towed || (gun._crewAboard || 0) >= 2) {
-            // The piece got hitched while its crew was still walking back:
-            // they chase the truck and ride along instead of standing lost.
-            if (gun && gun.alive && gun._towed && u._crewOfGunId === gun.id) {
-                const tower = Game.getUnitById(gun._towedBy);
-                if (tower && tower.alive && Game.transportHasRoom(tower)) {
-                    const entry = Game.transportEntryPoint(tower);
-                    u._enterCarrierId = tower.id;
-                    u.path = Game.findCarrierEntryPath(u, entry.x, entry.z);
-                    u.moving = u.path.length > 0;
-                }
-            }
-            u._enterGunId = null;
-            continue;
-        }
-        if (Game.dist(u.x, u.z, gun.x, gun.z) < 1.5) {
-            u._enterGunId = null;
-            u.alive = false;
-            u._absorbed = true;
-            // He stepped onto the gun, he didn't die: skip the corpse
-            // promotion in the renderer (no phantom body left behind).
-            u._deathHandled = true;
-            u._noRemnant = true;
-            if (u.mesh) u.mesh.visible = false;
-            Game.selection.delete(u.id);
-            gun._crewAboard = (gun._crewAboard || 0) + 1;
-            if (gun._unmanned) {
-                gun._unmanned = false;
-                if (gun.team === Game.playerTeam) Game.pushMessage(`${gun.label} is manned again.`, 1.8);
+Game.updateGunEntry = (u) => {
+    if (!u.alive || u._enterGunId == null) return;
+    const gun = Game.getUnitById(u._enterGunId);
+    if (!gun || !gun.alive || gun.team !== u.team || gun._towed
+        || (gun._crewAboard || 0) >= Game.gunCrewCapacity(gun)) {
+        u.path = []; u.moving = false;
+        // The piece got hitched while its crew was still walking back:
+        // they chase the truck and ride along instead of standing lost.
+        if (gun && gun.alive && gun._towed && u._crewOfGunId === gun.id) {
+            const tower = Game.getUnitById(gun._towedBy);
+            if (tower && tower.alive && Game.transportHasRoom(tower)) {
+                const entry = Game.transportEntryPoint(tower);
+                u._enterCarrierId = tower.id;
+                u.path = Game.findCarrierEntryPath(u, entry.x, entry.z);
+                u.moving = u.path.length > 0;
             }
         }
+        u._enterGunId = null;
+        return;
     }
+    if (Game.dist(u.x, u.z, gun.x, gun.z) < 1.5) {
+        u._enterGunId = null;
+        u.alive = false;
+        u._absorbed = true;
+        // He stepped onto the gun, he didn't die: skip the corpse
+        // promotion in the renderer (no phantom body left behind).
+        u._deathHandled = true;
+        u._noRemnant = true;
+        if (u.mesh) u.mesh.visible = false;
+        Game.selection.delete(u.id);
+        gun._crewAboard = (gun._crewAboard || 0) + 1;
+        if (gun._unmanned) {
+            gun._unmanned = false;
+            if (gun.team === Game.playerTeam) Game.pushMessage(`${gun.label} is manned again.`, 1.8);
+        }
+    } else if (!u.path?.length && (u._gunEntryRetryAt || 0) <= Game.gameClock) {
+        u._gunEntryRetryAt = Game.gameClock + 1;
+        u.path = Game.findCarrierEntryPath(u, gun.x, gun.z);
+        u.moving = u.path.length > 0;
+    }
+};
+
+Game.updateGunManning = () => {
+    for (const u of Game.units) Game.updateGunEntry(u);
 };
 
 // Hover affordance: a selected transport over a towable gun (or a selected
@@ -2858,12 +2845,14 @@ Game.untowUnit = (target) => {
     if (tower) tower._towedUnitId = null;
     target._towed = false;
     target._towedBy = null;
+    Game.clearTransportOrders(target);
+    target.orderMode = 'hold';
     // The riding crew hops off beside the gun and mans it again (the manning
     // loop absorbs them next tick, so this reads as one smooth motion).
     if (tower && tower._passengers && tower._passengers.length) {
         const crewIds = tower._passengers.filter(pid => {
             const man = Game.getUnitById(pid);
-            return man && man._crewOfGunId === target.id;
+            return man?.alive && man._crewOfGunId === target.id;
         });
         crewIds.forEach((pid, i) => {
             const man = Game.getUnitById(pid);
@@ -2875,6 +2864,8 @@ Game.untowUnit = (target) => {
             man.z = Game.clamp(target.z + Game.rand(-0.8, 0.8), 1, Game.WORLD_H - 1);
             man.y = Game.getHeight ? Game.getHeight(man.x, man.z) : 0;
             if (man.mesh) man.mesh.visible = true;
+            Game.clearTransportOrders(man);
+            man.orderMode = 'move';
             man._enterGunId = target.id;
             man.path = [];
             man.moving = false;
@@ -2922,6 +2913,7 @@ Game.loadUnit = (inf, carrier) => {
     }
     inf._inVehicle = carrier.id;
     inf._enterCarrierId = null;
+    inf._enterGunId = null;
     inf._enterCarrierRepath = null;
     inf._preCarrierStance = inf.stance;
     inf.stance = 'rest';
@@ -2956,6 +2948,7 @@ Game.orderEnterCarrier = (carrier) => {
         if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
         if (Game.clearArrivalFacing) Game.clearArrivalFacing(u);
         carrier._boardingQueue.push(u.id);
+        u._enterGunId = null;
         u._enterCarrierId = carrier.id;
         u._enterCarrierRepath = 0;
         // A soldier ordered aboard may currently be in the autonomous `rest`
@@ -3082,7 +3075,10 @@ Game.unloadCarrier = (carrier, tx = null, tz = null) => {
         inf.stance = inf._preCarrierStance || 'stand';
         inf._preCarrierStance = null;
         inf.y = Game.getHeight ? Game.getHeight(inf.x, inf.z) : 0;
-        inf.path = []; inf.moving = false;
+        Game.clearTransportOrders(inf);
+        inf.orderMode = 'hold';
+        inf.holdPoint = { x: inf.x, z: inf.z };
+        if (inf.stance === 'rest') inf.stance = 'stand';
         if (tx != null && tz != null) {
             const a = (i / Math.max(1, arr.length)) * Math.PI * 2;
             const r = i === 0 ? 0 : 0.9 + Math.floor((i - 1) / 4) * 0.8;
@@ -3328,6 +3324,15 @@ Game.updateFogOfWar = (dt) => {
             }
         }
     });
+    // A muzzle flash spotted by an actual soldier reveals just that firing
+    // position, not the surrounding concealed force or an entire sight circle.
+    for (const enemy of Game.units) {
+        if (!enemy.alive || enemy.team === Game.playerTeam || Game.firingSignature(enemy) === 1) continue;
+        if (!Game.units.some(ally => ally.alive && ally.team === Game.playerTeam
+            && ally._inVehicle == null && Game.unitCanSee(ally, enemy))) continue;
+        const gx = Math.floor(enemy.x * Game.FOG_RES), gz = Math.floor(enemy.z * Game.FOG_RES);
+        if (gx >= 0 && gx < Game.fogCols && gz >= 0 && gz < Game.fogRows) reveal(gz * Game.fogCols + gx);
+    }
     // Friendly aircraft on station: a MASSIVE recon bubble rides the plane —
     // the whole reason to call the sortie even with nothing to strafe. The
     // PATROL RING itself stays lit for the entire sortie too (second stamp):
@@ -4271,7 +4276,7 @@ Game.NEURAL_NEG = '';      // FULL negative override (empty = built-in default)
     const status = document.getElementById('dbgNeuralStatus');
     const say = (t) => { if (status) status.textContent = t; };
     const HIDE_NAMES = new Set(['water-surface', 'river-wash-stones', 'forest-undergrowth-blades']);
-    const HIDE_RE = /^(divider-)/;   // bushes stay real 3D, like trees
+    const HIDE_RE = /^(divider-|forest-undergrowth-blades)/;   // bushes stay real 3D, like trees
     const N = Game._neural = { on: false, frame: 0, saved: null, ghost: null, mat: null, tex: null };
 
     const applyDisplay = () => {
@@ -4377,7 +4382,7 @@ Game.NEURAL_BAKE_PPU = 21.6;   // px per world unit ~= training pixel density
     const status = document.getElementById('dbgBakeStatus');
     const say = (t) => { if (status) status.textContent = t; };
     const HIDE_NAMES = new Set(['river-wash-stones', 'forest-undergrowth-blades']);
-    const HIDE_RE = /^(divider-)/;   // bushes stay real 3D, like trees
+    const HIDE_RE = /^(divider-|forest-undergrowth-blades)/;   // bushes stay real 3D, like trees
     // Water in bake mode: the model paints the water COLOUR into the texture,
     // but paint is dead still. Keep the water plane with a ripple-only
     // material: near-transparent, so the painted water shows through, with
@@ -4496,8 +4501,32 @@ Game.NEURAL_BAKE_PPU = 21.6;   // px per world unit ~= training pixel density
         for (const o of B.hidden || []) o.visible = true;
         if (B.tex) B.tex.dispose();
         B.oldMap = null; B.hidden = null; B.tex = null; B.applied = false;
+        B.canvas = null; B.ctx = null; B.displayCanvas = null; B.refreshDisplay = null;
         if (btn) btn.textContent = 'Bake Neural Map';
         say('restored');
+    };
+
+    // Keep the full-resolution editable/exportable bake on the CPU, but upload
+    // at most 4096² pixels (85 MiB with mipmaps instead of 341 MiB at 8192²).
+    // Reuse this display canvas when a region is painted; source edits stay sharp.
+    const bakeDisplayTexture = () => {
+        const limit = Math.min(4096, Game.renderer.capabilities.maxTextureSize);
+        const scale = Math.min(1, limit / Math.max(B.canvas.width, B.canvas.height));
+        B.displayCanvas = document.createElement('canvas');
+        B.displayCanvas.width = Math.max(1, Math.round(B.canvas.width * scale));
+        B.displayCanvas.height = Math.max(1, Math.round(B.canvas.height * scale));
+        const ctx = B.displayCanvas.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        B.refreshDisplay = () => {
+            ctx.clearRect(0, 0, B.displayCanvas.width, B.displayCanvas.height);
+            ctx.drawImage(B.canvas, 0, 0, B.displayCanvas.width, B.displayCanvas.height);
+            if (B.tex) B.tex.needsUpdate = true;
+        };
+        B.refreshDisplay();
+        const tex = new Game.THREE.CanvasTexture(B.displayCanvas);
+        tex.colorSpace = Game.THREE.SRGBColorSpace;
+        tex.anisotropy = Math.min(8, Game.renderer.capabilities.getMaxAnisotropy());
+        return tex;
     };
 
     // apply a full-map texture image (fresh bake or a saved one) to the world
@@ -4509,9 +4538,7 @@ Game.NEURAL_BAKE_PPU = 21.6;   // px per world unit ~= training pixel density
         B.canvas.height = img.height;
         B.ctx = B.canvas.getContext('2d');
         B.ctx.drawImage(img, 0, 0);
-        const tex = new THREE.CanvasTexture(B.canvas);
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.anisotropy = Game.renderer.capabilities.getMaxAnisotropy();
+        const tex = bakeDisplayTexture();
         B.oldMap = Game.terrainMesh.material.map;
         Game.terrainMesh.material.map = tex;
         Game.terrainMesh.material.needsUpdate = true;
@@ -4631,9 +4658,7 @@ Game.NEURAL_BAKE_PPU = 21.6;   // px per world unit ~= training pixel density
                 B.canvas.height = cur.image.height;
                 B.ctx = B.canvas.getContext('2d');
                 B.ctx.drawImage(cur.image, 0, 0);
-                const tex = new THREE.CanvasTexture(B.canvas);
-                tex.colorSpace = THREE.SRGBColorSpace;
-                tex.anisotropy = Game.renderer.capabilities.getMaxAnisotropy();
+                const tex = bakeDisplayTexture();
                 B.oldMap = cur;
                 Game.terrainMesh.material.map = tex;
                 Game.terrainMesh.material.needsUpdate = true;
@@ -4664,7 +4689,7 @@ Game.NEURAL_BAKE_PPU = 21.6;   // px per world unit ~= training pixel density
             feather(0, pc.height, 0, pc.height - F);
             const scale = B.canvas.width / Game.WORLD_W;
             B.ctx.drawImage(pc, (cx - hw) * scale, (cz - hh) * scale, hw * 2 * scale, hh * 2 * scale);
-            B.tex.needsUpdate = true;
+            B.refreshDisplay();
             say(`view baked in ${Math.round((performance.now() - t0) / 1000)}s`);
         } catch (e) {
             say('failed: ' + e.message);
@@ -5565,6 +5590,7 @@ Game.tick = (now) => {
         if (Game.updateSmokeClouds) Game.updateSmokeClouds(dt);
         if (Game.updateTracers3D) Game.updateTracers3D(dt);
         if (Game.updateCraterDeformations) Game.updateCraterDeformations(dt);
+        Game.updateImpactDebris?.(dt);
         if (Game.updateWreckFx) Game.updateWreckFx(dt);
         if (Game.updateFires) Game.updateFires(dt);
         if (Game.updateBuildings) Game.updateBuildings(dt);
@@ -5597,6 +5623,7 @@ Game.tick = (now) => {
 
     // Order markers animate even while paused (orders are issued during pause)
     if (Game.updateOrderMarkers) Game.updateOrderMarkers(dt);
+    Game.updateMortarAreaMarkers?.();
     // Garrison labels + enter affordance (runs while paused so you can read/queue)
     if (Game.updateGarrisonUI) Game.updateGarrisonUI();
     if (Game.updateFoliage) Game.updateFoliage(dt);
@@ -5691,14 +5718,20 @@ Game.boot = async () => {
         cmdAttack: () => { Game.setOrderStance('attack'); },
         stanceMove: () => { Game.setOrderStance('move'); },
         stanceAttack: () => { Game.setOrderStance('attack'); },
-        cmdAttackGround: () => { Game._commandMode = 'attackground'; Game.pushMessage('Attack ground — right-click a spot to suppress.', 2.0); },
+        cmdAttackGround: () => Game.beginGroundFireCommand(),
+        cmdMortarMethod: () => Game.setMortarFireMode('ranged'),
+        cmdMortarRapid: () => Game.setMortarFireMode('rapid'),
+        cmdCancel: () => { Game._commandMode = null; Game.updateCommandDeck(); },
         cmdStop: () => {
+            Game._commandMode = null;
             const stoppedUnits = Game.selectedPlayerUnits();
             stoppedUnits.forEach(u => {
+                Game.cancelQueuedPath?.(u);
                 if (Game.cancelTruckManeuver) Game.cancelTruckManeuver(u);
                 if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
                 if (Game.clearArrivalFacing) Game.clearArrivalFacing(u);
                 u.path = []; u.moving = false; u.orderMode = 'hold';
+                u._enterGunId = null;
                 u.forcedTargetId = null; u.bombardX = null; u.bombardZ = null;
                 u._bombarding = false;
             });
@@ -5732,7 +5765,7 @@ Game.boot = async () => {
     };
     Object.entries(cmdHandlers).forEach(([id, fn]) => {
         const el = document.getElementById(id);
-        if (el) el.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+        if (el) el.addEventListener('click', (e) => { e.stopPropagation(); fn(); Game.updateHUD(); if (e.detail) el.blur(); });
     });
 
     // Init Three.js

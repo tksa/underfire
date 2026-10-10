@@ -704,6 +704,7 @@ Game.orderEnterBuilding = (rec) => {
         u.bombardX = null; u.bombardZ = null; u._bombarding = false;
         u._faceAngle = null; u._faceUntil = 0;
         u._enterRec = rec;
+        u._enterGunId = null;
         const np = nDoors
             ? ranked[i % nDoors]
             : (Game.buildingNearPoint ? Game.buildingNearPoint(rec, u.x, u.z) : { x: rec.cx, z: rec.cz });

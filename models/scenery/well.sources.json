@@ -1,0 +1,47 @@
+{
+  "output": "well.glb",
+  "bytes": 344180,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/construction/entourage/shaft_euro/land.ply",
+      "sha256": "7a61a6d91a196eeef6c6970805886efbe45d6c95696632767bc8fae821c37f8d"
+    },
+    {
+      "path": "entity/construction/entourage/shaft_euro/material1.mtl",
+      "sha256": "fcd5d0fb9b7987c8f3d99ce8bf323275021446f1aae6395e7d95ec4e4626cb57"
+    },
+    {
+      "path": "entity/construction/entourage/shaft_euro/material2.mtl",
+      "sha256": "61c364ffa3a5177f9a0257e1a32ac14f14027c3a481429571f551382a4cf9894"
+    },
+    {
+      "path": "entity/construction/entourage/shaft_euro/material3.mtl",
+      "sha256": "1c309d4b15fd6cdf0c9627ece8c9bb891d9ce84e2c8b18dbeb572da5596d45af"
+    },
+    {
+      "path": "entity/construction/entourage/shaft_euro/shaft_euro.def",
+      "sha256": "895269fd680d88fd9f2af6d53f5523d0edac3621c80f39a38e6a16c9b3d152ca"
+    },
+    {
+      "path": "entity/construction/entourage/shaft_euro/shaft_euro.mdl",
+      "sha256": "0cedb5e622c81ef06ea6224752cd9d57f9ab3e4f3aa8c480dda70ed4e9c10f70"
+    },
+    {
+      "path": "entity/construction/entourage/shaft_euro/shaft_euro.ply",
+      "sha256": "5975b9a373f5040b5927b762acff9f3fb4479b7c130e82f02c9f2c13c38a4021"
+    },
+    {
+      "path": "texture/common/construction/bridge_river_fense.dds",
+      "sha256": "4e76e01bb2859b3fc36ff2bb90bd00d3baa3d928651298531adc38897e60087a"
+    },
+    {
+      "path": "texture/common/entourage/shaft1_euro.dds",
+      "sha256": "997f607fb2b739cbeb92c1228991c431b6a7bc47b8954404c6264b19ea323645"
+    },
+    {
+      "path": "texture/common/roof/roof_sh8.dds",
+      "sha256": "18c406941f0ae7444f67556b6ce6d949e575c4febd2cd24e4fd5d1ba4306bf93"
+    }
+  ]
+}

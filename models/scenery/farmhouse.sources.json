@@ -1,0 +1,255 @@
+{
+  "output": "farmhouse.glb",
+  "bytes": 1275660,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/construction/village/e-house03a1/common/12_-_default.mtl",
+      "sha256": "8c24c2d93683610d5f6d4c750e01d237188f9721d059c19cb33532736435ec70"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/common/material_#931.mtl",
+      "sha256": "e20106e130066cde80fcb62af05cc59f6a25990435f4fad5c9e5feea05754b14"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/common/mtl02.mtl",
+      "sha256": "4899d9fddc5f1b63057518a2110f553587ad9996bbfb88acf191fd4558cfab9e"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/common/mtl03.mtl",
+      "sha256": "affd480cab34755a611224771a59b6439e8341061e52893ffb21a80c4e8d8fd0"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/common/mtl04.mtl",
+      "sha256": "4950d0c05a27f1bce0f0baa2a010b15d7a97214929360e88af507c59eec482ef"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/common/mtl05.mtl",
+      "sha256": "60b4ba94ba1a828403858441f2fdd3f0172ef4aa1e49aa44119aa78f4f769731"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/common/mtl06.mtl",
+      "sha256": "ec9a7fd62e914b251ac60f71c081021add80ca4caf5b8491ba0ddd7fb67d3e4c"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/common/mtl07.mtl",
+      "sha256": "464760c40d8b59d87b6105a09b617123cb90c04e6372595d103776b8f3b6e1af"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/common/mtl08.mtl",
+      "sha256": "338ef478acfb1384f1dc977dca25457520f1178c447d1a7d21274873ba581147"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/common/mtl09.mtl",
+      "sha256": "89943a2a1d7983ffbebe5611b1e6f043e817a89fac88a4b361cd2f71cf1206cd"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/common/mtl10.mtl",
+      "sha256": "a2a451394e867ea839de9b14b295f75f80a3afb779282b707d5c4be54f89b81d"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/common/mtl11.mtl",
+      "sha256": "4994bcc3cd16b6b8085ec1ff11a691b0f159c36bad029db75ce403005f6268ce"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/common/window_opaque.mtl",
+      "sha256": "b701c55acca0f46605cda11fcc8e731d0cb6ccdb8a6759a71919a8995ec9477e"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_1/e-h03a1_1.def",
+      "sha256": "0a43bd3c348ff3c6e4945cf56ebd27d83de1ce492f02ccee641519063ce0ff11"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_1/e-h03a1_1.mdl",
+      "sha256": "64e2cea03476283cc0e7da85f816e064235e06baaca1328eed0dfde1555de820"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_1/e-h03a1_1.ply",
+      "sha256": "70758b5799e7d037cd7ac87a484edd472f322a5db46b09814429743cb57c997d"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_1/exterior.ply",
+      "sha256": "01a5b5f5464717dc8d3f408a15075c5aae94b362119e1a0aad6ae3b08fa892dd"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_2/e-h03a1_2.def",
+      "sha256": "3aba92b87dc68388a32af8a2afcdb2ab95819bfa713ce22e17f3844343527993"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_2/e-h03a1_2.mdl",
+      "sha256": "31ef7556e927885217dee25b30744fa2c8bc68cfd93b6650eb4cdcd4fc960c73"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_2/e-h03a1_2.ply",
+      "sha256": "dea8140203c6ba06857868553dac7df6236ba68ec3c4105af3c596ec0d6db878"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_2/exterior.ply",
+      "sha256": "4e0359722c9e223d6fdbf73416b78d545d216ddb2be45329bd906bb0d71e4f6f"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_2/window2.ply",
+      "sha256": "e1203661f2b95954a2d7c0ed7122d21ea60a7413c2e2ca8d30e315dab8649c9b"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_3/e-h03a1_3.def",
+      "sha256": "82ee9cbfec1762b16870727246fe5f43b274aa23c885f53580c389f5fbde1df7"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_3/e-h03a1_3.mdl",
+      "sha256": "d4a2326e536ae39c8c984617c4cf4d0d735691889697d56616733982a2d59cd8"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_3/e-h03a1_3.ply",
+      "sha256": "d3f20cef7e58cc4512a8e25c5d266534d144bb0600624aebadec7e7cd406a271"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_3/exterior.ply",
+      "sha256": "9d2875ee264d1b0ed2e819b97366ce90650cd42fd73953cecd76e768d9df8255"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_4/e-h03a1_4.def",
+      "sha256": "eb8b786ba101fbc87f5fecd33062c6fef133703e9f4a230648adfa064d8339fa"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_4/e-h03a1_4.mdl",
+      "sha256": "2cb805e2a26a85c43b5c7959e824bfce69023a31a18049c4711ac537205cb421"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_4/e-h03a1_4.ply",
+      "sha256": "74e1b540166a5f1db9692908d8232a73de2c3b3852b67b893c8ebe0404d552a7"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_4/exterior.ply",
+      "sha256": "5ba6da967ae2a2ea40b85d546eede0834572a324dd1b55624cd3db0e666fcf18"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_5/e-h03a1_5.def",
+      "sha256": "f69683c982bca98c2bfbd02e765a2b3385dcf3de92263c5836263f94bbf7d931"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_5/e-h03a1_5.mdl",
+      "sha256": "571f3a15b6784435b2694beac1e5a2619200470efcd777dcbe3e49ec1dc8272b"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_5/e-h03a1_5.ply",
+      "sha256": "7d7de4669fa9935b69788718b08e40fc2263bea99300117c506a39ab1358c82e"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_5/exterior.ply",
+      "sha256": "747299a2af9a092b2d933adc33bd8055bc7ea1a68dd3bcd4261c38114825efbb"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_6/e-h03a1_6.def",
+      "sha256": "41498b0e429a269b50b7f2d2dae6db93f6821ee76736c357e5c7a5b09d776574"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_6/e-h03a1_6.mdl",
+      "sha256": "07003b74991256020eb47bf723a4cc56c21cfe7458fbcdb1b864ec5aedbe5fcf"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_6/e-h03a1_6.ply",
+      "sha256": "e9ef5261349d7f36ee5b9e8add5c08ec1f1b88130b4d2e9f4be9a66a5f89cc8b"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_6/exterior.ply",
+      "sha256": "6f55db272fe77b467512c437d23f52f9eb25a398e8bfb9219654cd9119bd1d17"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_6/window0.ply",
+      "sha256": "b633f159a17b3ad3d7856705a83d82e285c458056d414f5c0d8c6e5d6ffc322a"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_7/e-h03a1_7.def",
+      "sha256": "d5c34138e1df428d078e43839ff7fc817e10c6a549a9f880c4a36675d3a886ed"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_7/e-h03a1_7.mdl",
+      "sha256": "1536a9669fd0f54af706142c27eb3d6d2974df1805a568bbd473068afa7f6ffa"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_7/e-h03a1_7.ply",
+      "sha256": "9777cd7236a4f8530f7f334895411f10e1ff680af98c4ba2a786434955f666fa"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_7/exterior.ply",
+      "sha256": "4d010c080a641bb8fc43869cc3f7fd661294fefdc2a7679eeebf45ab20660724"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_7/window1.ply",
+      "sha256": "6930738732f7e2b777b550c5fd010b39dc220c1ed959980ffdf901d2126b9f9e"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_8/e-h03a1_8.def",
+      "sha256": "976344dbaa0ef492ccf3864809ded539f9e62e7050b395b03b4de12df456f1bb"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_8/e-h03a1_8.mdl",
+      "sha256": "53f2acdd6eb75cb0baca69968f1f08b4ec0ed4bb6bac32a444826d46614ead6e"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_8/e-h03a1_8.ply",
+      "sha256": "d03a64659cf2f0372693be39eeac9a76d4564bdbd5dc85642e8adf7b201ecd0c"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-h03a1_8/exterior.ply",
+      "sha256": "8d8b04dcedb0a62365c0b7f408348c2b2bac0690d1128ef07a3df54efa7ddbb4"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-house03a1.def",
+      "sha256": "372834c329da3e501bb8119ffc1843a7cc2d721cbc61c0d5739b8332a4508e15"
+    },
+    {
+      "path": "entity/construction/village/e-house03a1/e-house03a1.mdl",
+      "sha256": "21baaa8d389174d7a9a18035066da79d6ee58f82f7df9e01b602669b8f3f8e11"
+    },
+    {
+      "path": "texture/common/decor/beam_concrete_sh01.dds",
+      "sha256": "384974afad90bb5734b92ecbcac38d54ef3e52a12af610d90ed99e598967de8d"
+    },
+    {
+      "path": "texture/common/decor/cut_sh10.dds",
+      "sha256": "2e5fe1924450e48cfc82f39f7c696a0a44a216b09c0346207515137103a45c6e"
+    },
+    {
+      "path": "texture/common/decor/wood_02.dds",
+      "sha256": "d40ed9e7b0cd290cf47675663d8a3db79e88d428dfbba73b5e643f0807e61379"
+    },
+    {
+      "path": "texture/common/entourage/light.dds",
+      "sha256": "3de774865f213486b93af4eb2aa7daf4eb0eb12655213a4c805cca7855bde1fe"
+    },
+    {
+      "path": "texture/common/roof/roof_sh14.dds",
+      "sha256": "6df7adc34f031be7deb8003a4912046542124e7e1b68a994fc398f5a2731b81e"
+    },
+    {
+      "path": "texture/common/roof/roof_sh14_x.dds",
+      "sha256": "0cab6b425a6704baee0be9ae1fd06c4efeeedfef5ad42c575a0ad2ba1bb24bff"
+    },
+    {
+      "path": "texture/common/wall/farm_concrete.dds",
+      "sha256": "af88acf7511d6c8061e7590086d385f6323c42a7ff4ce426fc32752462893c38"
+    },
+    {
+      "path": "texture/common/wall/wall_gals01.dds",
+      "sha256": "4a9b230d7f0c18fd9cc62b099db8c9670cdc31f4aff651e333bbbaf884f77966"
+    },
+    {
+      "path": "texture/common/window & door/door2.dds",
+      "sha256": "ad0d8d3aca7216956749c966b2897422a8e2fa18791ece101df1c63f194c3703"
+    },
+    {
+      "path": "texture/common/window & door/win_e1.dds",
+      "sha256": "b208efa245141d350173b5f1051365d7f23a3e2e0ef251b45b443dab977a2889"
+    },
+    {
+      "path": "texture/common/window & door/wnd_gals01.dds",
+      "sha256": "bd24d8d7df8b2d5e50417e3b756964fe926a2d350115b7195093896fc51d0dbb"
+    },
+    {
+      "path": "texture/common/wood/plat-wood.dds",
+      "sha256": "b2282f742d6a11a4f5daf46919eb82aa120fc18068998d7e3bb0e108d49d036e"
+    }
+  ]
+}

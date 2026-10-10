@@ -44,27 +44,42 @@ applicable in a browser or to this game's design).
 | N | Throw smoke |
 | Z | Cycle formation (line/column/wedge/block/spread) |
 | X | Cycle posture (attention / at ease / auto) |
-| C | Guard an area (patrol circle) |
+| C | Cycle run / walk / crouch / crawl |
+| Shift+C | Guard an area (patrol circle) |
+| Shift+F | First aid |
+| Shift+Q | Enter / leave a building |
+| Shift+N | Entrench |
+| Shift+X | Exit vehicle |
+| Shift+L | Load / unload troops |
+| Shift+J | Recon plane |
 | V | Stop / cancel orders |
 | S | Infantry run/walk toggle |
 | / | Cycle behavior (defensive/aggressive/cautious) |
 | J | Fighter cover — opens the squadron menu (plane types + counts); pick one, the green patrol ring follows the cursor, right-click calls the sortie (approach path = the map edge nearest the click). An airborne plane is click-selectable like a tank; right-click then re-tasks its patrol circle. (SS2 ran air support through orders-menu plane icons + waypoints.) |
 | Alt | Toggle all health bars |
 | L | Jump to last attack |
+
 | ` | Debug panel (includes the Ruler: toggle it on, left-click the map to place point A then B — the span is drawn with tick marks one soldier height apart and a label in world units / infantry heights / tiles; Esc exits, Clear wipes all measurements) |
+
+To reman an artillery piece, select available infantry in Move mode and hover
+over a detached gun. The entry cursor and **Enter / man gun · Right-click** hint
+appear if it has a vacant crew position. Right-click sends only the needed men;
+partly manned guns can also receive a replacement. Detaching a towed gun returns
+its riding crew and holds the gun at the unloading position. A new move, attack,
+retreat or Stop order cancels a pending remanning order.
 
 ## Mouse
 
 | SS2 | Status | Under Fire |
 |---|---|---|
-| Left-click / drag: select / box-select | ✅ | Same (Shift adds to selection). Left-click only ever selects — mounting, boarding, manning guns and tow hook-ups are right-click orders |
+| Left-click / drag: select / box-select | ✅ | Same (Shift adds to selection). When Attack ground is armed, left-click places the fire order. Mounting, boarding, manning guns and tow hook-ups remain right-click orders |
 | Right-click: move / contextual action | ✅ | Same; E toggles move vs attack-move stance |
 | Right-click + drag on open terrain | — | The press point is the destination and the arrow sets the formation's final facing. Drag beside the selected formation to rotate it in place. Shift queues the destination/facing order; Ctrl/Cmd retains gather behavior. |
 | Right-click enemy: attack | ✅ | Same |
 | Right-click building with infantry selected: enter | ✅ | Same (right-click only; left-click selects; capacity enforced) |
 | Hover a riderless horse with its linked Ułan selected | — | Shows the green enter cursor; right-click sends the Ułan to the horse's mounting side. The horse itself cannot be selected or controlled. |
 | Select building → unload occupants | ✅ | Select a garrisoned building (click it with nothing else selected): right-click terrain = **all** file out and move there; right-click the building itself = **one** soldier steps out |
-| Cursor edge scrolling | ✅ | Same (+ WASD/arrow keys, wheel zoom) |
+| Cursor edge scrolling | ✅ | Same (+ arrow keys; + / − zoom) |
 | Double right-click ground | — | Retreat order (Under Fire extra) |
 | Double right-click enemy armor | — | Selected foot infantry close assault: they charge the vehicle and throw AT grenade bundles from short range (2 per man). Single right-click with rifle infantry refuses instead: small arms cannot hurt real armor, and riflemen automatically seek cover, kneel, or give ground when a tank approaches. |
 
@@ -84,3 +99,23 @@ unit stats but are not drawn in the building stack yet.)
 - Mid-mission save/load (F11/F12).
 - Morale (blue) and experience (red) bars in the garrison stack.
 - Hold-M tactical map overlay (we have a permanent minimap).
+
+## Tactical command panel
+
+Orders are on the left, the selected unit roster spans the middle, and the field
+map is on the right. Each square groups one unit type: the upper-right number
+is its count; blue badges show assigned control-group numbers. A dashed badge
+with a small count means only that many units belong to the group. Health is
+the group average, with a light marker for the weakest unit; the lower thin
+bar shows ammunition. Hover gives exact counts and health. Click a square to
+select that type, or Shift-click to remove it. Ctrl/Cmd+0–9 assigns a group;
+0–9 recalls it. The cards scroll when a large roster exceeds the space.
+
+Move, Attack move and Attack ground are always visible. Formation, readiness
+and group pace open from the compact Formation & readiness control. Selecting
+mortars reveals separate Ranged and Rapid buttons and an area-radius slider.
+Press F or Attack ground, then click terrain with either mouse button. Escape
+or Cancel exits targeting; Stop also cancels unfinished route searches.
+
+The HUD uses the existing update cadence and reuses card elements while health
+changes. Its SVG silhouettes require no extra model renders or texture loads.

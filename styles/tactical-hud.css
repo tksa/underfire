@@ -1,0 +1,131 @@
+/* Field-map / unit-card / orders layout, with primary orders always in view. */
+#hudBar {
+    --hud-height: 218px;
+    height: var(--hud-height);
+    display: grid;
+    grid-template-columns: 354px minmax(0, 1fr) 148px;
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0;
+    padding: 8px 10px;
+    background: linear-gradient(180deg, #282c29, #181d1b);
+    border-top: 1px solid #8b8765;
+    box-shadow: 0 -5px 18px #0006, inset 0 3px 0 #1116;
+    color: #e3e3d5;
+    font-family: var(--font-ui);
+}
+#hudBar [hidden] { display: none !important; }
+#hudBar button, #hudBar input { font: inherit; }
+#hudBar button:focus-visible, #hudBar input:focus-visible { outline: 2px solid #dfc985; outline-offset: 2px; }
+#hudBar .hud-section { padding: 0 12px; justify-content: flex-start; border-right: 1px solid #64706240; }
+#hudBar .hud-title { color: #a8af9f; font-size: 10px; line-height: 18px; letter-spacing: 1.2px; margin: 0 0 5px; }
+#hudBar .minimap-section { grid-column: 3; grid-row: 1; padding: 0 0 0 10px; border-right: 0; display: flex; gap: 0; align-items: stretch; }
+.map-heading { display: flex; justify-content: space-between; }
+.map-heading span { color: #ddd2a9; font-variant-numeric: tabular-nums; letter-spacing: .3px; }
+#hudBar .minimap-frame { width: 100%; height: 140px; flex: 1; min-height: 80px; border: 1px solid #767a65; box-shadow: 0 0 0 3px #0b100e; }
+#hudBar .overlay-toggles { width: 100%; justify-content: space-between; margin-top: 8px; gap: 3px; }
+#hudBar .ov-label { display: none; }
+#hudBar .ov-chip { font-size: 10px; padding: 3px 6px; border-color: #68706070; }
+#hudBar .info-section { grid-column: 2; grid-row: 1; overflow: hidden; padding: 0 12px; min-height: 0; }
+.selection-heading { display: flex; justify-content: space-between; gap: 8px; align-items: center; color: #aab49e; font-size: 10px; line-height: 19px; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 5px; }
+.selection-heading .unit-count { color: #d9c691; letter-spacing: 0; text-transform: none; }
+.unit-roster { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: 1px 3px 3px 1px; }
+#hudBar .unit-card { position: relative; flex: 0 0 76px; height: 76px; padding: 0; overflow: hidden; cursor: pointer; border: 1px solid #77886a; border-radius: 2px; background: radial-gradient(ellipse at 50% 30%, #4c5748, #252e27 85%); color: #e0e5d4; }
+#hudBar .unit-card:hover { border-color: #e1cf94; background: #4a5940; }
+.card-icon { position: absolute; inset: 6px 11px auto; height: 31px; color: #c7ceba; filter: drop-shadow(0 2px 1px #0008); }
+.card-icon svg { width: 100%; height: 100%; }
+.card-count { position: absolute; right: 3px; top: 1px; z-index: 1; font-size: 14px; line-height: 16px; text-shadow: 0 1px 3px #000; color: #fff4d5; }
+.card-groups { position: absolute; top: 2px; left: 2px; z-index: 2; display: flex; flex-wrap: wrap; gap: 2px; max-width: 53px; }
+.group-badge { background: #426079; color: #e4eff8; border: 1px solid #8babc1; padding: 0 3px; font: 600 10px/12px var(--font-ui); border-radius: 1px; }
+.group-badge.partial { border-style: dashed; }
+.group-badge small { font-size: 8px; }
+.card-name { position: absolute; top: 36px; left: 2px; right: 2px; font-size: 10px; line-height: 10px; height: 20px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.card-health { position: absolute; bottom: 8px; left: 4px; right: 4px; display: flex; justify-content: space-between; color: #a5b897; font-size: 8px; line-height: 9px; }
+.card-health strong { font-weight: 500; color: #dce6cd; }
+.card-meter, .card-ammo { position: absolute; bottom: 4px; left: 3px; right: 3px; height: 3px; background: #11170e; overflow: hidden; }
+.card-meter i, .card-ammo i { display: block; height: 100%; background: #9cb782; }
+.card-meter b { position: absolute; width: 2px; top: 0; bottom: 0; background: #f5ead0; transform: translateX(-2px); }
+.card-ammo { bottom: 1px; height: 2px; }
+.card-ammo i { background: #b4a374; }
+#hudBar .unit-card.damaged { border-color: #bc9462; }
+#hudBar .unit-card.critical { border-color: #cb7660; }
+.unit-card.damaged .card-meter i { background: #c0a466; }
+.unit-card.critical .card-meter i { background: #cc806b; }
+.selection-detail { min-height: 19px; padding-top: 4px; color: #b6bfa9; font-size: 10px; line-height: 13px; }
+.selection-empty { color: #9fa798; font-size: 12px; line-height: 1.5; padding: 18px 5px; }
+.selection-empty strong { display: block; color: #dadbca; font: 600 21px var(--font-heading); margin-bottom: 6px; }
+#hudBar .cmd-section { grid-column: 1; grid-row: 1; min-width: 0; padding: 0 10px 0 0; position: relative; }
+.command-heading { display: flex; justify-content: space-between; }
+.command-heading span { letter-spacing: 0; text-transform: none; color: #c7cebd; }
+.primary-orders { display: grid; grid-template-columns: .82fr 1fr 1.15fr; gap: 5px; }
+#hudBar .primary-orders button { display: flex; flex-direction: row; gap: 4px; min-height: 29px; padding: 4px; justify-content: center; color: #dce0d1; font-size: 11px; text-transform: none; letter-spacing: 0; border: 1px solid #66705f; border-radius: 2px; background: linear-gradient(#3e473b, #2b332c); cursor: pointer; }
+#hudBar .primary-orders button.active { background: #4f6142; border-color: #a0b48a; color: #f1f3d9; box-shadow: inset 0 -2px #1c2b17; }
+#hudBar .primary-orders #stanceAttack.active { background: #694e36; border-color: #c49566; }
+#hudBar .primary-orders .ground-order { color: #f0dca6; border-color: #a38a57; background: linear-gradient(#5d5036, #3c3427); }
+#hudBar .primary-orders .ground-order.armed { color: #fff0bd; background: #8b6237; border-color: #e9c483; }
+#hudBar kbd { font: 9px var(--font-ui); border: 1px solid #ced3b638; border-radius: 2px; padding: 1px 3px; color: #c1c7b6; background: #0002; }
+#hudBar .cmd-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: none; grid-auto-rows: 27px; flex: 0; margin-top: 5px; gap: 4px; }
+#hudBar .cmd-btn { border-radius: 2px; color: #c5cdbd; background: linear-gradient(#303831, #242b25); border: 1px solid #56624e80; box-shadow: none; }
+#hudBar .cmd-btn:hover, #hudBar .primary-orders button:hover { border-color: #d2c28d; color: #f1efdb; background: #535944; }
+#hudBar .cmd-grid .cmd-btn { flex-direction: row; justify-content: flex-start; padding: 3px 2px; gap: 2px; justify-content: center; }
+#hudBar .cmd-grid .cmd-icon { display: none; font-size: 15px; line-height: 1; }
+#hudBar .cmd-grid .cmd-label { font-size: 10px; letter-spacing: 0; line-height: 1.05; text-transform: none; }
+#hudBar .cmd-grid kbd { position: absolute; right: 2px; bottom: 2px; font-size: 7px; border: 0; padding: 0; background: none; color: #a6ad9688; }
+#hudBar .ui-ico { width: 17px; height: 17px; object-fit: contain; }
+#hudBar .cmd-btn.active, #hudBar .cmd-btn.armed { border-color: #d1bb79; background: #645734; color: #faf0cb; }
+#hudBar .cmd-btn.disabled { opacity: .38; }
+#hudBar #cmdCavalry, #hudBar #cmdTow, #hudBar #cmdCarrier, #hudBar #cmdUnload { order: 0; }
+.mortar-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 4px 0 0; }
+.fire-method-label { font-size: 10px; color: #acb5a2; margin-right: 2px; }
+#hudBar .mortar-controls .cmd-btn { min-height: 23px; padding: 2px 7px; font-size: 11px; }
+.area-control { display: grid; grid-template-columns: 1fr auto; gap: 0 7px; margin-left: auto; width: 120px; font-size: 10px; color: #bfc5b4; }
+.area-control output { color: #e6d3a0; font-variant-numeric: tabular-nums; }
+.area-control input { grid-column: 1/-1; width: 100%; height: 12px; accent-color: #c7b47d; cursor: pointer; }
+.command-guidance { margin-top: auto; padding-top: 4px; display: flex; align-items: center; gap: 8px; min-height: 20px; color: #b9c2ac; font-size: 10px; line-height: 1.15; }
+.command-guidance.targeting { color: #f1d08f; }
+.command-guidance button { border: 1px solid #8f7c52; background: #403a2c; color: #e6d2a8; padding: 3px 5px; white-space: nowrap; cursor: pointer; }
+.tactics-menu { position: relative; margin-top: 5px; font-size: 10px; color: #bdc8ae; }
+.tactics-menu summary { cursor: pointer; width: fit-content; padding: 2px 0; }
+.tactics-menu summary:hover { color: #eee0b3; }
+.tactics-section { position: absolute; right: 0; bottom: calc(100% + 8px); width: 295px; padding: 12px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; background: #252e26; border: 1px solid #8e9979; box-shadow: 0 5px 25px #000a; z-index: 20; }
+#hudBar .tactics-section .pace-section { grid-column: 1/-1; }
+#hudBar .primary-orders .stance-icon, #hudBar .primary-orders .cmd-icon { display: none; }
+#hudBar .primary-orders .cmd-label { font-size: 11px; line-height: 1.1; text-transform: none; letter-spacing: 0; }
+#hudBar .tactics-section .hud-section { flex: 0; padding: 0; border: 0; }
+#hudBar .tactics-section .hud-title { font-size: 9px; margin-bottom: 4px; }
+#hudBar .fm-strip, #hudBar .pos-strip { flex-direction: row; gap: 4px; }
+#hudBar .fm-btn, #hudBar .pos-btn { width: 24px; height: 25px; font-size: 16px; border-radius: 2px; color: #b4bfaa; background: #263027; border: 1px solid #5e6b5180; cursor: pointer; }
+#hudBar .fm-btn.active, #hudBar .pos-btn.active { background: #536244; border-color: #aabd84; color: #f3efcf; }
+#hudBar #paceBtn { width: auto; padding: 0 8px; font-size: 11px; }
+#hudBar .hud-log-section { position: absolute; right: 16px; bottom: calc(100% + 10px); width: 300px; min-height: 0; padding: 0; border: 0 !important; pointer-events: none; }
+#hudBar #gameMessages { max-height: 65px; overflow: hidden; color: #e1dfcf; font-size: 11px; line-height: 1.4; text-shadow: 0 1px 3px #000; }
+#hudBar .hud-fold { top: -30px; right: 42px; width: 22px; height: 22px; background: #252d23ed; border-radius: 2px; }
+#hudBar .hud-help-wrap { top: -30px; right: 14px; }
+#hudBar .hud-help-btn { width: 22px; height: 22px; border-radius: 2px; background: #252d23ed; }
+@media (min-width: 1600px) {
+    #hudBar { grid-template-columns: 354px minmax(0, 1fr) 156px; }
+}
+@media (max-width: 1050px) {
+    #hudBar { grid-template-columns: 326px minmax(0, 1fr) 122px; padding: 7px; }
+    #hudBar .info-section { padding: 0 8px; }
+    #hudBar .cmd-section { padding-right: 8px; }
+    #hudBar .ov-chip { font-size: 9px; padding: 3px 4px; }
+    .selection-heading { letter-spacing: 0; font-size: 9px; }
+    .selection-detail { font-size: 9px; }
+    #hudBar .primary-orders button, #hudBar .primary-orders .cmd-label { font-size: 10px; }
+}
+@media (max-width: 700px) {
+    #hudBar { height: 280px; grid-template-columns: minmax(0, 1fr) 102px; grid-template-rows: 108px 150px; row-gap: 8px; }
+    #hudBar .minimap-section { grid-column: 2; grid-row: 1/-1; }
+    #hudBar .info-section { grid-column: 1; grid-row: 1; }
+    #hudBar .cmd-section { grid-column: 1; grid-row: 2; }
+    #hudBar .selection-detail, #hudBar .command-heading, #hudBar .hud-log-section { display: none; }
+    #hudBar .minimap-frame { flex: 0; height: 110px; }
+    #hudBar .overlay-toggles { flex-wrap: wrap; }
+    #hudBar .cmd-grid { grid-auto-rows: 24px; }
+    .selection-heading { line-height: 14px; margin-bottom: 3px; }
+    #hudBar .tactics-menu { margin-top: 2px; }
+    #hudBar .primary-orders kbd { display: none; }
+    .tactics-section { width: 260px; }
+    .area-control { width: 100px; }
+    .fire-method-label { display: none; }
+}

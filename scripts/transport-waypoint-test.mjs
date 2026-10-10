@@ -101,6 +101,7 @@ const results = await page.evaluate((repeats) => {
         if (queueDuringRecovery) {
             for (let i = 0; i < 90 && !truck._truckRecoveryGoal; i++) {
                 Game.gameClock += dt;
+                Game.processVehicleRouteQueue();
                 Game.updateUnit(truck, dt);
                 Game.updateTowing(dt);
             }
@@ -155,8 +156,11 @@ const results = await page.evaluate((repeats) => {
                 blocked: true, type: 'terrain', hit: null,
             });
             Game.gameClock += dt;
+            Game.processVehicleRouteQueue();
             Game.updateUnit(truck, dt);
             Game._sweepVehicleMotion = realSweep;
+            // Recovery rebuilds run on the next frame's route budget.
+            while (Game._vehRouteQueue.length) Game.processVehicleRouteQueue();
             stuckReplanProbeOk = activeOrderIds().join(',') === ids.join(',');
             truck._stuckT = 0;
             truck._stuckReplans = 0;
@@ -186,6 +190,7 @@ const results = await page.evaluate((repeats) => {
         for (let step = 0; step < 3000; step++) {
             Game.gameClock += dt;
             elapsed += dt;
+            Game.processVehicleRouteQueue();
             Game.updateUnit(truck, dt);
             troops.forEach(u => { if (u._inVehicle == null) Game.updateUnit(u, dt); });
             Game.updateTowing(dt);
@@ -222,7 +227,7 @@ const results = await page.evaluate((repeats) => {
                 });
                 previousPathSignature = pathSignature;
             }
-            if (expectPlayerReverse && step % 150 === 0) {
+            if (step % 150 === 0) {
                 trajectory.push({
                     t: +elapsed.toFixed(1), x: +truck.x.toFixed(2), z: +truck.z.toFixed(2),
                     angle: +truck.angle.toFixed(2), speed: +(truck.currentSpeed || 0).toFixed(2),
@@ -303,11 +308,16 @@ const results = await page.evaluate((repeats) => {
             recoveryRestored,
             sawPlayerReverse,
             playerReverseReleased,
-            ...(expectPlayerReverse && failures.length ? { pathEvents, trajectory } : {}),
+            ...(failures.length ? { pathEvents, trajectory } : {}),
         };
     };
 
     const scenarios = [
+        {
+            name: 'shift-appends-before-long-route-is-ready',
+            start: { x: 45, z: 45 }, angle: 0,
+            stops: [{ x: 76, z: 45 }, { x: 76, z: 60 }, { x: 85, z: 60 }],
+        },
         {
             name: 'four-shift-corners-with-boarders',
             start: { x: 45, z: 45 }, angle: 0, boarders: true,

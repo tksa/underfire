@@ -1,0 +1,27 @@
+{
+  "output": "plough.glb",
+  "bytes": 79096,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/construction/entourage/plough/material1.mtl",
+      "sha256": "7f96bd60736fa930b826bf78af18726ccc8d7e864a4adf75dd0bb6892f0f61e9"
+    },
+    {
+      "path": "entity/construction/entourage/plough/plough.def",
+      "sha256": "adce47ede60171d5eee6b455801bf8c9587210f00c33433fcdd85edeccb4e7ea"
+    },
+    {
+      "path": "entity/construction/entourage/plough/plough.mdl",
+      "sha256": "870c6d6a68da768a3283de089ddf6cffb2c41a670b85fec11500ed9d22f02cfe"
+    },
+    {
+      "path": "entity/construction/entourage/plough/plough.ply",
+      "sha256": "64c9e631398d7ffb50692cebce53f2820ae15869cc0e98c02cc5e24659f5418a"
+    },
+    {
+      "path": "texture/common/entourage/plough.dds",
+      "sha256": "5e7ce846ebf314d2762d1e86564af4b30c227e842d93b701a4fd3c78f063cc6d"
+    }
+  ]
+}

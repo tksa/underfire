@@ -1,5 +1,19 @@
 # Bunny CDN Operations
 
+## v0.22.0 release routing
+
+The new unit, infantry and scenery GLBs in this release are explicitly routed
+to the origin by `originOnlyAssets` in `index.html`. CDN write/purge credentials
+were unavailable at deployment, and the CDN did not have these files. Existing
+mirrored assets retain their CDN routing and the CORS-probe origin fallback.
+Origin-only assets also receive the stable release version query; the loading
+manager preserves that route when resolving an already absolute URL.
+
+After uploading these models to Storage and purging the Pull Zone, verify each
+model's CORS headers and SHA-256 against the origin before removing its entry.
+`node scripts/asset-routing-test.mjs` checks this release contract. The general
+CDN contract below remains necessary when enabling CDN delivery for these files.
+
 Production keeps `index.html`, game JavaScript, CSV and JSON on `underfire.io` and routes heavyweight public assets through the Bunny Pull Zone at `https://underfire.b-cdn.net`:
 
 - `models/`

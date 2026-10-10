@@ -1,0 +1,27 @@
+{
+  "output": "farm_cart.glb",
+  "bytes": 122160,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/construction/entourage/telega/mtl01.mtl",
+      "sha256": "f139ce1ed2528e4027ea2dbe2acb68a286eeb8b42c00e950e0f29b63f5eba8c4"
+    },
+    {
+      "path": "entity/construction/entourage/telega/telega.def",
+      "sha256": "f1ef86bf557339c9f5cf5b9af3dc2dd0ae3ba56e5c7fbfd4007407c808b2c659"
+    },
+    {
+      "path": "entity/construction/entourage/telega/telega.mdl",
+      "sha256": "939fa007e6895d56478678604c73c00271d290000a3d3e8ccb37069eb24b3b45"
+    },
+    {
+      "path": "entity/construction/entourage/telega/telega.ply",
+      "sha256": "5c84fb51fc7aa68bf364a242099f5de7b48b3e7b4dbaebb65dfe2c328f975319"
+    },
+    {
+      "path": "texture/common/model/telega_hay.dds",
+      "sha256": "24a312014f8aa30d0b99b5f6e5ac0136c7188eacb689ac1b7d796b9c696c0c4c"
+    }
+  ]
+}

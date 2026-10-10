@@ -9,6 +9,7 @@
  */
 Game.syncUnitMeshes = (dt) => {
     const THREE = Game.THREE;
+    if (Game._paused) dt = 0;
 
     if (Game._updatePathLines) Game._updatePathLines();
     if (Game.recordMoveFrame) Game.recordMoveFrame();
@@ -35,10 +36,13 @@ Game.syncUnitMeshes = (dt) => {
                 unit.speed = 0; unit.currentSpeed = 0;
                 if (Game.isTank(unit.kind)) {
                     unit._isWreck = true;
+                    const charred = new Set();
                     unit.mesh.traverse(o => {
                         if ((o.isMesh || o.isInstancedMesh) && o.material) {
                             const mats = Array.isArray(o.material) ? o.material : [o.material];
                             mats.forEach(m => {
+                                if (charred.has(m)) return;
+                                charred.add(m);
                                 if (m.color) m.color.multiplyScalar(0.28);
                                 if ('metalness' in m) m.metalness = 0.1;
                                 if ('roughness' in m) m.roughness = 1.0;
@@ -91,11 +95,14 @@ Game.syncUnitMeshes = (dt) => {
                     const light = unit.kind === 'hmg' || /^mortar/.test(unit.kind);
                     unit.mesh.rotation.z = light ? 1.25 : 0.22;
                     unit.mesh.position.y = Math.max(0, (unit.y || 0) - 0.05);
+                    const charred = new Set();
                     unit.mesh.traverse(o => {
                         if (o.userData && o.userData.isFieldGunCrewman) o.visible = false;
                         if ((o.isMesh || o.isInstancedMesh) && o.material) {
                             const mats = Array.isArray(o.material) ? o.material : [o.material];
                             mats.forEach(m => {
+                                if (charred.has(m)) return;
+                                charred.add(m);
                                 if (m.color) m.color.multiplyScalar(0.45);
                                 if ('roughness' in m) m.roughness = 1.0;
                             });
@@ -137,8 +144,9 @@ Game.syncUnitMeshes = (dt) => {
 
         // Drive skeletal animation only for visible units. Off-map reinforcements
         // and fog-hidden enemies otherwise consumed mixer/bone work every frame.
-        Game._updateModelAnimation(unit, dt);
-        if (Game.GUN_CREWS && Game.GUN_CREWS[unit.kind] && Game.updateFieldGunCrew) {
+        if (!Game._paused || Game.SOLDIER_FORCE_CLIP) Game._updateModelAnimation(unit, dt);
+        if (!Game._paused && Game.updateVehicleModel) Game.updateVehicleModel(unit, dt);
+        if (!Game._paused && Game.GUN_CREWS && Game.GUN_CREWS[unit.kind] && Game.updateFieldGunCrew) {
             Game.updateFieldGunCrew(unit, dt);
         }
 
@@ -248,7 +256,11 @@ Game.syncUnitMeshes = (dt) => {
                     || (gunNode && gunNode.name === 'Synthetic_Gun' ? 'x' : 'z');
                 const recoilSign = unit.mesh.userData.recoilSign
                     ?? (gunNode && gunNode.name === 'Synthetic_Gun' ? -1 : 1);
-                if (gunNode) {
+                const boundRecoil = unit.mesh.userData.weaponRecoil;
+                if (boundRecoil) {
+                    boundRecoil.node.position.copy(boundRecoil.base)
+                        .addScaledVector(boundRecoil.direction, -rc.gun * envelope);
+                } else if (gunNode) {
                     if (unit._gunBasePos === undefined) unit._gunBasePos = gunNode.position[recoilAxis];
                     gunNode.position[recoilAxis] = unit._gunBasePos + recoilSign * rc.gun * envelope;
                 }
@@ -256,7 +268,8 @@ Game.syncUnitMeshes = (dt) => {
                 unit.recoilTime += dt;
                 if (unit.recoilTime >= rc.dur) {
                     unit.recoilTime = 0;
-                    if (gunNode && unit._gunBasePos !== undefined) {
+                    if (boundRecoil) boundRecoil.node.position.copy(boundRecoil.base);
+                    else if (gunNode && unit._gunBasePos !== undefined) {
                         gunNode.position[recoilAxis] = unit._gunBasePos; // snap back perfectly
                     }
                     if (headNode && unit._headBaseRotX !== undefined) {
@@ -364,97 +377,6 @@ Game.syncUnitMeshes = (dt) => {
             }
         }
     });
-};
-
-/**
- * Update tracer effects (3D lines).
- */
-Game.updateTracers3D = (dt) => {
-    const THREE = Game.THREE;
-
-    for (let i = Game.tracers.length - 1; i >= 0; i--) {
-        const tr = Game.tracers[i];
-        tr.life -= dt;
-
-        if (tr.life <= 0) {
-            if (tr.mesh) {
-                Game.effectsGroup.remove(tr.mesh);
-                tr.mesh.geometry.dispose();
-                tr.mesh.material.dispose();
-            }
-            
-            // Spawn crater based on unit's terrain damage value
-            if (tr.terrainDamage > 0 && typeof Game.spawnCrater === 'function') {
-                const impactRadius = Game.rand(0.6, 1.0) * tr.terrainDamage;
-                const impactDepth = 0.8 * tr.terrainDamage;
-                const cx = tr.tx + Game.rand(-0.3, 0.3);
-                const cz = tr.tz + Game.rand(-0.3, 0.3);
-                Game.spawnCrater(cx, cz, impactRadius, impactDepth);
-            }
-
-            Game.tracers.splice(i, 1);
-            continue;
-        }
-
-        const p = 1 - tr.life / tr.total;
-        const cx = Game.lerp(tr.x, tr.tx, p);
-        const cz = Game.lerp(tr.z, tr.tz, p);
-        const bx = Game.lerp(tr.x, tr.tx, Math.max(0, p - 0.12));
-        const bz = Game.lerp(tr.z, tr.tz, Math.max(0, p - 0.12));
-
-        // Altitude fire (aircraft strafing): y0/y1 give the source and impact
-        // heights and the round slopes down between them; ground fire keeps
-        // the terrain-hugging height as before.
-        const yFor = (pp) => (tr.y0 != null)
-            ? Game.lerp(tr.y0, (tr.y1 != null ? tr.y1 : 0.6), pp)
-            : (Game.getHeight ? Game.getHeight(cx, cz) : 0) + (tr.big ? 0.8 : 0.6);
-
-        if (!tr.mesh) {
-            const tracerY = yFor(p);
-            const color = tr.big ? 0xffd28c : (tr.team === Game.TEAM.FRENCH ? 0xfff5be : 0xffd6aa);
-
-            if (tr.big) {
-                // Tank shell: thick cylinder tracer
-                const len = Math.hypot(cx - bx, cz - bz) || 0.3;
-                const geo = new THREE.CylinderGeometry(0.06, 0.06, len, 4, 1);
-                geo.rotateX(Math.PI / 2); // align along Z
-                const mat = new THREE.MeshBasicMaterial({
-                    color, transparent: true, opacity: 0.95,
-                });
-                tr.mesh = new THREE.Mesh(geo, mat);
-                // Position at midpoint facing direction
-                const midX = (bx + cx) / 2, midZ = (bz + cz) / 2;
-                tr.mesh.position.set(midX, tracerY, midZ);
-                tr.mesh.lookAt(cx, tracerY, cz);
-            } else {
-                // Regular tracer: thin line
-                const geo = new THREE.BufferGeometry().setFromPoints([
-                    new THREE.Vector3(bx, yFor(Math.max(0, p - 0.12)), bz),
-                    new THREE.Vector3(cx, tracerY, cz)
-                ]);
-                const mat = new THREE.LineBasicMaterial({
-                    color, linewidth: 2, transparent: true, opacity: 0.9
-                });
-                tr.mesh = new THREE.Line(geo, mat);
-            }
-            Game.effectsGroup.add(tr.mesh);
-        } else {
-            const tracerY = yFor(p);
-            if (tr.big && tr.mesh.isMesh) {
-                // Update cylinder tracer position and orientation
-                const midX = (bx + cx) / 2, midZ = (bz + cz) / 2;
-                tr.mesh.position.set(midX, tracerY, midZ);
-                tr.mesh.lookAt(cx, tracerY, cz);
-                tr.mesh.material.opacity = Game.clamp(tr.life / tr.total * 2, 0, 0.95);
-            } else if (tr.mesh.geometry.attributes.position) {
-                const positions = tr.mesh.geometry.attributes.position.array;
-                positions[0] = bx; positions[1] = yFor(Math.max(0, p - 0.12)); positions[2] = bz;
-                positions[3] = cx; positions[4] = tracerY; positions[5] = cz;
-                tr.mesh.geometry.attributes.position.needsUpdate = true;
-                tr.mesh.material.opacity = Game.clamp(tr.life / tr.total * 2, 0, 0.9);
-            }
-        }
-    }
 };
 
 /**
@@ -583,31 +505,52 @@ Game._chooseClip = (unit) => {
     // A single threshold flapped walk<->idle several times a second whenever a
     // man hovered around it (one flavour of the "repeating animation" thrash).
     const spd = (unit._dispSpeed != null) ? unit._dispSpeed : (unit.currentSpeed || 0);
-    const loco = spd > (ud._locoOn ? 0.12 : 0.3);
+    const intentional = unit.moving && unit.path?.length;
+    let loco = spd > (ud._locoOn ? 0.12 : intentional || st === 'prone' || st === 'crouch' ? 0.3 : 0.8);
+    // Keep the locomotion state through a short traffic pause, not just its
+    // clip. Resetting it immediately let an aim pose interrupt the existing
+    // 0.7-second clip hold, then restart crouch-walk on the following frame.
+    // Stride playback still reads actual speed, so stopped feet stay stopped.
+    if (loco) ud._locoStopSince = null;
+    else if (ud._locoOn && intentional) {
+        ud._locoStopSince ??= Game.gameClock;
+        loco = Game.gameClock - ud._locoStopSince < 0.7;
+    } else ud._locoStopSince = null;
     ud._locoOn = loco;
+    if (!loco || st === 'prone' || st === 'crouch') {
+        ud._runOn = false; ud._slowGaitSince = null;
+    }
     if (loco) {
         // A prone man on the move is CRAWLING — never the upright walk cycle
         // (a pinned soldier gliding along standing was the standing/prone mixup).
         if (st === 'prone') return pick(['crawl', 'fire_prone', 'prone_idle']) || pick(['walk']) || names[0];
-        // Walk/run pick with HYSTERESIS: break into a run at a firm sprint,
-        // drop back to a walk only once clearly slower. A single threshold
-        // flapped walk<->run twice a second at group-march pace (~3.2 u/s).
-        const fast = st === 'run' || spd > (ud._runOn ? 2.8 : 3.6);
+        if (st === 'crouch') return pick(['crouch_walk', 'crouch', 'walk']) || names[0];
+        // Select a gait at the actor's actual scale, with separate entry/exit
+        // speeds so formation pace and turning do not flap between walk/run.
+        const runThreshold = ud.isSoldier && Game.soldierRunThreshold
+            ? Game.soldierRunThreshold(unit) : (ud._runOn ? 2.8 : 3.6);
+        let fast = st === 'run' || spd > runThreshold;
+        // Short braking pulses on a turn should slow the running cadence,
+        // without replacing the entire body pose twice in the same second.
+        if (!fast && ud._runOn && ud.isSoldier) {
+            ud._slowGaitSince ??= Game.gameClock;
+            fast = Game.gameClock - ud._slowGaitSince < 0.75;
+        } else ud._slowGaitSince = null;
         ud._runOn = fast;
         return (fast && pick(['run'])) || pick(['walk', 'run', 'push', 'move', 'crawl']) || names[0];
     }
-    if (unit.fireTargetId != null) {
+    if ((unit.fireTargetId != null || unit._bombarding || unit._supportFire) && unit.ammo !== 0 && !unit.holdFire) {
         // Prone fires prone, a crouched man fires kneeling (composed clip), and
         // only a standing man uses the standing fire loop. The old fallback
         // order let a crouched man borrow the STANDING fire clip.
-        if (st === 'prone') return pick(['fire_prone', 'fire_crouch', 'fire_stand', 'fire']) || pick(['idle']) || names[0];
-        if (st === 'crouch') return pick(['fire_crouch', 'crouch', 'fire_stand', 'fire']) || pick(['idle']) || names[0];
-        return pick(['fire_stand', 'fire', 'attack', 'fire_crouch']) || pick(['idle']) || names[0];
+        if (st === 'prone') return pick(['prone_idle', 'fire_prone']) || pick(['idle']) || names[0];
+        if (st === 'crouch') return pick(['aim_crouch', 'fire_crouch', 'crouch']) || pick(['idle']) || names[0];
+        return pick(['aim_stand', 'fire_stand', 'fire', 'attack']) || pick(['idle']) || names[0];
     }
     // Idle poses match the stance — a crouched or prone soldier must NOT pop back
     // up into the standing idle (troops "stood up" in bushes the moment they
     // stopped firing).
-    if (st === 'prone') return pick(['fire_prone', 'prone_idle']) || pick(['idle']) || names[0];
+    if (st === 'prone') return pick(['prone_idle', 'fire_prone']) || pick(['idle']) || names[0];
     if (st === 'crouch') return pick(['crouch', 'crouch_idle']) || pick(['idle']) || names[0];
     if (st === 'rest') return pick(['sit', 'crouch']) || pick(['idle']) || names[0];
     return pick(['idle', 'crouch_idle', 'prone_idle']) || names[0];
@@ -654,6 +597,8 @@ Game._conformSelectionRing = (unit, ring) => {
 Game._updateModelAnimation = (unit, dt) => {
     const ud = unit.mesh && unit.mesh.userData;
     if (!ud || !ud.mixer) return;
+    if (ud.isSoldier && Game._restoreSoldierMotion) Game._restoreSoldierMotion(unit);
+    if (ud.isMountedCavalry && Game.restoreMountedWeaponPose) Game.restoreMountedWeaponPose(unit);
     // Mount/dismount are authored one-shots. The ordinary locomotion selector
     // must not replace them before their final pose has completed.
     if (ud.isMountedCavalry && unit._cavalryTransition?.phase === 'animating') {
@@ -662,6 +607,7 @@ Game._updateModelAnimation = (unit, dt) => {
     }
     // Soldier debug override (e.g. RAW-timeline scrub) fully handles the frame.
     if (ud.isSoldier && Game._soldierAnimOverride && Game._soldierAnimOverride(unit, dt)) return;
+    if (Game.animateInfantryAction?.(unit, dt)) return;
     if (ud.actions) {
         const want = Game._chooseClip(unit);
         // Min-hold: a freshly started clip plays for at least a beat before a
@@ -671,9 +617,9 @@ Game._updateModelAnimation = (unit, dt) => {
         // Combat picks and locomotion STARTS react instantly (a delayed walk
         // clip reads as sliding). Switching BETWEEN walk and run is not urgent
         // — it waits out the min-hold, or pace flutter thrashes the two clips.
-        const isLoco = (n) => n === 'walk' || n === 'run' || n === 'crawl';
+        const isLoco = (n) => n === 'walk' || n === 'run' || n === 'crawl' || n === 'crouch_walk';
         const now = Game.gameClock || 0;
-        const isFire = (n) => !!n && (n.startsWith('fire') || n === 'grenade');
+        const isFire = (n) => !!n && (n.startsWith('fire') || n.startsWith('aim_') || n === 'grenade');
         // Locomotion may start at once only for COMMANDED movement or a real
         // sprint; a nudge from a neighbour (separation) is not a reason to
         // break into the walk clip and back within half a second.
@@ -685,28 +631,34 @@ Game._updateModelAnimation = (unit, dt) => {
         // second (the to-and-fro jitter).
         let fireSwitch = want && isFire(want) !== isFire(ud._activeClip);
         if (fireSwitch && now - (ud._fireSwitchT ?? -9) < 1.0) fireSwitch = false;
-        const urgent = want && (locoStart || (isFire(want) && fireSwitch));
+        const lowPose = n => n === 'crawl' || n === 'prone_idle' || n === 'fire_prone'
+            || n === 'crouch' || n === 'crouch_walk' || n === 'aim_crouch' || n === 'fire_crouch';
+        const urgent = want && (locoStart || (isFire(want) && fireSwitch)
+            || (lowPose(want) && !lowPose(ud._activeClip)));
         // A walking man who pauses for a beat (a hull crossing, a kerb wait, a
         // crowd shuffle) keeps his walk cycle: dropping to the idle pose and
         // back within half a second is the stop-go stutter. Hold the locomotion
-        // clip until he has been still for 0.4 s (fire picks still win).
+        // clip until he has been still for 0.7 s (fire picks still win).
         const spdNow = unit._dispSpeed != null ? unit._dispSpeed : (unit.currentSpeed || 0);
         if (spdNow > 0.12) ud._stillSince = null;
         else if (ud._stillSince == null) ud._stillSince = now;
         const briefPause = isLoco(ud._activeClip) && !isLoco(want) && !isFire(want)
-            && ud._stillSince != null && now - ud._stillSince < 0.4;
+            && ud._stillSince != null && now - ud._stillSince < 0.7;
         const held = !briefPause && now - (ud._clipSince ?? -9) > 0.5;      // min-hold for everything else
-        if (want && want !== ud._activeClip && (isFire(want) !== isFire(ud._activeClip)) && !fireSwitch && !held) {
-            // waiting out the fire-switch limiter
+        if (want && want !== ud._activeClip && (isFire(want) !== isFire(ud._activeClip))
+            && !fireSwitch && !held && !locoStart) {
+            // Target flicker waits out the limiter; a move order must release
+            // the firing pose immediately, even just after acquiring a target.
         } else if (want && (want === ud._activeClip || urgent || held)) {
             if (want !== ud._activeClip && isFire(want) !== isFire(ud._activeClip)) ud._fireSwitchT = now;
             // Transitions in/out of the prone pose fade FAST: a slow blend
             // between a standing and a lying clip reads as a half-standing
             // ghost for a beat (the "standing/prone look" when hitting the dirt).
             const proneHop = want === 'fire_prone' || ud._activeClip === 'fire_prone'
-                || want === 'crawl' || ud._activeClip === 'crawl';
+                || want === 'crawl' || ud._activeClip === 'crawl'
+                || want === 'prone_idle' || ud._activeClip === 'prone_idle';
             const fade = !ud.isSoldier ? 0.25
-                : proneHop ? 0.12 : (Game.SOLDIER_POSTURE_FADE || 0.3);
+                : proneHop ? 0.12 : locoStart ? 0.18 : (Game.SOLDIER_POSTURE_FADE || 0.3);
             Game._playClip(unit, want, fade);
         }
     }
@@ -715,9 +667,13 @@ Game._updateModelAnimation = (unit, dt) => {
         Game.updateCavalryAnimationSpeed(unit);
     }
     ud.mixer.update(dt);
+    if (ud.isSoldier && Game._captureSoldierMotion) Game._captureSoldierMotion(unit);
     // Procedural walk legs (the baked clip has no stride) — override the clip's
     // static legs AFTER the mixer writes them.
     if (ud.isSoldier && Game._soldierProceduralLegs) Game._soldierProceduralLegs(unit, dt);
+    if (ud.isSoldier && Game.alignSoldierWeapon) Game.alignSoldierWeapon(unit, dt);
+    if (ud.isSoldier && Game._soldierWeaponMotion) Game._soldierWeaponMotion(unit);
+    if (ud.isMountedCavalry && Game.alignMountedWeapon) Game.alignMountedWeapon(unit, dt);
 };
 
 Game._getSmokeTex = () => {
@@ -814,9 +770,11 @@ Game._getScorchTex = () => {
 };
 
 // Record a burn mark. Radius scales with the blast; oldest scars retire first.
-Game.addScorch = (x, z, r = 1.5) => {
+Game.addScorch = (x, z, r = 1.5, surface = 'soot') => {
     if (!Game.scorchCfg.enable || !Game.THREE || !Game.effectsGroup) return;
-    Game.scorchDecals.push({ x, z, r, rot: Game.rand(0, Math.PI * 2), age: 0, mesh: null });
+    const old = Game.scorchDecals.find(s => s.surface === surface && Game.distSq(s.x,s.z,x,z) < Math.min(s.r,r)**2*.5);
+    if (old) return;
+    Game.scorchDecals.push({ x, z, r, surface, rot: Game._tracerRandom()*Math.PI*2, age: 0, mesh: null });
     // Retire oldest beyond the cap.
     while (Game.scorchDecals.length > Game.scorchCfg.max) {
         const old = Game.scorchDecals.shift();
@@ -834,7 +792,7 @@ Game.updateScorch3D = (dt) => {
     for (const s of Game.scorchDecals) {
         s.age += dt;
         if (!s.mesh) {
-            const geo = new THREE.PlaneGeometry(s.r * 2.4, s.r * 2.4);
+            const geo = new THREE.PlaneGeometry(s.r * 2.4, s.r * 2.4, 8, 8);
             geo.rotateX(-Math.PI / 2);
             const mat = new THREE.MeshBasicMaterial({
                 map: Game._getScorchTex(),
@@ -842,12 +800,14 @@ Game.updateScorch3D = (dt) => {
                 polygonOffset: true, polygonOffsetFactor: -4,
             });
             s.mesh = new THREE.Mesh(geo, mat);
-            s.mesh.rotation.y = s.rot;
-            s.mesh.position.set(s.x, (Game.getHeight ? Game.getHeight(s.x, s.z) : 0) + 0.04, s.z);
+            geo.rotateY(s.rot);
+            s.mesh.position.set(s.x, 0, s.z);
+            Game.conformScorch(s);
             s.mesh.renderOrder = 2;
             s.mesh.raycast = () => { };
             Game.effectsGroup.add(s.mesh);
         }
+        if (s.groundRevision !== Game._craterPerf.batches) Game.conformScorch(s);
         // Quick fade-in, then hold at the configured opacity.
         const target = Game.scorchCfg.opacity;
         s.mesh.material.opacity = Math.min(target, s.age * target * 3.0);
@@ -1231,8 +1191,36 @@ Game._dustColorAt = (x, z) => {
     }
 };
 
-Game.updateSmoke3D = (dt) => {
+// Sprites share one Three.js geometry, including unrelated markers. Disposing
+// it when a puff expires invalidates every sprite's GPU buffers. Keep that
+// geometry alive and reuse independent materials for successive effects.
+Game._effectSpritePools = { smoke: [], flash: [] };
+Game._acquireEffectSprite = (kind, color, opacity) => {
     const THREE = Game.THREE;
+    const pool = Game._effectSpritePools[kind];
+    let sprite = pool.pop();
+    if (!sprite) {
+        sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: kind === 'flash' ? Game._getFlashTex() : Game._getSmokeTex(),
+            transparent: true, depthWrite: false,
+            blending: kind === 'flash' ? THREE.AdditiveBlending : THREE.NormalBlending,
+        }));
+    }
+    sprite.material.color.setHex(color);
+    sprite.material.opacity = opacity;
+    sprite.material.rotation = Math.random() * Math.PI * 2;
+    sprite.scale.setScalar(1);
+    return sprite;
+};
+Game._releaseEffectSprite = (kind, sprite) => {
+    sprite.removeFromParent();
+    const pool = Game._effectSpritePools[kind];
+    // Limit idle memory, not the number of visible effects in a battle.
+    if (pool.length < (kind === 'flash' ? 128 : 256)) pool.push(sprite);
+    else sprite.material.dispose();
+};
+
+Game.updateSmoke3D = (dt) => {
     const lifeMul = Game.fxDustLife || 1;
     const opMul = (Game.fxDustOpacity != null) ? Game.fxDustOpacity : 1;
 
@@ -1245,9 +1233,8 @@ Game.updateSmoke3D = (dt) => {
 
         if (s.life <= 0) {
             if (s.mesh) {
-                Game.effectsGroup.remove(s.mesh);
-                s.mesh.geometry.dispose();
-                s.mesh.material.dispose();
+                Game._releaseEffectSprite('smoke', s.mesh);
+                s.mesh = null;
             }
             Game.smoke.splice(i, 1);
             continue;
@@ -1259,15 +1246,7 @@ Game.updateSmoke3D = (dt) => {
             const shade = (s.tint != null) ? s.tint
                 : (s.dust && Game._dustColorAt) ? Game._dustColorAt(s.x, s.z)
                     : (s.r > 1.2 ? 0x55504a : 0x8a8782);
-            const mat = new THREE.SpriteMaterial({
-                map: Game._getSmokeTex(),
-                color: shade,
-                transparent: true,
-                opacity: 0.0,
-                depthWrite: false,
-            });
-            mat.rotation = Math.random() * Math.PI * 2;
-            s.mesh = new THREE.Sprite(mat);
+            s.mesh = Game._acquireEffectSprite('smoke', shade, 0);
             // baseY: explicit spawn height (aircraft trails); default = ground.
             s._baseY = (s.baseY != null) ? s.baseY
                 : (Game.getHeight ? Game.getHeight(s.x, s.z) : 0) + 0.5;
@@ -1298,26 +1277,16 @@ Game.updateSmoke3D = (dt) => {
 
             if (f.life <= 0) {
                 if (f.mesh) {
-                    Game.effectsGroup.remove(f.mesh);
-                    f.mesh.geometry.dispose();
-                    f.mesh.material.dispose();
+                    Game._releaseEffectSprite('flash', f.mesh);
+                    f.mesh = null;
                 }
                 Game.muzzleFlashes.splice(i, 1);
                 continue;
             }
 
             if (!f.mesh) {
-                const mat = new THREE.SpriteMaterial({
-                    map: Game._getFlashTex(),
-                    color: f.flame ? 0xff7a2e : 0xffcc66,
-                    transparent: true,
-                    opacity: f.flame ? 0.0 : 0.95,
-                    blending: THREE.AdditiveBlending,
-                    depthWrite: false,
-                });
-                mat.rotation = Math.random() * Math.PI * 2;
-                f.mesh = new THREE.Sprite(mat);
-                f._baseY = (Game.getHeight ? Game.getHeight(f.x, f.z) : 0) + (f.flame ? 0.35 : 0.7);
+                f.mesh = Game._acquireEffectSprite('flash', f.flame ? 0xff7a2e : 0xffcc66, f.flame ? 0 : 0.95);
+                f._baseY = f.y ?? ((Game.getHeight ? Game.getHeight(f.x, f.z) : 0) + (f.flame ? 0.35 : 0.7));
                 f.mesh.position.set(f.x, f._baseY, f.z);
                 Game.effectsGroup.add(f.mesh);
             } else if (f.flame) {
@@ -1673,6 +1642,9 @@ Game._craterPerf = Game._craterPerf || { queued: 0, dropped: 0, batches: 0, maxB
 
 Game.spawnCrater = (wx, wz, radius, depth) => {
     if (!Game.terrainMesh || radius <= 0 || depth <= 0) return;
+    if (['water','road','yard','house','wall'].includes(Game.getTileAtWorld?.(wx,wz)?.type)) return;
+    radius = Game.clamp(radius, .2, 3.5);
+    depth = Math.min(depth, radius * .14, .32);
     const impact = { wx, wz, radius, depth };
     // Several rounds landing on effectively the same vertex patch are one visual
     // crater, not separate full jobs. Preserve the largest rim and deepen gently.
@@ -1680,7 +1652,7 @@ Game.spawnCrater = (wx, wz, radius, depth) => {
         Game.distSq(item.wx, item.wz, wx, wz) < Math.max(item.radius, radius) ** 2 * 0.35);
     if (nearby) {
         nearby.radius = Math.max(nearby.radius, radius);
-        nearby.depth = Math.min(Math.max(nearby.depth, depth) + Math.min(nearby.depth, depth) * 0.25, 2.4);
+        nearby.depth = Math.max(nearby.depth, depth);
         return;
     }
     if (Game._craterQueue.length >= Game.MAX_CRATER_QUEUE) {
@@ -1721,6 +1693,13 @@ Game.updateCraterDeformations = (dt) => {
     const z0 = pos.getZ(0), z1 = pos.getZ(segZ * stride);
     const gridX = value => (value - x0) / (x1 - x0) * segX;
     const gridZ = value => (value - z0) / (z1 - z0) * segZ;
+    if (Game._terrainDeformation?.geo !== geo) {
+        Game._terrainDeformation = { geo, base: new Float32Array(pos.count),
+            delta: new Float32Array(pos.count), colors: col?.array.slice(), segX, segZ, x0, x1, z0, z1 };
+        for(let i=0;i<pos.count;i++)Game._terrainDeformation.base[i]=pos.getY(i);
+    }
+    const ground=Game._terrainDeformation;
+    const cell=Math.max(Math.abs((x1-x0)/segX),Math.abs((z1-z0)/segZ));
     let changed = false, positionChanged = false;
     let minChangedY = Infinity, maxChangedY = -Infinity;
     const sphere = geo.boundingSphere;
@@ -1729,8 +1708,8 @@ Game.updateCraterDeformations = (dt) => {
     for (const impact of batch) {
         const localX = impact.wx - Game.WORLD_W / 2;
         const localZ = impact.wz - Game.WORLD_H / 2;
-        const craterRadius = impact.radius * 0.6;
-        const scorchRadius = Math.max(2.0, craterRadius * 2.0);
+        const craterRadius = impact.radius;
+        const scorchRadius = craterRadius * 1.3;
         const xa = gridX(localX - scorchRadius), xb = gridX(localX + scorchRadius);
         const za = gridZ(localZ - scorchRadius), zb = gridZ(localZ + scorchRadius);
         const minX = Game.clamp(Math.floor(Math.min(xa, xb)), 0, segX);
@@ -1748,13 +1727,17 @@ Game.updateCraterDeformations = (dt) => {
                 const distSq = dx * dx + dz * dz;
                 if (distSq > scorchSq) continue;
                 const dist = Math.sqrt(distSq);
-                if (distSq <= craterSq) {
+                if (distSq <= craterSq && craterRadius >= cell * 1.5) {
                     const t = dist / craterRadius;
                     const bowl = Math.cos(t * Math.PI * 0.5) ** 2;
                     const rim = Math.max(0, 1 - Math.abs(t - 0.82) / 0.18) ** 2;
                     const noise = 0.85 + Math.sin(vx * 13.7 + vz * 7.3) * 0.15;
-                    const nextY = pos.getY(i)
-                        + (-impact.depth * bowl + impact.depth * 0.15 * rim) * noise;
+                    const desired = (-impact.depth * bowl + impact.depth * .10 * rim) * noise;
+                    // Repeated shelling saturates at the largest local bowl.
+                    // It cannot dig a bottomless spike into one grid vertex.
+                    const delta = Math.max(-.32, Math.min(ground.delta[i], desired));
+                    ground.delta[i] = delta;
+                    const nextY = ground.base[i] + delta;
                     pos.setY(i, nextY);
                     positionChanged = true;
                     minChangedY = Math.min(minChangedY, nextY);
@@ -1768,11 +1751,11 @@ Game.updateCraterDeformations = (dt) => {
                 }
                 if (col) {
                     const st = dist / scorchRadius;
-                    const dark = 0.42 + 0.58 * st ** 1.6;
+                    const dark = .78 + .22 * st ** 1.6;
                     col.setXYZ(i,
-                        Math.max(col.getX(i) * dark, 0.18),
-                        Math.max(col.getY(i) * dark, 0.15),
-                        Math.max(col.getZ(i) * dark, 0.12));
+                        Math.min(col.getX(i), ground.colors[i*3] * dark),
+                        Math.min(col.getY(i), ground.colors[i*3+1] * dark),
+                        Math.min(col.getZ(i), ground.colors[i*3+2] * dark));
                 }
                 changed = true;
             }
@@ -1782,8 +1765,7 @@ Game.updateCraterDeformations = (dt) => {
     if (changed) {
         pos.needsUpdate = true;
         if (col) col.needsUpdate = true;
-        geo.computeVertexNormals();
-        geo.attributes.normal.needsUpdate = true;
+        if (positionChanged) { geo.computeVertexNormals(); geo.attributes.normal.needsUpdate = true; }
         // Preserve fast local deformation without paying for two additional
         // full-geometry bounds scans. Existing bounds only need to expand: x/z
         // never change, and the old sphere already contains every old vertex.
@@ -1956,6 +1938,14 @@ Game.updateHUD = () => {
                 : (allUnmounted ? 'Return to the horse and mount' : 'Dismount cavalry'));
     }
 
+    const mortarButton = document.getElementById('cmdMortarMethod');
+    if (mortarButton) {
+        const mortars = Game.selectedPlayerUnits().filter(Game.isMortar);
+        mortarButton.style.display = mortars.length ? 'flex' : 'none';
+        mortarButton.querySelector('.cmd-label').textContent = 'Ranged';
+        mortarButton.title = 'Ranged fire: sight first; observed impacts improve accuracy.';
+    }
+
     // Hold button lights up while the selection is holding fire
     const holdBtn = document.getElementById('cmdHold');
     if (holdBtn) {
@@ -2073,66 +2063,8 @@ Game.updateHUD = () => {
     `;
     }
 
-    // Selected panel
-    if (Game.hud.selectedPanel) {
-        const selected = Game.selectedPlayerUnits();
-        if (!selected.length) {
-            Game.hud.selectedPanel.innerHTML = `
-        <div class="hud-title">Selected</div>
-        <div class="hud-text muted">No friendly unit selected.</div>
-      `;
-        } else if (selected.length === 1) {
-            const u = selected[0];
-            const hpPct = Math.round(u.hp / u.maxHp * 100);
-            const isV = Game.isTank(u.kind);
-            const fuelStr = isV ? ` • Fuel ${Math.round(u.fuel)}` : '';
-            const hasAmmo = u.maxAmmo > 0;
-            const ammoPct = hasAmmo ? Math.round(u.ammo / u.maxAmmo * 100) : 100;
-            const ammoOut = hasAmmo && u.ammo === 0;
-            const ammoLow = hasAmmo && u.ammo > 0 && ammoPct <= 25;
-            const ammoColor = ammoOut ? '#ff5a4d' : (ammoLow ? '#f5a623' : '#6fd06f');
-            const statusFlags = [];
-            if (u.tracksDisabled) statusFlags.push('⚠ TRACKS');
-            if (u.engineDamaged) statusFlags.push('🔥 ENGINE');
-            if (u.turretDamaged) statusFlags.push('⚠ TURRET JAMMED');
-            if (ammoOut) statusFlags.push('⛔ OUT OF AMMO — can\'t fire');
-            else if (ammoLow) statusFlags.push('⚠ LOW AMMO');
-            const ammoText = hasAmmo
-                ? `<span style="color:${ammoColor};font-weight:600">Ammo ${u.ammo}/${u.maxAmmo}</span>`
-                : 'Ammo —';
-            const description = String(u.description || '').replace(/[&<>"']/g, ch => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-            })[ch]);
-            Game.hud.selectedPanel.innerHTML = `
-        <div class="hud-title">Selected</div>
-        <div class="hud-unit-name">${u.label}</div>
-        ${description ? `<div class="hud-text muted">${description}</div>` : ''}
-        <div class="hud-text">Move: ${(Game.STANCE_LABEL && Game.STANCE_LABEL[u.stance]) || u.stance} • Fire: ${u.holdFire ? '<span style="color:#ff9a4d;font-weight:600">HOLD</span>' : 'free'} • ${u.behavior || 'defensive'}</div>
-        <div class="hud-text">HP ${Math.round(u.hp)} • ${ammoText}${fuelStr} • XP ${Math.round(u.experience || 0)}</div>
-        ${statusFlags.length ? `<div class="hud-text" style="color:#ff6b5e;font-weight:600">${statusFlags.join(' &nbsp; ')}</div>` : ''}
-        <div class="hud-bar"><div class="hud-bar-fill hp" style="width:${hpPct}%"></div></div>
-        ${hasAmmo ? `<div class="hud-bar"><div class="hud-bar-fill" style="width:${ammoPct}%;background:${ammoColor}"></div></div>` : ''}
-        <div class="hud-bar"><div class="hud-bar-fill supp" style="width:${Math.round(u.suppressionValue)}%"></div></div>
-      `;
-        } else {
-            const counts = {};
-            selected.forEach(u => counts[u.label] = (counts[u.label] || 0) + 1);
-            const lines = Object.entries(counts).slice(0, 5).map(([k, v]) => `${k}: ${v}`).join(' • ');
-            const avgHp = Math.round(selected.reduce((s, u) => s + u.hp / u.maxHp, 0) / selected.length * 100);
-            const armed = selected.filter(u => u.maxAmmo > 0);
-            const out = armed.filter(u => u.ammo === 0).length;
-            const low = armed.filter(u => u.ammo > 0 && u.ammo <= u.maxAmmo * 0.25).length;
-            const ammoWarn = out || low
-                ? `<div class="hud-text" style="color:#ff6b5e;font-weight:600">${out ? `⛔ ${out} out of ammo` : ''}${out && low ? ' • ' : ''}${low ? `⚠ ${low} low` : ''}</div>`
-                : '';
-            Game.hud.selectedPanel.innerHTML = `
-        <div class="hud-title">Selected</div>
-        <div class="hud-unit-name">${selected.length} units (${avgHp}% avg HP)</div>
-        <div class="hud-text">${lines}</div>
-        ${ammoWarn}
-      `;
-        }
-    }
+    Game.renderSelectionCard(Game.selectedPlayerUnits());
+    Game.updateCommandDeck();
 
     // Objective ring pulse
     if (Game.objectiveRing) {

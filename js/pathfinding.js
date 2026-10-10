@@ -94,9 +94,9 @@ Game.tileCost = (unit, tx, ty, angle = unit.angle || 0, obstacleCtx = null) => {
                     ? Game._vehicleCollisionOBBs(unit, p.x, p.z, angle)
                     : [Game._vehicleOBB(unit, p.x, p.z, angle)];
                 for (const other of obstacleCtx.vehicles) {
-                    const otherBodies = Game._vehicleCollisionOBBs
+                    const otherBodies = obstacleCtx.vehicleBodies?.get(other.id) || (Game._vehicleCollisionOBBs
                         ? Game._vehicleCollisionOBBs(other)
-                        : [Game._vehicleOBB(other)];
+                        : [Game._vehicleOBB(other)]);
                     for (const body of bodies) for (const otherBody of otherBodies) {
                         if (Game._obbPenetration(body, otherBody, 0.20)) return Infinity;
                     }
@@ -132,6 +132,7 @@ Game.tileCost = (unit, tx, ty, angle = unit.angle || 0, obstacleCtx = null) => {
 Game._buildDynObstacles = (unit) => {
     const set = new Set();
     const vehicles = [];
+    const vehicleBodies = new Map();
     const T = Game.TILE;
     for (const o of Game.units) {
         if (!o.alive || o.id === unit.id) continue;
@@ -147,6 +148,7 @@ Game._buildDynObstacles = (unit) => {
         const bodies = Game._vehicleCollisionOBBs
             ? Game._vehicleCollisionOBBs(o)
             : [Game._vehicleOBB(o)];
+        vehicleBodies.set(o.id, bodies);
         for (const body of bodies) {
             const rx = Math.abs(body.fx) * body.hl + Math.abs(body.rx) * body.hw + 0.4;
             const rz = Math.abs(body.fz) * body.hl + Math.abs(body.rz) * body.hw + 0.4;
@@ -175,10 +177,18 @@ Game._buildDynObstacles = (unit) => {
     } else {
         reach = (unit.size || 0.6) * 1.3 + 0.7;   // circular (cavalry) footprint + margins
     }
-    return { tiles: set, vehicles, reach };
+    return { tiles: set, vehicles, vehicleBodies, reach };
 };
 
-Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0, nodeBudget = null) => {
+Game.findPath = (...args) => {
+    const search = Game.findPathSteps(...args);
+    let step; do { step = search.next(); } while (!step.done);
+    return step.value;
+};
+
+// The exact same search can be drained synchronously for short local queries,
+// or resumed across frames for player orders. No partial route is committed.
+Game.findPathSteps = function* (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0, nodeBudget = null) {
     const obstacleCtx = Game._buildDynObstacles(unit);
     const start = Game.tileAtWorld(startX, startZ);
     const requestedEnd = Game.tileAtWorld(endX, endZ);
@@ -210,6 +220,7 @@ Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0,
         let found = null, bestD = Infinity;
         for (let radius = 1; radius <= 6 && !found; radius++) {
             for (let dy = -radius; dy <= radius; dy++) {
+                yield;
                 for (let dx = -radius; dx <= radius; dx++) {
                     const tx = end.tx + dx, ty = end.ty + dy;
                     if (!endFits(tx, ty)) continue;
@@ -275,6 +286,7 @@ Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0,
         const currentKey = keyFor(current.tx, current.ty, current.dir);
         if (closed.has(currentKey)) continue;
         closed.add(currentKey); expanded++;
+        if (expanded % 8 === 0) yield;
         if (current.h < best.h) best = current;
         if (current.tx === end.tx && current.ty === end.ty) { reached = current; break; }
 
@@ -357,7 +369,7 @@ Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0,
                 last.x = endX; last.z = endZ; last._exactGoal = true;
             }
         }
-        return Game.smoothVehiclePath(unit, startX, startZ, path, obstacleCtx, startAngle);
+        return yield* Game.smoothVehiclePathSteps(unit, startX, startZ, path, obstacleCtx, startAngle);
     }
     if (isMounted && Game.smoothCavalryPath) {
         const last = path[path.length - 1] || { x: startX, z: startZ };
@@ -365,9 +377,55 @@ Game.findPath = (unit, startX, startZ, endX, endZ, startAngle = unit.angle || 0,
             && Game.segmentPassable(unit, last.x, last.z, endX, endZ, { obstacleCtx })) {
             path.push({ x: endX, z: endZ, _exactGoal: true });
         }
-        return Game.smoothCavalryPath(unit, startX, startZ, path, obstacleCtx);
+        return yield* Game.smoothCavalryPathSteps(unit, startX, startZ, path, obstacleCtx);
+    }
+    if (Game.isFootInfantry(unit)) {
+        const last = path[path.length - 1] || { x: startX, z: startZ };
+        if (reached && Game.dist(last.x, last.z, endX, endZ) > 0.05
+            && Game.segmentPassable(unit, last.x, last.z, endX, endZ, { obstacleCtx })) {
+            path.push({ x: endX, z: endZ, _exactGoal: true });
+        }
+        return yield* Game.smoothInfantryPathSteps(unit, startX, startZ, path, obstacleCtx);
     }
     return path;
+};
+
+// Remove the grid's stair-step turns without erasing a road/cover detour or a
+// player waypoint. Every shortcut uses the same body clearance as locomotion.
+// Eight-node lookahead bounds the work even on long routes through a village.
+Game.smoothInfantryPath = (...args) => {
+    const search = Game.smoothInfantryPathSteps(...args);
+    let step; do { step = search.next(); } while (!step.done);
+    return step.value;
+};
+Game.smoothInfantryPathSteps = function* (unit, x, z, route, obstacleCtx = null) {
+    const result = [];
+    const cost = (ax, az, bx, bz) => {
+        const length = Math.hypot(bx - ax, bz - az);
+        const n = Math.max(1, Math.ceil(length / 0.75));
+        let sum = 0;
+        for (let s = 1; s <= n; s++) {
+            const tile = Game.getTileAtWorld(ax + (bx - ax) * s / n, az + (bz - az) * s / n);
+            sum += tile && !tile.blocked ? tile.move : Infinity;
+        }
+        return sum * length / n;
+    };
+    for (let i = 0; i < route.length;) {
+        let chosen = i, budget = 0, from = { x, z };
+        for (let j = i; j < Math.min(route.length, i + 8); j++) {
+            yield;
+            const to = route[j];
+            budget += cost(from.x, from.z, to.x, to.z);
+            if (cost(x, z, to.x, to.z) <= budget * 1.05 + 0.01
+                && Game.segmentPassable(unit, x, z, to.x, to.z, { obstacleCtx })) chosen = j;
+            from = to;
+            if (to._orderStop || to._detour) break;
+        }
+        result.push(route[chosen]);
+        x = route[chosen].x; z = route[chosen].z;
+        i = chosen + 1;
+    }
+    return result;
 };
 
 /**
@@ -381,19 +439,20 @@ Game.segmentPassable = (unit, ax, az, bx, bz, options = null) => {
     const length = Math.hypot(bx - ax, bz - az);
     const travelAngle = length > 0.001 ? Math.atan2(bz - az, bx - ax) : (unit.angle || 0);
     if (!isVeh) {
-        const steps = Math.max(1, Math.ceil(length / (isMounted ? 0.4 : 1)));
-        const obstacleCtx = isMounted
-            ? ((options && options.obstacleCtx) || Game._buildDynObstacles(unit))
-            : null;
+        const steps = Math.max(1, Math.ceil(length / 0.35));
+        const obstacleCtx = options?.obstacleCtx || (isMounted ? Game._buildDynObstacles(unit) : null);
+        let previousSolid = Game._bodySolidCount ? Game._bodySolidCount(unit, ax, az, travelAngle) : 0;
         for (let i = 1; i <= steps; i++) {
             const t = i / steps;
             const x = ax + (bx - ax) * t, z = az + (bz - az) * t;
             const tile = Game.getTileAtWorld(x, z);
             if (!tile || tile.blocked) return false;
-            if (isMounted) {
-                if (Game._bodySolidCount && Game._bodySolidCount(unit, x, z, travelAngle) > 0) {
-                    return false;
-                }
+            if (Game._bodySolidCount) {
+                const solid = Game._bodySolidCount(unit, x, z, travelAngle);
+                if (solid > previousSolid) return false;
+                previousSolid = solid;
+            }
+            if (obstacleCtx) {
                 if (Game._tankBoxPush) {
                     for (const other of obstacleCtx.vehicles) {
                         if (Game._tankBoxPush(x, z, other, unit.size, 0.25)) return false;
@@ -433,9 +492,9 @@ Game.segmentPassable = (unit, ax, az, bx, bz, options = null) => {
     let terrainCleared = lastSolid === 0;
     const lastPen = new Map(), cleared = new Set();
     const penetrationAgainst = (bodies, other) => {
-        const otherBodies = Game._vehicleCollisionOBBs
+        const otherBodies = obstacleCtx.vehicleBodies?.get(other.id) || (Game._vehicleCollisionOBBs
             ? Game._vehicleCollisionOBBs(other)
-            : [Game._vehicleOBB(other)];
+            : [Game._vehicleOBB(other)]);
         let deepest = null;
         for (const body of bodies) for (const otherBody of otherBodies) {
             const p = Game._obbPenetration(body, otherBody, margin);
@@ -479,7 +538,12 @@ Game.segmentPassable = (unit, ax, az, bx, bz, options = null) => {
 
 // Greedy string-pulling for cavalry. Infantry can tolerate tile-centre doglegs;
 // a galloping horse cannot, so retain only the farthest full-width clear points.
-Game.smoothCavalryPath = (unit, startX, startZ, route, obstacleCtx = null) => {
+Game.smoothCavalryPath = (...args) => {
+    const search = Game.smoothCavalryPathSteps(...args);
+    let step; do { step = search.next(); } while (!step.done);
+    return step.value;
+};
+Game.smoothCavalryPathSteps = function* (unit, startX, startZ, route, obstacleCtx = null) {
     if (!route || !route.length) return [];
     const ctx = obstacleCtx || Game._buildDynObstacles(unit);
     const out = [];
@@ -487,6 +551,7 @@ Game.smoothCavalryPath = (unit, startX, startZ, route, obstacleCtx = null) => {
     while (i < route.length) {
         let chosen = i;
         for (let j = route.length - 1; j >= i; j--) {
+            yield;
             if (Game.segmentPassable(unit, ax, az, route[j].x, route[j].z, {
                 obstacleCtx: ctx,
             })) {
@@ -507,7 +572,12 @@ Game.smoothCavalryPath = (unit, startX, startZ, route, obstacleCtx = null) => {
 // oriented corridor. Every retained edge is independently valid; if even the
 // immediate graph edge is no longer valid, return no route instead of silently
 // reinstating the unsafe segment.
-Game.smoothVehiclePath = (unit, startX, startZ, route, obstacleCtx = null, startAngle = unit.angle || 0) => {
+Game.smoothVehiclePath = (...args) => {
+    const search = Game.smoothVehiclePathSteps(...args);
+    let step; do { step = search.next(); } while (!step.done);
+    return step.value;
+};
+Game.smoothVehiclePathSteps = function* (unit, startX, startZ, route, obstacleCtx = null, startAngle = unit.angle || 0) {
     if (!route || !route.length) return [];
     const ctx = obstacleCtx || Game._buildDynObstacles(unit);
     // The heading-state A* chain was already validated edge by edge. Preserve an
@@ -519,6 +589,7 @@ Game.smoothVehiclePath = (unit, startX, startZ, route, obstacleCtx = null, start
     while (i < route.length) {
         let chosen = -1, chosenAngle = heading;
         for (let j = route.length - 1; j >= i; j--) {
+            yield;
             const angle = Math.atan2(route[j].z - az, route[j].x - ax);
             if (Game.segmentPassable(unit, ax, az, route[j].x, route[j].z, {
                 startAngle: heading,
@@ -568,6 +639,11 @@ Game.lineOfSight = (a, b) => {
     return vis;
 };
 
+// A recent discharge is conspicuous, but never bypasses walls, foliage or smoke.
+Game.firingSignature = unit => unit.alive && unit._lastShotAt != null
+    && (Game.gameClock || 0) - unit._lastShotAt >= 0
+    && (Game.gameClock || 0) - unit._lastShotAt < 2.5 ? 2.4 : 1;
+
 Game.unitCanSee = (a, b) => {
     if (!a.alive || !b.alive) return false;
     // NOTE: this is a UNIT's own perception (line-of-sight + its sight range),
@@ -578,7 +654,7 @@ Game.unitCanSee = (a, b) => {
     // for the player's display only (see renderer's isFogVisible checks).
     const dx = b.x - a.x, dz = b.z - a.z;
     const dSq = dx * dx + dz * dz;
-    let visRange = a.sight;
+    let visRange = a.sight * Game.firingSignature(b);
     const targetTile = Game.getTileAtWorld(b.x, b.z);
     if (targetTile) visRange *= (1 - targetTile.concealment * 0.35);
     // Stance affects how far the target can be spotted
@@ -687,25 +763,39 @@ Game.queueRouteJob = (unit, run) => {
     Game._vehRouteQueue.push({ unit, run });
 };
 
+Game.runVehicleRouteJob = (job, deadline = Infinity) => {
+    const unit = job.unit;
+    if (!unit.alive) { unit._routePending = false; return true; }
+    if (job.run) { unit._routePending = false; job.run(); return true; }
+    if (!job.search) job.search = Game.findPathSteps(unit, unit.x, unit.z, job.ex, job.ez,
+        job.startAngle ?? unit.angle ?? 0, job.nodeBudget);
+    do {
+        const step = job.search.next();
+        if (step.done) {
+            unit._routePending = false; job.apply(step.value); return true;
+        }
+    } while (performance.now() < deadline);
+    return false;
+};
+
+// Shift must append to the route being prepared, not cancel its destination.
+// Resolve just this unit's outstanding request before validating the next leg.
+Game.finishQueuedPath = unit => {
+    const i = Game._vehRouteQueue.findIndex(job => job.unit === unit);
+    if (i >= 0) Game.runVehicleRouteJob(Game._vehRouteQueue.splice(i, 1)[0]);
+};
+
 // Drain jobs within a frame budget, always making progress on at least one.
 // Runs even while paused so orders issued during a pause are ready on resume.
 Game.processVehicleRouteQueue = () => {
-    const queue = Game._vehRouteQueue;
-    if (!queue.length) return;
-    const started = performance.now();
-    do {
-        const job = queue.shift();
-        const unit = job.unit;
-        unit._routePending = false;
-        if (!unit.alive) continue;
-        if (job.run) {
-            job.run();
-            continue;
-        }
-        // Route from wherever the unit is NOW: it may have drifted (or been
-        // shoved) since the order landed in the queue.
-        const path = Game.findPath(unit, unit.x, unit.z, job.ex, job.ez,
-            job.startAngle ?? unit.angle ?? 0, job.nodeBudget);
-        job.apply(path);
-    } while (queue.length && performance.now() - started < 6);
+    if (!Game._vehRouteQueue.length) return;
+    const deadline = performance.now() + 3;
+    // Round robin: a difficult tank route must not strand the entire infantry
+    // selection behind it. Each search retains its own heap and obstacle snapshot.
+    const visits = Game._vehRouteQueue.length;
+    for (let i = 0; Game._vehRouteQueue.length && i < visits; i++) {
+        const job = Game._vehRouteQueue.shift();
+        if (!Game.runVehicleRouteJob(job, Math.min(deadline, performance.now() + .8))) Game._vehRouteQueue.push(job);
+        if (performance.now() >= deadline) break;
+    }
 };

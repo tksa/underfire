@@ -1,0 +1,31 @@
+{
+  "output": "hayrick.glb",
+  "bytes": 122728,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/construction/entourage/stack/material1.mtl",
+      "sha256": "567911c0c82ede0bfc854c200c8037d50ad842eabd3a23d5e10113760770341d"
+    },
+    {
+      "path": "entity/construction/entourage/stack/material2.mtl",
+      "sha256": "df0f908f7d4394f9b9dcfa7f630bdbe7abb8f2de2781c3771edaba7e842bc77c"
+    },
+    {
+      "path": "entity/construction/entourage/stack/stack.def",
+      "sha256": "be5e2c470ebe8b76182cccdcd64907768858343e73c38dca5d6076b99d62a4e3"
+    },
+    {
+      "path": "entity/construction/entourage/stack/stack.mdl",
+      "sha256": "a49bc2fda610b7c1fb95e1a0c5fb3bf0510a168437831eb385c574928d179414"
+    },
+    {
+      "path": "entity/construction/entourage/stack/stack.ply",
+      "sha256": "9fa589ec13902c6d365a7591179403a856cabdf5152c350d333c3c38bafcd021"
+    },
+    {
+      "path": "texture/common/entourage/soloma2.dds",
+      "sha256": "93c6cd1a64a5501032f083c99a33f192bb026e3bb62ff32aa54c37970a49dae4"
+    }
+  ]
+}

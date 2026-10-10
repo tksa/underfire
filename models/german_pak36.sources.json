@@ -1,0 +1,51 @@
+{
+  "output": "german_pak36.glb",
+  "bytes": 505384,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/-vehicle/cannon/pak36/body.ply",
+      "sha256": "a7c5b3318546aa0ba2d1e025e2b94e58f67c232165ecff962af864e0bd19dfc6"
+    },
+    {
+      "path": "entity/-vehicle/cannon/pak36/gun.ply",
+      "sha256": "bca3a6b044422c0e2f9b37cb2ebacab6d2a7b8b49dd5076fcdce31c1c34a3833"
+    },
+    {
+      "path": "entity/-vehicle/cannon/pak36/gun_rot.ply",
+      "sha256": "65981b593ffad7d97739c5d785e5807f33acd4f39f400af75549f6409a1d5859"
+    },
+    {
+      "path": "entity/-vehicle/cannon/pak36/material1.mtl",
+      "sha256": "5f29c85d8ee8474f8437cb44bad2721f2c7a0dba650682313981e37fe2107b85"
+    },
+    {
+      "path": "entity/-vehicle/cannon/pak36/pak36.mdl",
+      "sha256": "54fb0032c6a51ab3b069165d5a02907b116557a6ac26b03f2d2a25b768580aa7"
+    },
+    {
+      "path": "entity/-vehicle/cannon/pak36/pak37.dds",
+      "sha256": "ebca290e4010a0ae6f7c164f83fcb528e11cf3f0c2ec3dbe4000f8a707b0464c"
+    },
+    {
+      "path": "entity/-vehicle/cannon/pak36/standl.ply",
+      "sha256": "0b2d586182751252b1562dbb69c5a53d5ac083ae1031979edd7ca0d6e30a9093"
+    },
+    {
+      "path": "entity/-vehicle/cannon/pak36/standr.ply",
+      "sha256": "00ee229ea37c3b683bb15ec466515021fb126e8db35347b43d8955786443d52b"
+    },
+    {
+      "path": "entity/-vehicle/cannon/pak36/turret.ply",
+      "sha256": "b3cef80a641e916c77ad66a6753f3e479e7d3a1d8c35e3b3d9ef4958d1c54a52"
+    },
+    {
+      "path": "entity/-vehicle/cannon/pak36/wheell.ply",
+      "sha256": "fbdd7918d19932d567e5ecb1577ddc0307cb046bd8762e987c1d78713dddb0b7"
+    },
+    {
+      "path": "entity/-vehicle/cannon/pak36/wheelr.ply",
+      "sha256": "947b3a1a5e2a41d4a844ff4a809ad5f5278153ac1a4cb6fe54ca3e1e3101bc5d"
+    }
+  ]
+}

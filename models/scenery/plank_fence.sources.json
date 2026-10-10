@@ -1,0 +1,27 @@
+{
+  "output": "plank_fence.glb",
+  "bytes": 65636,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/construction/fence/fence-wood_3/fence-wood_3.def",
+      "sha256": "3c23ac2986e997554965d867cdd5af9b056b39fc3079a51286dff1dd7cf0fb58"
+    },
+    {
+      "path": "entity/construction/fence/fence-wood_3/fence-wood_3.mdl",
+      "sha256": "28bc4b4259118fa6264f8ec3ccb2ce36f8c3bc18ee86ecc95858784ac1f2227b"
+    },
+    {
+      "path": "entity/construction/fence/fence-wood_3/fence-wood_3.ply",
+      "sha256": "27bf727c56164056758358de48c741298a4e4fd05ae8234f21f28339cf433673"
+    },
+    {
+      "path": "entity/construction/fence/fence-wood_3/material1.mtl",
+      "sha256": "4f7b9ca4b38269050f0a19d554c7cd8a0a2f5d467d040c5d3ac4b14e158d2149"
+    },
+    {
+      "path": "texture/common/entourage/wood_sh05.dds",
+      "sha256": "33abab76071ca3e5b2ef1b82f15e8f54c61388809d68fd1f2d5036a3a979ec8c"
+    }
+  ]
+}

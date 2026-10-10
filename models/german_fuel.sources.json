@@ -1,0 +1,123 @@
+{
+  "output": "german_fuel.glb",
+  "bytes": 1356772,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/all_wheels01.mtl",
+      "sha256": "575627536ba2b6c7696eaf78b9d715e5b7448a65fcd2f182cadc29bdd2c4ec59"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/blitz3_6f.mdl",
+      "sha256": "c726178df15d4535229931b59c8f15db7edf125143522cf91e8c19da5452d350"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/blitz3f.dds",
+      "sha256": "322f5abeb46cc40e5376ac4abf73f9cb7ba91f03be54581b41883fc1adda0ffb"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/body.ply",
+      "sha256": "7630fbc2a5d42669dd5e49e70e40b536860a32fce09af9dbaacd906a7be82599"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/bodyback.ply",
+      "sha256": "acfa444144f65cdc746984e89b3f4e027ffe1813eb28f26eeb4e4970c0b393f2"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/cabin.ply",
+      "sha256": "b1d729bb05fc3bcb0a8f2aa82660c340db4b615838dd7cc77d50dae31b7bf6fc"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/doorl.ply",
+      "sha256": "a3652fd7cebfeb9014001321af3c03b6b202a9a6d4228157e39c3e32deba83c1"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/doorr.ply",
+      "sha256": "197dde8375d6ccf1b566273984562d5432705fab9b6a16158c655fa6c207384e"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/engine.ply",
+      "sha256": "c315f85423c8a2c79d469f37bea454318d510e2705c77350272559ddbcd3c0e5"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/enumerator.ply",
+      "sha256": "a435b3a7b9636c30d1af05323ebc5395b9d8b8914cb5780ddc4af14a4ef47603"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/glass.mtl",
+      "sha256": "0de606a7d000b62506ffc528b1fc972dc0cbe7c7a816c61522247d3162456f26"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/glass.ply",
+      "sha256": "0d31b479caf7f7df742153aab82f58e9d00b121c43630d0f1983a863b73cae27"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/hull.mtl",
+      "sha256": "83ba83a27528f0ee2f9c4fc9bcb830f46f3b69ada5236ec08f0572e44fc1f967"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/hull_alpha.mtl",
+      "sha256": "0cb0ece9f1e9635cc9058483cfb0e10e00da0fc69d78780a8b5630720dd1b40a"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/hull_env.mtl",
+      "sha256": "1715edd3e337b0e256bf315bf935f393e26133f19b9f2db4f045a4eb5ea1b09d"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/number1.mtl",
+      "sha256": "7e9a8d40fa9c032ad0e2668cadb518bdf7f01846763dc9e33a275cc920301fa5"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/number2.mtl",
+      "sha256": "ed773f58ae7054eb9ca576100f2de4264f8aed9d7e2b4edbba00e2dc52816b47"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/number3.mtl",
+      "sha256": "74d9b179ff28e8a59e619f5e689991d217f4caa276f319f4814ab2dd6091dbf7"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/pivot_back.ply",
+      "sha256": "ddcb1902254d083c1bcd14ec8b441bb87d9ed52c78a335f340c2c44f8b4c9b07"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/pivot_front.ply",
+      "sha256": "21536a70e25bb08fe15d5e0bcf3d251150bd13c576656959d7b821d3a1c1e8f1"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/wheell1.ply",
+      "sha256": "ec0ab05555b3bbee4f725264129f197b1a1acf1d798f63152e017c0ae5a68d6d"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/wheell2.ply",
+      "sha256": "7e1748ade5da635b80e7f5c1fbc41acdba390bde781d8424e448e743303a6f43"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/wheelr1.ply",
+      "sha256": "35bce1db5e55938008a54e0ec1a0117998f684f5fbae9d92b46eb10866d5cbcb"
+    },
+    {
+      "path": "entity/-vehicle/car/blitz3_6f/wheelr2.ply",
+      "sha256": "3463f3b5f94414e29a72bca1420ba02c13a0a5f02cf671a4b92684cd34900493"
+    },
+    {
+      "path": "texture/common/model/all_wheels01.dds",
+      "sha256": "04f5aa630c0e4e89562b11152f36e23f145f5e6cefb6ba12ee98e3ea80d1b99f"
+    },
+    {
+      "path": "texture/common/model/enumerator/1.dds",
+      "sha256": "50ca677af655d805b6c73af93e98c299f735a713200fd2ab53ebe43b75f93307"
+    },
+    {
+      "path": "texture/common/model/enumerator/2.dds",
+      "sha256": "01ad140bfd40f6a4ca5434d0ecef557e89a495ce624e108d818868cff1882b27"
+    },
+    {
+      "path": "texture/common/model/enumerator/3.dds",
+      "sha256": "46ce16c97de0fd9438730463bc2db01e20edd78aca0e9e1678ea61dc74609241"
+    },
+    {
+      "path": "texture/common/model/glass1.dds",
+      "sha256": "bd989885fc9e0957a48097ef147fa1b295c1f2184aeaf86eb62da2907658bc2f"
+    }
+  ]
+}

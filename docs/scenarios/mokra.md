@@ -27,7 +27,7 @@ Dawn has brought war to the Mokra line. The German armoured division is approach
 - Defeat: lose the whole Polish force, or leave the central crossing under uncontested German control for 25 seconds.
 - Deployment: a persistent white, top-centre three-minute countdown opens the scenario. No Germans spawn or receive attack routes during this period, leaving time to move infantry into the woods and conceal guns. Siren playback is temporarily disabled during testing; its asset is retained for a later audio pass.
 - Attack structure: at 3:00 total elapsed time the German vanguard enters inside the westernmost five-tile strip, facing east. Later echelons enter from the same map edge at 3:55, 5:05, and 6:25; the unchanged combat-relative cadence is 0, 55, 125, and 205 seconds.
-- Mission length: the railway must be held for 300 combat seconds after the vanguard appears, so victory resolves at 8:00 total elapsed time.
+- Mission length: the hold succeeds at 300 combat seconds (8:00 total). The train arrives then; the counterattack opens at 310, withdrawal at 420, and final scoring at 500 combat seconds (11:20 total). Transports extract their passengers and any towed gun; extraction is counted once per unit. Final reporting distinguishes extracted personnel from survivors still on the map.
 - Air support: none is player-callable. French fighters and generic bomber support are disabled for Mokra.
 - Voice behavior: Polish infantry use dedicated Polish command pools, while tank pools reuse vehicle-neutral takes from the same supplied recordings. Attack commands periodically draw from a shared vehicle-safe morale pool, and the final German echelon forces one Polish `nie-zlamia-nas` cue. Dedicated vehicle-crew recordings remain desirable, but tanks are not silent and never fall through to French or German speech. Combat effects, engines, ambience, and UI sounds remain enabled.
 
@@ -72,6 +72,7 @@ This allocation makes the line readable and playable at the current map and miss
 | Moździerz wz. 31 (81 mm) | Battalion high-explosive support against infantry, woods, and exposed crews. |
 | Armata ppanc. wz. 36 (37 mm Bofors) | The principal Polish tank killer at Mokra; best concealed and firing into flanks. |
 | Armata wz. 1902/26 (75 mm) | Dedicated horse-artillery field-gun model with a maximum of two visible Polish-skinned operators; both walk with the carriage and crouch at the trails when deployed. |
+| Reinforced armoured reserve | The playable 64-unit roster includes 7TP single/twin-turret variants and two TKS 20 mm vehicles. This is an expanded gameplay reserve, not a historical Mokra order of battle. |
 | TKS (7.92 mm) | MG-only reconnaissance tankette, explicitly not the rare 20 mm tank-hunter conversion. |
 | Samochód pancerny wz. 34 | Fast but thin-skinned wheeled reconnaissance car. |
 | Oficer, Saper, Sanitariusz, Mechanik | Command, engineering, medical, and repair support. |
@@ -99,7 +100,7 @@ The current allowlist uses Kar98k/MG34 infantry with one limited-issue MP38 squa
 | Poland faction and player-relative AI/fog/selection | Implemented | Polish is the locked player side for this mission. |
 | Appropriate 1939 core roster | Implemented | Includes editable descriptions and model-safe procedural fallbacks. |
 | Railway, limited crossings, Mokra I–III, no major water | Implemented | Dedicated scenario generator; the legacy French river map is not used. |
-| Deployment countdown, defensive hold, and German attack waves | Implemented | Persistent white, top-centre three-minute preparation timer followed by five combat minutes; the vanguard enters at 3:00, later waves at 3:55/5:05/6:25, and victory resolves at 8:00 while crossing-control defeat logic remains active. Siren playback is temporarily disabled during testing, with the asset retained for later use. |
+| Deployment countdown, defensive hold, and German attack waves | Implemented | Persistent white, top-centre three-minute preparation timer followed by five combat minutes; the vanguard enters at 3:00, later waves at 3:55/5:05/6:25, followed by train support, counterattack and withdrawal; final scoring occurs at 11:20 total while crossing-control defeat logic remains active. Siren playback is temporarily disabled during testing, with the asset retained for later use. |
 | Polish voice assets | Implemented | 75 unique assets are active across infantry and tank pools. Only two context-specific clips remain reserved; tank pools reuse vehicle-neutral takes, with dedicated crew recordings still desirable. |
 | Dedicated Polish infantry/vehicle/gun models and PNG skins | Partial | Mounted Ułans use a dedicated supplied 17-clip rigged horse-and-rider GLB. The 75 mm Armata now has a dedicated gun model and two rifle-free clones of the Polish-tinted infantry rig for its visible operators. Foot infantry still use tint rather than a painted Polish PNG, and most Polish vehicles/guns remain procedural. |
 | Mounted cavalry reserve | Implemented | Four player-controlled `mounted_ulan` units deploy east of the railway. Dismounting parks a persistent, unselectable riderless horse; its linked Ułan must return through an enter-style order before remounting. Mounted movement uses acceleration, braking, limited turning, and speed-synchronised walk/run animation. |
@@ -133,7 +134,7 @@ Runtime copies are mono 22,050 Hz, signed 16-bit FLAC audio in Ogg containers, p
 - Do not add a major lake or broad river to this map.
 - Polish cavalry fights primarily dismounted; the four mounted reserves represent battlefield mobility, not a replacement for the dismounted defensive line.
 - Do not add a mounted anti-tank charge. Sabres and horses are not substitutes for Bofors guns, wz. 35 anti-tank rifles, mines, or artillery.
-- Do not field 7TP tanks at Mokra.
+- The historical roster excludes 7TP tanks. The existing preview deliberately includes them as an expanded gameplay reserve; do not describe that reserve as the historical order of battle.
 - Do not treat routine TKS tankettes as 20 mm tank hunters.
 - Use mostly Panzer I and II, very few Panzer IV, and no routine Panzer III.
 - Frame Polish success as delay, disruption, combat losses inflicted, and force preservation—not destruction of the entire German division.

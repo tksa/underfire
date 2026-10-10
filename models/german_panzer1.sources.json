@@ -1,0 +1,135 @@
+{
+  "output": "german_panzer1.glb",
+  "bytes": 1018872,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/antenna.ply",
+      "sha256": "eed8e892f411d236bbf71fe8040b1313e9eb7187b11204b4f3427441e1aabd87"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/base#alfa.mtl",
+      "sha256": "715a8aafc8bfeb5adbfea64a04ea10d2926927caf56b0d51740e352e1f854308"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/base.mtl",
+      "sha256": "3eaec22656eec7419e5f593b30d4f57521099ed0059e47e00ad6e5d9b86b8159"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/body.ply",
+      "sha256": "2a80e83faf2168bab71703f788b60e2c948a3353df1f30ace98cdaefefea1c06"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/cover.ply",
+      "sha256": "29d67094dd9a242ac68672339f67cd3bcfbd717a0b9560062e39f1a0377590e3"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/engine.ply",
+      "sha256": "298fe766adce163a2bcb3cecd5aaac3ab48871236a24da5a0cffac77f0e3f142"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/pz1b.dds",
+      "sha256": "de6bdc9cbf09009f0925b12b3b8daf3a42825affb1bf2696d065bdfb5f48f5be"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/pz1b.mdl",
+      "sha256": "a6574117957314554ab74399cf002e15c0f4afe9aa6214841d56fc5f7a8489be"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/shooter00.ply",
+      "sha256": "8317f52e3c2f291df49f8f13c9bdb345562578e1aa469cf7d7f9535cb7a33f8e"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/shooter01.ply",
+      "sha256": "f0b031b2cc9fcede0e385323620ec620206a006c093a6a2b8a0e9f127a154d20"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/trackl.ply",
+      "sha256": "dd472e9c2499a68c9a13fea2ced0e55c967f15cb385934c1ebc48dce7fca0736"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/trackr.ply",
+      "sha256": "d4d540afd0480cce06efb261e137bc86f01d5bc7808c78809398224e0c9870bf"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/tracks#1.mtl",
+      "sha256": "de5d8cc29f62417d5e02af5f0d9caa3c9e86e1af86a60406cc2373b67b0030a7"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/tracks#2.mtl",
+      "sha256": "de5d8cc29f62417d5e02af5f0d9caa3c9e86e1af86a60406cc2373b67b0030a7"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/turret.ply",
+      "sha256": "ae68c8942cbe7247684aec0f6d2d77067256bd60fa6ee1db0ac9028ef4f73dc4"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheell1.ply",
+      "sha256": "ec0a16259b1f7c4d7528afcc5c2405ac4ddf066f5c5fe7f5ced36a29ba915f91"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheell2.ply",
+      "sha256": "11c0059c3bfb1ce02fbeb0d332e8952cfd4364071258a3f66a82e167d0291334"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheell3.ply",
+      "sha256": "d60af99fb468706b393c356c56002a63378c4f35d4da8c79c1a20fb892356b86"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheell4.ply",
+      "sha256": "b893cbe840510374a1123599e483df58b398b8ef31e48618d0f24466707d19dc"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheell5.ply",
+      "sha256": "b893cbe840510374a1123599e483df58b398b8ef31e48618d0f24466707d19dc"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheell6.ply",
+      "sha256": "a9afd72ee802b93475c4f39419d3caf1df86299e4e88ff527089c0684f92cfc2"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheell7.ply",
+      "sha256": "4e48652dfc9acfeabc6f4a9c9bda153012958fc4577b42fb69dc3a7d321b4ae1"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheelr1.ply",
+      "sha256": "28d20182154b7c6f38059846170b0b610910ec83ebf3a8e8218dca2c69856b54"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheelr2.ply",
+      "sha256": "56036d75aa8f2ee6c1621d6ed1538521317b97b3dd63cac5637356e2f286f25b"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheelr3.ply",
+      "sha256": "9ff3c5ebf049586dcd159f7ffd5c49405a0ec969b994acbed8b6f6c37855c70c"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheelr4.ply",
+      "sha256": "ea5dea891fbc15ac054b63ab3bb6990ea8088ebdea177eaf25d0e70d2fd7df42"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheelr5.ply",
+      "sha256": "b7c28a376c17aefaba65971a795a268e2978cff65f2c227471427597d8eed6db"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheelr6.ply",
+      "sha256": "5411b08effa225c04b0d93260db23fc495ae065ea95d9284a014ce1e2d1b3b5a"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheelr7.ply",
+      "sha256": "0ba71c83b07460343761f42a73a6b0926dbac0c883cdf3c31b5ecfaffad3b5e8"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheelsl.ply",
+      "sha256": "1af02d4e9a92293602f704db904f86d37a7f093116353c0fb7be730f56db782e"
+    },
+    {
+      "path": "entity/-vehicle/tank_light/pz1b/wheelsr.ply",
+      "sha256": "5060fca84d13af5711f4c94b9bd064fed48ff73b41d4083190a727eca6bf5c17"
+    },
+    {
+      "path": "texture/common/animation/track_pz3.dds",
+      "sha256": "9c27fe8aa65e13e97ae9bce0affcccbde844069d52ca8437eaa1c34c4dc58da4"
+    }
+  ]
+}

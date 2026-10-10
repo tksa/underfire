@@ -271,6 +271,8 @@ try {
             const directBlocked = sweptSat(directStart, directEnd, tankPose).maxDepth > PEN_EPS;
             Game.issueCommand(goal.x, goal.z, 'move', [truck]);
             if (queueGoal) Game.issueCommand(queueGoal.x, queueGoal.z, 'move', [truck], true);
+            // The browser drains this budgeted queue at the start of each tick.
+            while (Game._vehRouteQueue.length) Game.processVehicleRouteQueue();
             truck.orderDelay = 0;
             const initialPathNodes = truck.path.length;
             const initialPath = truck.path.map(p => ({ x: round(p.x), z: round(p.z) }));
@@ -331,6 +333,7 @@ try {
             for (let step = 0; step < maxSteps; step++) {
                 Game.gameClock += DT;
                 elapsed += DT;
+                Game.processVehicleRouteQueue();
                 Game.updateUnit(truck, DT);
 
                 const current = pose(truck);

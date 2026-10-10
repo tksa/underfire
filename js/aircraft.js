@@ -230,6 +230,7 @@ Game._attachFighterMesh = (f) => {
         m.traverse(o => { o.raycast = () => { }; });   // never blocks unit picking
         f.mesh = m;
         Game.scene.add(m);
+        Game._attachFighterWeapons(f);
         Game._attachPropBlur(f);                        // spinning-prop overlay
     };
     if (Game._fighterProtos[type]) { attach(Game._fighterProtos[type]); return; }
@@ -266,6 +267,52 @@ Game._attachFighterMesh = (f) => {
             }
         }).catch(() => { /* keep the procedural silhouette */ });
     }
+};
+
+// The source airframes have fused wing geometry rather than weapon sockets.
+// Place small visible barrels at measured leading-edge sections; their tips
+// then move with the same bank, dive and heading as the aircraft itself.
+Game._attachFighterWeapons = (f) => {
+    const T = Game.THREE, mesh = f.mesh, body = mesh.children[0];
+    if (!body || !Game.weaponGeometryPoints) return;
+    const def = f.def || Game.FIGHTER_TYPES[f.type] || Game.FIGHTER_TYPES.d520;
+    body.rotation.y = mesh.userData.procFallback ? 0 : def.yaw;
+    const points = Game.weaponGeometryPoints(body, mesh);
+    if (!points.length) return;
+    const box = new T.Box3().setFromPoints(points);
+    const halfSpan = (box.max.x - box.min.x) / 2;
+    const material = new T.MeshStandardMaterial({ color: 0x333b3a, roughness: 0.7 });
+    mesh.userData.weaponMuzzles = [];
+    for (const station of [-0.53, -0.43, 0.43, 0.53]) {
+        const x = station * halfSpan;
+        const section = Game.weaponGeometrySection(body, mesh, 'x', x);
+        if (!section.length) continue;
+        const front = Math.max(...section.map(p => p.z));
+        const lip = section.filter(p => p.z > front - 0.06);
+        const y = new T.Box3().setFromPoints(lip).getCenter(new T.Vector3()).y;
+        const cannon = f.type === 'mb152' && Math.abs(station) < 0.5;
+        const length = cannon ? 0.22 : 0.11;
+        const barrel = new T.Mesh(new T.CylinderGeometry(cannon ? 0.016 : 0.010,
+            cannon ? 0.020 : 0.014, length, 8), material);
+        barrel.name = 'wing_gun'; barrel.rotation.x = Math.PI / 2;
+        barrel.position.set(x, y, front + length / 2 - 0.04); mesh.add(barrel);
+        Game.attachWeaponMuzzle(f, barrel, new T.Vector3(0, length / 2, 0), new T.Vector3(0, 1, 0));
+    }
+};
+
+Game._syncFighterMesh = (f) => {
+    if (!f.mesh) return;
+    const def = f.def || Game.FIGHTER_TYPES[f.type] || Game.FIGHTER_TYPES.d520;
+    let y = (f.gy || 0) + f.alt;
+    if (f.state !== 'crash') {
+        y += Math.sin((f.t || 0) * 1.6 + (f.ph2 || 0)) * 0.35;
+        y = Math.max(y, (Game.getHeight?.(f.x, f.z) || 0) + 12);
+    }
+    f.mesh.position.set(f.x, y, f.z);
+    f.mesh.rotation.order = 'YXZ';
+    f.mesh.rotation.set((f.state === 'crash' ? 0.35 : (f.pitch || 0)) + (def.pitchFix || 0),
+        -f.angle + Math.PI / 2, f.bank || 0);
+    f.mesh.updateWorldMatrix(true, true);
 };
 
 // ── Call the sortie ──────────────────────────────────────────────────────────
@@ -355,11 +402,12 @@ Game._fighterStrafe = (f) => {
     const aimErr = Game.angleDiff(f.angle, Game.angleTo(f.x, f.z, tgt.x, tgt.z));
     if (Math.abs(aimErr) > 0.15) return;            // guns don't traverse: SIGHT ON, or no shot
     const def = f.def || Game.FIGHTER_TYPES[f.type] || Game.FIGHTER_TYPES.d520;
-    const nx = f.x + Math.cos(f.angle) * 3.4;       // rounds leave the NOSE
-    const nz = f.z + Math.sin(f.angle) * 3.4;
-    const y0 = (f.gy != null ? f.gy : 0) + f.alt - 0.6;
+    Game._syncFighterMesh(f);
+    const mounts = f.mesh?.userData.weaponMuzzles || [];
+    if (!mounts.length) return; // wait for the visible weapon assembly
     f.firedThisRun = true;
     for (let r = 0; r < def.rounds; r++) {
+        const muzzle = mounts[r % mounts.length].anchor.getWorldPosition(new Game.THREE.Vector3());
         // WALKING FIRE: the burst stitches a ROW of impacts along the facing
         // line, striding through the target's range — the classic strafe
         // pepper line, not a random cloud.
@@ -367,12 +415,14 @@ Game._fighterStrafe = (f) => {
         const rd = d * stride + Game.rand(-0.5, 0.5);
         const ix = f.x + Math.cos(f.angle) * rd + Game.rand(-0.7, 0.7);
         const iz = f.z + Math.sin(f.angle) * rd + Game.rand(-0.7, 0.7);
-        Game.tracers.push({
-            x: nx, z: nz, tx: ix, tz: iz,
-            y0, y1: 0.4,
+        Game.addTracer({
+            x: muzzle.x, z: muzzle.z, tx: ix, tz: iz,
+            y0: muzzle.y, y1: (Game.getHeight?.(ix, iz) || 0) + 0.1,
             life: 0.22, total: 0.22,
-            team: Game.playerTeam, big: false, mesh: null,
+            team: Game.playerTeam, big: false, mesh: null, weaponType: 'hmg',
         });
+        (Game.muzzleFlashes ||= []).push({ x: muzzle.x, y: muzzle.y, z: muzzle.z,
+            life: 0.06, total: 0.06, r: 0.2, mesh: null });
         // Every round chips the ground: a small dust kick at the impact —
         // together they draw the row of gunfire across the terrain.
         Game.smoke.push({
@@ -704,34 +754,7 @@ Game.updateFighters = (dt) => {
             }
         }
 
-        if (f.mesh) {
-            // MODEL-FORWARD correction goes on the INNER model, not the outer
-            // mesh: these GLBs' noses lie along local X, so adding the yaw to
-            // the OUTER rotation left rotation.x rolling the airframe and
-            // rotation.z pitching it — the orbit's constant bank then held a
-            // constant pitch-up/-down (direction depending on the random orbit
-            // sense): the "flies tilted up" bug. With the inner model yawed
-            // nose→+Z, the outer axes are flight-true: X = pitch, Z = roll.
-            const yaw = (def.yaw != null) ? def.yaw : (F.yaw || 0);
-            const inner = f.mesh.children[0];
-            if (inner) inner.rotation.y = f.mesh.userData.procFallback ? 0 : yaw;
-            // HARD FLOOR: whatever the smoothing/dive produced, the airframe can
-            // never be closer than 12u to the terrain directly beneath it. The
-            // crash state is the one exception — that plane is going in.
-            let y = f.gy + f.alt;
-            // altitude micro-turbulence: a light bob on top of the flight path
-            if (f.state !== 'crash') {
-                y += Math.sin(f.t * 1.6 + f.ph2) * 0.35;
-                y = Math.max(y, gUnder + 12);
-            }
-            f.mesh.position.set(f.x, y, f.z);
-            f.mesh.rotation.order = 'YXZ';
-            f.mesh.rotation.y = -f.angle + Math.PI / 2;
-            f.mesh.rotation.z = f.bank;
-            // pitchFix: per-model trim (debug panel → Fighter) on top of the
-            // flight pitch (dive / crash).
-            f.mesh.rotation.x = (f.state === 'crash' ? 0.35 : (f.pitch || 0)) + (def.pitchFix || 0);
-        }
+        Game._syncFighterMesh(f);
         // Ground shadow: a blurred SILHOUETTE of the airframe (not a blob) —
         // the visual anchor that makes altitude READ from the tilted camera.
         // Locked to the flight heading; swaps from the fallback outline to the

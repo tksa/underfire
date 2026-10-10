@@ -1,0 +1,39 @@
+{
+  "output": "haystack.glb",
+  "bytes": 55728,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/construction/entourage/stack_euro/material1.mtl",
+      "sha256": "e9077c3fbe4c91d1a48216f63b719d5e81b05f35a73c33067bc9cade325c6bcf"
+    },
+    {
+      "path": "entity/construction/entourage/stack_euro/material2.mtl",
+      "sha256": "318a30aca5e68c2edbdfd78a6bbb8d62f87a68f7e29f853a59fa2bbe7e4fb285"
+    },
+    {
+      "path": "entity/construction/entourage/stack_euro/material4.mtl",
+      "sha256": "acc8c85af928befc0e5806512290fbbaa1968f4b622d8db9e0aff296370656e0"
+    },
+    {
+      "path": "entity/construction/entourage/stack_euro/stack_euro.def",
+      "sha256": "dfb5f62bcc1867a0245f06c70274ba31be211668563f8f6fd87cf57a242e06fd"
+    },
+    {
+      "path": "entity/construction/entourage/stack_euro/stack_euro.mdl",
+      "sha256": "9d18acad3b2322930ac16a747d2b3c4f0f55db5418d01f0708eaaef2ad034233"
+    },
+    {
+      "path": "entity/construction/entourage/stack_euro/stack_euro.ply",
+      "sha256": "2b5876a061fed302ee28f3e3f1a0c25ff9258e46deada5d2ab36d0aad1f5fb7e"
+    },
+    {
+      "path": "texture/common/entourage/seno_soloma.dds",
+      "sha256": "ecef218ba384b87c755e24b1049714377661796b8aecb32b07501c9212c53669"
+    },
+    {
+      "path": "texture/common/entourage/solomka.dds",
+      "sha256": "9d6cdab84360992af472f4f22fab6862f7fc4378a4aa7248d731454a52ad15e8"
+    }
+  ]
+}

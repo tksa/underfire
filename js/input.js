@@ -21,6 +21,7 @@ Game.cancelTruckManeuver = (unit, resetPreflight = true) => {
     unit._hullBlockT = 0;
     unit._hullBlockFor = null;
     if (resetPreflight) {
+        unit._finalApproachRetryAt = 0;
         unit._truckPreflightPath = null;
         unit._truckPreflightBackups = 0;
         unit._preflightRiskId = null;
@@ -185,9 +186,14 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false,
         // A ground move/waypoint replaces a pending walk-to-horse order. Let the
         // cavalry runtime release the horse reservation as well as rider state.
         if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(unit);
-        // A new order also supersedes any route still waiting in the queue.
+        if (queue && unit._routePending) Game.finishQueuedPath(unit);
+        // A replacing order supersedes any route still waiting in the queue.
         if (Game.cancelQueuedPath) Game.cancelQueuedPath(unit);
         const isQueued = queue && unit.path && unit.path.length > 0;
+        if (!isQueued) {
+            unit._squadBound = null; unit._infantryAction = null; unit._reload = null;
+            Game._coverReservations?.delete(unit.id);
+        }
         const previousTargetX = unit.targetX;
         const previousTargetZ = unit.targetZ;
         const previousMoveOrder = unit._lastMoveOrder;
@@ -296,7 +302,7 @@ Game.issueCommand = (wx, wz, mode = 'move', unitList = null, queue = false,
             }
         } else {
             const crowFlies = Math.hypot(tx - unit.x, tz - unit.z);
-            if ((Game.isTank(unit.kind) || Game.isTruck(unit.kind))
+            if ((Game.isTank(unit.kind) || Game.isTruck(unit.kind) || chosen.length > 8)
                 && Game.queueVehiclePath && crowFlies > 20) {
                 // Long vehicle hauls compute on the route queue's frame budget
                 // instead of freezing the click (one synchronous full-hull A*
@@ -579,6 +585,7 @@ Game.orderRetreat = (x, z) => {
         u.bombardX = null; u.bombardZ = null; u._bombarding = false;
         u._enterRec = null;
         u._enterCarrierId = null;
+        u._enterGunId = null;
         u._assaultGoal = null;
         if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
         u.orderMode = 'retreat';
@@ -618,7 +625,8 @@ Game.orderRetreat = (x, z) => {
  * lob shells; direct-fire units (tanks, MGs, rifles) suppress the area. They do
  * NOT walk onto the spot — they shoot AT it.
  */
-Game.orderAttackGround = (x, z) => {
+Game.orderAttackGround = (x, z, options = {}) => {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     const chosen = Game.selectedPlayerUnits();
     if (!chosen.length) return;
     let any = false;
@@ -630,8 +638,16 @@ Game.orderAttackGround = (x, z) => {
         Game.clearArrivalFacing(u);
         u._enterRec = null;
         u._enterCarrierId = null;
+        u._enterGunId = null;
         if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
         u.bombardX = x; u.bombardZ = z;
+        u.path = []; u.moving = false;
+        if (Game.isMortar(u)) {
+            u.bombardRadius = Game.clamp(options.radius ?? Game.groundFireRadius, 0, 24);
+            if (options.mode) u.mortarFireMode = options.mode === 'rapid' ? 'rapid' : 'ranged';
+            u._mortarMission = null;
+            Game.ensureMortarMission(u, x, z);
+        }
         u.forcedTargetId = null;
         u.orderMode = 'aggressive';
         u.holdFire = false;
@@ -785,6 +801,7 @@ Game.orderGrenadeCharge = (target) => {
         Game.clearArrivalFacing(u);
         u._enterRec = null;
         u._enterCarrierId = null;
+        u._enterGunId = null;
         if (Game.AI && Game.AI.clearPosture) Game.AI.clearPosture(u);
         u.forcedTargetId = target.id;
         u._grenadeChargeId = target.id;
@@ -1054,6 +1071,7 @@ Game.orderFace = (x, z) => {
 
 Game.haltSelection = () => {
     Game.selectedPlayerUnits().forEach(u => {
+        u._enterGunId = null;
         if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
         Game.cancelTruckManeuver(u);
         Game.clearArrivalFacing(u);
@@ -1316,9 +1334,7 @@ Game._canDeferTerrainRightOrder = (screenX, screenY, ground, modifiers = {}) => 
     // truck and stood there, and the tow dispatch below never even ran.
     const towPair = Game.getTowHoverPair && Game.getTowHoverPair(picked
         || (Game.towCounterpartAtWorld && Game.towCounterpartAtWorld(ground.x, ground.z)));
-    const onManGun = picked && picked.team === Game.playerTeam
-        && Game.GUN_CREWS && Game.GUN_CREWS[picked.kind] && picked._unmanned
-        && selectedUnits.some(u => Game.isFootInfantry(u) && !u._garrisoned && u._inVehicle == null);
+    const onManGun = picked && Game.canManGun && selectedUnits.some(u => Game.canManGun(picked, u));
     return !clickedEnemy && !mountRider && !nearbyEnemy && !onTransport
         && !towPair && !onManGun
         && !(onBuilding && !onBuilding.collapsed);
@@ -1360,6 +1376,11 @@ Game.handleInputEvents = () => {
         Game.mouse.screenX = e.clientX;
         Game.mouse.screenY = e.clientY;
 
+        if (e.button === 0 && Game._commandMode === 'attackground') {
+            const ground = Game.screenToGround(e.clientX, e.clientY);
+            if (ground) { Game.orderAttackGround(ground.x, ground.z); Game._commandMode = null; }
+            Game.mouse.down = false; Game.updateCommandDeck?.(); e.preventDefault(); return;
+        }
         if (e.button === 0) {
             // Left-click always disarms a pending command mode (grenade/smoke/
             // rotate/fighter/etc.) — a forgotten armed mode silently swallowed
@@ -1543,11 +1564,8 @@ Game.handleInputEvents = () => {
                             Game.orderTowApproach(towPair);
                         } else if (Game._towClickReason) {
                             // Refusal already explained in the message log.
-                        } else if (picked && picked.team === Game.playerTeam
-                            && Game.GUN_CREWS && Game.GUN_CREWS[picked.kind]
-                            && picked._unmanned && Game.orderManGun
-                            && selectedUnits.some(u => Game.isFootInfantry(u)
-                                && !u._garrisoned && u._inVehicle == null)) {
+                        } else if (picked && Game.canManGun && Game.orderManGun
+                            && selectedUnits.some(u => Game.canManGun(picked, u))) {
                             // Right-click an unmanned gun with infantry: man it.
                             Game.orderManGun(picked, selectedUnits.filter(u =>
                                 Game.isFootInfantry(u) && !u._garrisoned && u._inVehicle == null));
@@ -1588,7 +1606,8 @@ Game.handleInputEvents = () => {
 
             // Formation preview markers (throttled)
             const now = performance.now();
-            const overHud = e.clientY > window.innerHeight - 110;
+            const overHud = !!e.target.closest?.('#hudBar');
+            Game.mouse.overHud = overHud;
             const rightDrag = Game._rightOrderDrag;
             if (rightDrag) {
                 rightDrag.currentX = e.clientX;
@@ -1686,7 +1705,10 @@ Game.handleInputEvents = () => {
     // wheel sets how many planes to commit.
     container.addEventListener('wheel', e => {
         e.preventDefault();
-        if (Game._commandMode === 'airstrike') {
+        if (Game._commandMode === 'attackground' && Game.selectedPlayerUnits().some(Game.isMortar)) {
+            Game.setGroundFireRadius(Game.groundFireRadius + (e.deltaY < 0 ? 2 : -2));
+            Game.pushMessage(`Mortar area: ${Game.mortarDistanceLabel(Game.groundFireRadius)} radius. Click terrain to fire.`, 2);
+        } else if (Game._commandMode === 'airstrike') {
             Game.adjustAirStrikePlanes(e.deltaY < 0 ? 1 : -1);
             Game.pushMessage(`Air strike: ${Game.airStrikePlanesToUse} of ${Game.airStrikesAvailable} plane(s) — right-click target.`, 2.0);
         }
@@ -1696,6 +1718,7 @@ Game.handleInputEvents = () => {
         // typing in a text field (debug prompts etc.) must not fire hotkeys
         const _t = e.target;
         if (_t && (_t.tagName === 'INPUT' || _t.tagName === 'TEXTAREA' || _t.tagName === 'SELECT' || _t.isContentEditable)) return;
+        if (_t?.closest('button, summary') && ['Space', 'Enter'].includes(e.code)) return;
         Game.keys[e.code] = true;
         if (e.repeat) return;
 
@@ -1756,7 +1779,7 @@ Game.handleInputEvents = () => {
         }
 
         // L — jump to last attack
-        if (e.code === 'KeyL') {
+        if (e.code === 'KeyL' && !e.shiftKey) {
             if (Game.lastAttackPos) {
                 Game.cam.x = Game.lastAttackPos.x;
                 Game.cam.z = Game.lastAttackPos.z;
@@ -1846,7 +1869,7 @@ Game.handleInputEvents = () => {
         // Fighter cover (J key) — opens the squadron menu (plane types +
         // counts); pick one, then the green ring follows the cursor and
         // right-click sends it in (from the map edge nearest the click).
-        if (e.code === 'KeyJ') {
+        if (e.code === 'KeyJ' && !e.shiftKey) {
             if (Game.fighterTotalAvailable && Game.fighterTotalAvailable() > 0) {
                 Game.toggleFighterMenu();
             } else {
@@ -1860,9 +1883,8 @@ Game.handleInputEvents = () => {
         }
 
         // Attack ground — fire on a spot (F key)
-        if (e.code === 'KeyF') {
-            Game._commandMode = 'attackground';
-            Game.pushMessage('Attack ground — right-click a spot to suppress.', 2.0);
+        if (e.code === 'KeyF' && !e.shiftKey) {
+            Game.beginGroundFireCommand();
         }
 
         // Rotate (R key)
@@ -1893,6 +1915,7 @@ Game.handleInputEvents = () => {
                         if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
                         Game.cancelTruckManeuver(u);
                         Game.clearArrivalFacing(u);
+                        Game.cancelQueuedPath?.(u);
                         u.path = []; u.moving = false;
                     }
                 });
@@ -1901,7 +1924,7 @@ Game.handleInputEvents = () => {
         }
 
         // Grenade (Q key; was G — G is Stand Ground per SS2)
-        if (e.code === 'KeyQ') {
+        if (e.code === 'KeyQ' && !e.shiftKey) {
             Game._commandMode = 'grenade';
             Game.pushMessage('Grenade — right-click target.', 2.0);
         }
@@ -1912,31 +1935,34 @@ Game.handleInputEvents = () => {
         }
 
         // Smoke grenade (N key; was T — T is Hold Fire per SS2)
-        if (e.code === 'KeyN') {
+        if (e.code === 'KeyN' && !e.shiftKey) {
             Game._commandMode = 'smoke';
             Game.pushMessage('Smoke — right-click target.', 2.0);
         }
 
         // Posture cycle (X key): Attention -> At Ease -> Stand down (auto)
-        if (e.code === 'KeyX') {
+        if (e.code === 'KeyX' && !e.shiftKey) {
             Game.cyclePosture();
         }
 
-        // Guard an area (C key) — enter placement mode, right-click sets the centre
-        if (e.code === 'KeyC') {
+        // Guard an area (Shift+C) — enter placement mode, right-click sets the centre
+        if (e.code === 'KeyC' && e.shiftKey) {
             Game.AI.beginGuard();
         }
 
         // Stop / cancel orders (V key)
         if (e.code === 'KeyV') {
+            Game._commandMode = null;
             const stoppedUnits = Game.selectedPlayerUnits();
             stoppedUnits.forEach(u => {
+                Game.cancelQueuedPath?.(u);
                 if (Game.cancelHorseMountOrder) Game.cancelHorseMountOrder(u);
                 Game.cancelTruckManeuver(u);
                 Game.clearArrivalFacing(u);
                 u.path = [];
                 u.moving = false;
                 u.orderMode = 'hold';
+                u._enterGunId = null;
                 u.forcedTargetId = null;
                 u.bombardX = null; u.bombardZ = null;
                 u._bombarding = false;
@@ -1970,8 +1996,8 @@ Game.handleInputEvents = () => {
             }
         }
 
-        // First aid (F key) — one-time self-heal for infantry
-        if (e.code === 'KeyF') {
+        // First aid (Shift+F) — one-time self-heal for infantry
+        if (e.code === 'KeyF' && e.shiftKey) {
             Game.selectedPlayerUnits().forEach(u => {
                 if (!Game.isTank(u.kind) && u.hp < u.maxHp) {
                     u._firstAidKits = u._firstAidKits ?? 1;
@@ -1992,8 +2018,8 @@ Game.handleInputEvents = () => {
             else Game.pushMessage('Select a sapper to lay mines.', 1.5);
         }
 
-        // Entrench toggle (N key)
-        if (e.code === 'KeyN') {
+        // Entrench toggle (Shift+N)
+        if (e.code === 'KeyN' && e.shiftKey) {
             Game.selectedPlayerUnits().filter(Game.isFootInfantry)
                 .forEach(u => Game.entrenchUnit(u));
         }
@@ -2020,8 +2046,8 @@ Game.handleInputEvents = () => {
             }
         }
 
-        // Load / unload troops (L key) — select a truck (+ infantry to load)
-        if (e.code === 'KeyL') {
+        // Load / unload troops (Shift+L) — select a truck (+ infantry to load)
+        if (e.code === 'KeyL' && e.shiftKey) {
             const sel = Game.selectedPlayerUnits();
             const carrier = sel.find(u => Game.isCarrier(u));
             if (!carrier) { Game.pushMessage('Select a truck to carry troops.', 1.5); }
@@ -2041,21 +2067,21 @@ Game.handleInputEvents = () => {
             }
         }
 
-        // Recon plane (J key)
-        if (e.code === 'KeyJ') {
+        // Recon plane (Shift+J)
+        if (e.code === 'KeyJ' && e.shiftKey) {
             Game._commandMode = 'recon';
             Game.pushMessage('Recon — right-click target area.', 2.0);
         }
 
-        // Exit vehicle (X key)
-        if (e.code === 'KeyX') {
+        // Exit vehicle (Shift+X)
+        if (e.code === 'KeyX' && e.shiftKey) {
             Game.selectedPlayerUnits().forEach(u => {
                 if (Game.isTank(u.kind)) Game.exitVehicle(u);
             });
         }
 
-        // Building garrison (Q key)
-        if (e.code === 'KeyQ') {
+        // Building garrison (Shift+Q)
+        if (e.code === 'KeyQ' && e.shiftKey) {
             const garrisoned = Game.selectedPlayerUnits().filter(u => u._garrisoned);
             if (garrisoned.length > 0) {
                 garrisoned.forEach(u => Game.exitBuilding(u));
@@ -2068,7 +2094,7 @@ Game.handleInputEvents = () => {
         }
 
         // C key: cycle movement mode (run / walk / crouch / crawl)
-        if (e.code === 'KeyC') {
+        if (e.code === 'KeyC' && !e.shiftKey) {
             Game.setStanceForSelection();
         }
 
@@ -2100,6 +2126,7 @@ Game.handleInputEvents = () => {
                 if (menu) { menu.classList.remove('hidden'); Game._paused = true; }
             }
         }
+        Game.updateCommandDeck?.();
     });
 
     window.addEventListener('keyup', e => { Game.keys[e.code] = false; });

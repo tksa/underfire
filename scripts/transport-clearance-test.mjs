@@ -3,6 +3,7 @@ import { chromium } from 'playwright';
 const url = process.env.SMOKE_URL || 'http://localhost:8741/';
 const repeats = Math.max(1, Number.parseInt(process.env.CLEARANCE_REPEATS || '1', 10));
 const caseFilter = process.env.CLEARANCE_CASE || '';
+const unitFilter = process.env.CLEARANCE_UNIT || '';
 const browser = await chromium.launch();
 
 try {
@@ -19,7 +20,7 @@ try {
         { timeout: 120000 },
     );
 
-    const results = await page.evaluate(({ repeats: runRepeats, wantedCase }) => {
+    const results = await page.evaluate(({ repeats: runRepeats, wantedCase, wantedUnit }) => {
         Game._paused = true;
 
         // This table is deliberately independent of Game.VEHICLE_FOOTPRINTS and
@@ -46,8 +47,13 @@ try {
         const SWEEP_STEP = 0.05;
         const ARRIVAL_TOL = 1.65;
         const originalUnits = Game.units;
-        const sourceTruck = originalUnits.filter(u => u.kind === 'transport')[1]
+        let sourceTruck = originalUnits.filter(u => u.kind === 'transport')[1]
             || originalUnits.find(u => u.kind === 'transport');
+        if (wantedUnit) {
+            const split = wantedUnit.indexOf('_');
+            sourceTruck = Game.makeUnit(wantedUnit.slice(0, split), wantedUnit.slice(split + 1), 40, 40, { aiState: 'player' });
+            if (!sourceTruck || !Game.isTruck(sourceTruck.kind)) throw new Error(`Invalid truck ${wantedUnit}`);
+        }
         const sourceR35 = originalUnits.find(u => u.kind === 'r35')
             || originalUnits.find(u => u.kind === 'panzer2');
         const sourceAT = originalUnits.find(u => u.deployable && u.kind !== 'hmg');
@@ -363,6 +369,8 @@ try {
             Game.issueCommand(tc.goal[0], tc.goal[1], 'move', [truck]);
             truck.orderDelay = 0;
             const plannedCollision = auditPlannedPath(truck, obstacles, !!trailer);
+            // The live main loop drains queued long routes before movement.
+            while (Game._vehRouteQueue.length) Game.processVehicleRouteQueue();
             const initialPathN = truck.path.length;
             const initialPath = truck.path.map(p => ({ x: round(p.x), z: round(p.z) }));
 
@@ -398,6 +406,7 @@ try {
             for (let step = 0; step < maxSteps; step++) {
                 Game.gameClock += DT;
                 elapsed += DT;
+                Game.processVehicleRouteQueue();
                 Game.updateUnit(truck, DT);
                 if (trailer) Game.updateTowing(DT);
 
@@ -534,7 +543,7 @@ try {
             for (let i = 0; i < scenarios.length; i++) out.push(runCase(scenarios[i], i, repeatIndex));
         }
         return out;
-    }, { repeats, wantedCase: caseFilter });
+    }, { repeats, wantedCase: caseFilter, wantedUnit: unitFilter });
 
     console.log(JSON.stringify(results.map(r => ({
         name: r.name, pass: r.pass, elapsed: r.elapsed, remaining: r.remaining,

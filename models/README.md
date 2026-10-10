@@ -1,56 +1,107 @@
-# Tank Models — Pipeline Guide
+# Model pipeline
 
-## Format
+Under Fire loads GLB assets through `Game.loadModel` and normalizes unit models
+in `js/units.js`. Engine-local forward is **+Z**, up is **+Y**. The simulation
+heading maps to mesh yaw as `Math.PI / 2 - unit.angle`. Check the actual imported
+hierarchy: an asset can contain its own scale and axis-conversion nodes.
 
-**GLB only.** All models should be exported from Blender as `.glb` with embedded materials.
+## Placement and animation
 
-Materials are authored in Blender and preserved at runtime — no runtime material overrides.
+`MODEL_YAW`, `MODEL_SCALE`, model-name mappings and the loader's measured bounds
+control placement. Scale is normalized per model/unit; it is not a universal
+`0.5 * unit.size`. A missing vehicle keeps its procedural silhouette. The
+dormant `tiger-E.glb` is not the fallback for every tank.
 
-## Turret Auto-Detection
+The loader detects turret and barrel nodes and records their base rotations.
+New rigid models use explicit `vehiclePart` tags and identity rest rotations;
+`js/vehicle_model.js` handles wheels, steering, trails and gun recoil. Their
+embedded `weaponMuzzle` markers take precedence over name-based detection.
+Separate barrels follow turret traverse and recoil. Fused S35 and Panzer III
+geometry is partitioned at runtime, using indexed triangles. The S35 partition
+includes the entire barrel below the turret cut so it does not remain on the
+hull when traversing. Twin 7TP turrets retain their individual pivots.
 
-When a GLB model is loaded for a vehicle, `_loadUnitModel` automatically:
+`infantry/mow-{soldier,french,polish}.glb` supplies the replacement infantry and
+gun-crew rigs, with 50 named clips per skin and separate equipment subtrees.
+The old `soldier.glb` remains a legacy asset and is not the default runtime rig.
+`js/mow_soldier_model.js` selects faction models, role weapons and clips; the
+legacy synthetic leg gait is disabled. Skin bounds from the bind pose are not
+used for frustum culling: unit/fog visibility still controls the whole actor.
+Never blend between positive and negative joint scales; the asset test checks
+reflection consistency across every clip. Additional recoil/aim motion is
+restored before the mixer, while authored crew actions run without that legacy
+restore layer. `polish_mounted_ulan.glb` supplies horse/rider clips.
 
-1. **Scans all child nodes** for turret-related names (case-insensitive):
-   - Turret/Head: `turret`, `tower`, `turm`, `tourelle`, `head`
-   - Gun/Barrel: `gun`, `barrel`, `cannon`, `kanone`
+## Campaign materials
 
-2. **Merges head + gun into `turretGroup`** if both are siblings:
-   - Creates a `THREE.Group` at the head node's position
-   - Moves both head and gun into the group as children
-   - Each keeps its own original rotation
+`js/army_materials.js` retains source camouflage, weathering, UVs, alpha modes,
+markings and normal maps. Textured paint receives only a bounded 15% exposure
+correction. The aggressive faction palette replacement and generated surface
+noise were withdrawn after visual review. Rubber, running gear, wood, canvas,
+steel and paint retain separate roughness responses. Per-unit material clones
+prevent the shared mortar asset from inheriting another faction's paint.
 
-3. **If gun is already a child of turret** (preferred setup):
-   - Uses the turret node directly as the rotation group
-   - No merging needed
+The R35 retains all eight original texture maps and double-sided surfaces.
+Its source turret has 9,534 corner normals opposing the triangle winding;
+the isolated geometry repair rebuilds normals without changing positions,
+indices or UVs. `scripts/army-material-test.mjs` checks roof coverage, normal
+orientation, map preservation, faction isolation and shader compilation.
 
-4. **Wires rotation**: Y axis for yaw (standard Three.js up axis)
+## Weapon origins
 
-## Blender Export Checklist
+`js/weapon_mounts.js` binds `weapon_muzzle` objects to the actual moving gun or
+weapon bone. `MODEL_WEAPON_NODES` identifies the shipped fused/unnamed meshes.
+Barrel tips are measured from drawn vertices in engine-local coordinates;
+discarded hull vertices in shared split-mesh buffers are excluded. A world
+bounding-box corner cannot identify a muzzle reliably.
 
-1. **Name nodes properly** — turret mesh named `turret`, gun parts include `gun` in name
-2. **Parent gun to turret** — gun meshes should be children of the turret object
-3. **Remove non-mesh objects** — delete cameras, curves, lights before export
-4. **Materials** — set up all materials in Blender (they'll be used as-is in game)
-5. **Export settings:**
-   - Format: GLB
-   - Include: Animations (if any)
-   - Materials: Export
-   - Cameras/Lights: Off
+Infantry weapons contain named muzzle nodes under their hand attachment. Their
+native +X barrels are mapped to the engine's +Z forward. Mounted cavalry uses vertices
+rigidly weighted to `Gun`, transformed through the inverse bind pose, so the
+anchor remains correct through directional takes and model normalization.
+Mortars and guns declare their visible tube/barrel; all three HMG teams now have
+dedicated GLBs and two animated crew figures. Strafing fighters
+have visible wing barrels at measured leading-edge sections; their anchors
+follow bank and pitch. The scripted train's turrets traverse before firing and
+its shells originate at the recoiling barrel tips.
 
-## Adding New Models
+`Game.getWeaponMuzzle(unit)` synchronizes this simulation frame's hull/turret
+heading before returning world position and bore direction. Both direct fire
+and attack-ground use it. Tracers, flashes and smoke carry the same origin,
+including height. Twin turrets alternate their shot origins. An unbound weapon
+has an explicit fallback flagged by the audit.
 
-1. Model and texture in Blender
-2. Set up turret hierarchy (parent gun → turret)
-3. Export as `models/{unit_kind}.glb` (e.g., `panzer3.glb`, `s35.glb`)
-4. If filename differs from unit kind, add mapping to `modelNameMap` in `units.js`
-5. Fallback: all tanks without a specific model use `tiger-E.glb`
+## Adding or replacing an asset
 
-## Scale
+1. Export a GLB with embedded materials and no unwanted cameras/lights. Preserve
+   skinning and animation channels for animated units.
+2. Prefer a named `turret` with a child `gun` or `barrel`. Set sensible pivots.
+   Add a model-specific node mapping when automatic discovery is insufficient.
+3. Verify scale, forward direction, wheel axes, ground contact and crew placement
+   in the game. Asset materials are normally retained, with existing skin and
+   per-model material handling applied by the loader.
+4. Add the configuration to `scripts/model-weapon-audit.mjs`. Review at zero and
+   quarter-turn traverse, plus the recoil check. Use the muzzle markers to check
+   geometry, not just equality between two computed effect positions.
+5. Record the asset's source and license in `CREDITS.md`.
 
-GLB scale factor: `0.5 * unit.size` (where size 1.0 = standard tank)
+```sh
+node scripts/model-weapon-audit.mjs /tmp/underfire-model-review --assert
+node scripts/model-coverage-test.mjs
+node scripts/model-roster-gallery.mjs
+node scripts/weapon-actors-test.mjs /tmp/underfire-actor-review
+node scripts/fieldgun-model-test.mjs
+node scripts/infantry-asset-test.mjs
+node scripts/infantry-visibility-test.mjs
+```
 
-## Current Models
+The weapon audit covers 32 ground configurations, with separate aircraft/train
+checks. Core roster coverage checks all 63 configurations and 14 crewed weapons;
+none retain generic geometry. Additional GLBs cover farm scenery, railway pieces
+and dormant assets. See `docs/MODEL_COVERAGE.md` for the 15 new
+GLBs, runtime articulation, source variants and remaining art approximations.
+The larger imported CSV catalogue still has missing dedicated models; core
+coverage does not claim every extended type or exact historical variant is finished.
 
-| File | Unit | Notes |
-|------|------|-------|
-| `tiger-E.glb` | All tanks (fallback) | Early grey Dunkelgrau RAL 7021, textured in Blender |
+Farm scenery conversion and placement are documented in [SCENERY.md](../docs/SCENERY.md).
+Vehicle and infantry proportions are documented in [UNIT_SCALE.md](../docs/UNIT_SCALE.md).

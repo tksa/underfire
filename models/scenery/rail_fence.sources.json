@@ -1,0 +1,27 @@
+{
+  "output": "rail_fence.glb",
+  "bytes": 60904,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/construction/fence/fence-wood4/fence-wood4.def",
+      "sha256": "76abd573ade12f938d1b18d3468fc4cefb07506feebe65f48fe75f51f0b9ec7d"
+    },
+    {
+      "path": "entity/construction/fence/fence-wood4/fence-wood4.mdl",
+      "sha256": "ccb6841368bc2e87799d2be78658a7f99ce3268fcac81d3b671db33a68d4723c"
+    },
+    {
+      "path": "entity/construction/fence/fence-wood4/fence-wood4.ply",
+      "sha256": "5b2a1133f14ad22dbd2c4b478f52a4a61efbb46f085526bd4742e07b3bce5b53"
+    },
+    {
+      "path": "entity/construction/fence/fence-wood4/woodfence2.mtl",
+      "sha256": "6636b0d7c33d608317dcda65d8ac4bb803681d893d882489468e8a39580c5172"
+    },
+    {
+      "path": "texture/common/fence/woodfence2.dds",
+      "sha256": "871f26e5c44150ed21f45c1323a28dcdb93ed41ef3a8026cbb93301f1518c0eb"
+    }
+  ]
+}

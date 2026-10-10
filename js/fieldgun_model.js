@@ -19,6 +19,8 @@ Game.FIELDGUN75_CREW_SKIN = Object.freeze({
 });
 
 Game.FIELDGUN75_CREW_COUNT = 2;
+// Round travel and the loader's authored take use one shared cycle duration.
+Game.crewLoadDuration = unit => Math.max(0.6, Math.min(2.5, (unit.cooldown || 2) * 0.75));
 Game.FIELDGUN75_CREW_PLACEMENTS = Object.freeze([
     // Coordinates are defined before the gun's per-model half-turn, when its
     // trails extend toward +Z. The crew host inherits that half-turn below.
@@ -31,6 +33,26 @@ Game.FIELDGUN75_CREW_PLACEMENTS = Object.freeze([
 // 25 mm Hotchkiss reuses it with French-skinned clones of the same rig.
 // `muzzle` is the world-unit barrel-tip offset applyShot fires from.
 Game.GUN_CREWS = Object.freeze({
+    hmg: Object.freeze({
+        placements: Object.freeze([
+            Object.freeze({ x: 0, z: 0.65, phase: 0, restStance: 'crouch', role: 'mg_gunner' }),
+            Object.freeze({ x: 0.58, z: 0.5, phase: 0.5, restStance: 'crouch', role: 'mg_loader' }),
+        ]), muzzle: 0.9,
+    }),
+    pak36: Object.freeze({
+        placements: Object.freeze([
+            Object.freeze({ x: -0.40, z: 0.55, phase: 0, restStance: 'crouch', role: 'gunner' }),
+            Object.freeze({ x: 0.40, z: 0.74, phase: 0.5, restStance: 'crouch', role: 'loader' }),
+        ]),
+        muzzle: 1.30,
+    }),
+    bofors37: Object.freeze({
+        placements: Object.freeze([
+            Object.freeze({ x: -0.42, z: 0.58, phase: 0, restStance: 'crouch', role: 'gunner' }),
+            Object.freeze({ x: 0.42, z: 0.77, phase: 0.5, restStance: 'crouch', role: 'loader' }),
+        ]),
+        muzzle: 1.47,
+    }),
     fieldgun75: Object.freeze({
         placements: Game.FIELDGUN75_CREW_PLACEMENTS,
         muzzle: 1.15,
@@ -59,6 +81,7 @@ Game.GUN_CREWS = Object.freeze({
 Game.GUN_CREW_FALLBACK_SKINS = Object.freeze({
     polish: Object.freeze({ coatFallback: 0xa29f78, helmet: 0x5d6245, skin: 0xcaa987 }),
     french: Object.freeze({ coatFallback: 0x7d86a0, helmet: 0x4c5566, skin: 0xcaa987 }),
+    german: Object.freeze({ coatFallback: 0x68705b, helmet: 0x53574b, skin: 0xcaa987 }),
 });
 
 Game.FIELDGUN_PUSH_KEYS = Object.freeze([
@@ -271,6 +294,7 @@ Game._makeFieldGunSoldierCrewman = (model, placement, index) => {
     model.position.z -= (scaledBox.min.z + scaledBox.max.z) * 0.5;
     model.position.x += Game.SOLDIER_OFFSET_X || 0;
     model.position.z += Game.SOLDIER_OFFSET_Z || 0;
+    if (Game.isMowSoldier?.(model)) model.position.set(0, 0, 0);
 
     const modelWrapper = new THREE.Group();
     modelWrapper.name = 'fieldGunSoldierWrapper';
@@ -298,11 +322,19 @@ Game._makeFieldGunSoldierCrewman = (model, placement, index) => {
         const split = Game.splitSoldierAnim
             ? Game.splitSoldierAnim(model.animations || [])
             : (model.animations || []);
-        const roleClips = split.filter(clip =>
-            clip.name === 'idle' || clip.name === 'walk' || clip.name === 'crouch');
+        const roleClips = Game.isMowSoldier?.(model)
+            ? [['idle', 'crew_idle'], ['crouch', 'crew_idle'], ['walk', 'crew_push'], ['load', 'crew_load']]
+                .map(([name, source]) => { const clip = split.find(c => c.name === source)?.clone(); if (clip) clip.name = name; return clip; }).filter(Boolean)
+            : split.filter(clip => clip.name === 'idle' || clip.name === 'walk' || clip.name === 'crouch');
         Game._fieldGunSoldierClips = roleClips.length ? roleClips : split;
     }
-    const clips = Game._fieldGunSoldierClips;
+    const clips = placement.role?.startsWith('mortar_') && Game.isMowSoldier?.(model)
+        ? [['idle', 'mortar_idle'], ['crouch', 'mortar_idle'], ['walk', 'mortar_walk'], ['load', 'mortar_load']]
+            .map(([name, source]) => { const clip = model.animations.find(c => c.name === source)?.clone(); if (clip) clip.name = name; return clip; }).filter(Boolean)
+        : placement.role?.startsWith('mg_') && Game.isMowSoldier?.(model)
+        ? [['idle', 'hmg_idle'], ['crouch', 'hmg_idle'], ['walk', 'walk'], ['load', 'hmg_load']]
+            .map(([name, source]) => { const clip = model.animations.find(c => c.name === source)?.clone(); if (clip) clip.name = name; return clip; }).filter(Boolean)
+        : Game._fieldGunSoldierClips;
     const actions = {};
     clips.forEach(clip => { actions[clip.name] = mixer.clipAction(clip); });
     let facingRoot = null;
@@ -329,7 +361,7 @@ Game._makeFieldGunSoldierCrewman = (model, placement, index) => {
     });
     // Solve while the clone is still in its bind pose, before the first
     // mixer/animation update below can disturb the limb vectors.
-    figure.userData.pushPose = Game._solveFieldGunPushPose
+    figure.userData.pushPose = !placement.role?.startsWith('mortar_') && Game._solveFieldGunPushPose
         ? Game._solveFieldGunPushPose(figure) : null;
     figure.userData.animationUnit = {
         mesh: figure,
@@ -406,7 +438,8 @@ Game._loadFieldGunSoldierCrew = async (unit, unitMesh, crew) => {
         && (!Game.getUnitById || unit.id == null || Game.getUnitById(unit.id) === unit);
     const config = (Game.GUN_CREWS && Game.GUN_CREWS[unit.kind]) || Game.GUN_CREWS.fieldgun75;
     const placements = config.placements;
-    const models = await Promise.all(placements.map(() => Game.loadModel(Game.SOLDIER_MODEL_PATH)));
+    const soldierPath = Game.soldierModelPath?.(unit.team) || Game.SOLDIER_MODEL_PATH;
+    const models = await Promise.all(placements.map(() => Game.loadModel(soldierPath)));
     if (!isCurrent()) return false;
 
     const figures = models.map((model, index) => {
@@ -422,7 +455,7 @@ Game._loadFieldGunSoldierCrew = async (unit, unitMesh, crew) => {
     figures.forEach(figure => crew.add(figure));
     crew.userData.figures = figures;
     crew.userData.crewMode = 'soldier';
-    crew.userData.skinSource = Game.SOLDIER_MODEL_PATH;
+    crew.userData.skinSource = soldierPath;
     crew.userData.materials = null;
     Game.updateFieldGunCrew(unit, 0);
     return true;
@@ -478,7 +511,8 @@ Game.attachFieldGunCrew = (unit, unitMesh) => {
     // Crew are siblings of modelWrapper, so they do not inherit MODEL_YAW.
     // Apply only the per-model correction (not the wrapper's automatic -90°)
     // to put them behind the now +Z-facing bore and facing its breech.
-    crew.rotation.y = (Game.MODEL_YAW && Game.MODEL_YAW[`${unit.team}_${unit.kind}`]) || 0;
+    crew.rotation.y = unitMesh.userData.proceduralGun || unitMesh.userData.vehicleRig || unit.kind === 'hmg' || unit.kind.startsWith('mortar') ? Math.PI
+        : (Game.MODEL_YAW && Game.MODEL_YAW[`${unit.team}_${unit.kind}`]) || 0;
     crew.userData.skinTeam = unit.team;
     crew.userData.uniformTint = coat.getHex();
     crew.userData.materials = materials;
@@ -599,10 +633,59 @@ Game._resetFieldGunCrewRest = (unit, crew) => {
     });
 };
 
+// Solve the two arm segments against actual model grips. Working in each
+// parent's local frame also handles reflected GEM skeletons correctly.
+Game._placeCrewHand = (figure, side, target, unit) => {
+    const T = Game.THREE, model = figure.userData.soldierModel;
+    if (!Game.isMowSoldier?.(model)) return;
+    const upper = model.getObjectByName(`hand1${side}`), lower = model.getObjectByName(`hand2${side}`);
+    const wrist = model.getObjectByName(`hand_rot1${side}`);
+    if (!upper || !lower || !wrist) return;
+    figure.updateWorldMatrix(true, true);
+    const a = upper.getWorldPosition(new T.Vector3()), b = lower.getWorldPosition(new T.Vector3()), c = wrist.getWorldPosition(new T.Vector3());
+    const l1 = a.distanceTo(b), l2 = b.distanceTo(c);
+    const direction = target.clone().sub(a), distance = Game.clamp(direction.length(), Math.abs(l1 - l2) + 0.001, l1 + l2 - 0.001);
+    direction.normalize();
+    const pole = new T.Vector3(side === 'l' ? 0.6 : -0.6, -1, -0.25).transformDirection(unit.mesh.matrixWorld);
+    pole.addScaledVector(direction, -pole.dot(direction)).normalize();
+    const along = (l1 * l1 + distance * distance - l2 * l2) / (2 * distance);
+    const elbow = a.clone().addScaledVector(direction, along).addScaledVector(pole, Math.sqrt(Math.max(0, l1 * l1 - along * along)));
+    const aim = (bone, end, goal) => {
+        const inv = bone.parent.matrixWorld.clone().invert();
+        const origin = bone.position;
+        const from = end.getWorldPosition(new T.Vector3()).applyMatrix4(inv).sub(origin).normalize();
+        const to = goal.clone().applyMatrix4(inv).sub(origin).normalize();
+        bone.quaternion.premultiply(new T.Quaternion().setFromUnitVectors(from, to));
+        bone.updateWorldMatrix(false, true);
+    };
+    aim(upper, lower, elbow); aim(lower, wrist, target);
+};
+
+Game._fitMachineGunCrewHands = (unit, figure) => {
+    const wrapper = unit.mesh.userData.modelWrapper;
+    if (!wrapper || !figure.userData.fieldGunRole?.startsWith('mg_')) return;
+    const T = Game.THREE, left = wrapper.getObjectByName('spade_grip_-1'), right = wrapper.getObjectByName('spade_grip_1');
+    const handle = wrapper.getObjectByName('equipment_mg34_handle');
+    if ((!left || !right) && !handle) return;
+    unit.mesh.updateWorldMatrix(true, true);
+    const point = node => new T.Box3().setFromObject(node).getCenter(new T.Vector3());
+    const targetR = right ? point(right) : handle.getWorldPosition(new T.Vector3());
+    const targetL = left ? point(left) : targetR.clone().add(new T.Vector3(-0.045, 0.01, 0.12).transformDirection(unit.mesh.matrixWorld).multiplyScalar(0.129));
+    if (figure.userData.fieldGunRole === 'mg_loader') {
+        // The assistant handles the feed while remaining beside the weapon.
+        const feed = wrapper.getObjectByName('feed_strip') || wrapper.getObjectByName('belt_link_3') || wrapper.getObjectByName('mount_cartridge_belt');
+        if (feed) targetL.copy(point(feed));
+        targetR.copy(targetL).add(new T.Vector3(-0.08, -0.03, 0).applyQuaternion(unit.mesh.quaternion));
+    }
+    Game._placeCrewHand(figure, 'r', targetR, unit); Game._placeCrewHand(figure, 'l', targetL, unit);
+};
+
 Game.updateFieldGunCrew = (unit, dt) => {
     const ud = unit && unit.mesh && unit.mesh.userData;
     const crew = ud && ud.fieldGunCrew;
     if (Game.updateFieldGunWheels) Game.updateFieldGunWheels(unit, dt);
+    if (Game.updateGunMechanism) Game.updateGunMechanism(unit, dt);
+    Game.updateMortarModel?.(unit, dt);
     if (!crew || !crew.userData.figures) return;
     // Towed: the crew has climbed aboard the towing truck. Unmanned: they
     // dismounted as real infantry. Either way the decorative crew hides
@@ -658,6 +741,22 @@ Game.updateFieldGunCrew = (unit, dt) => {
             } else if (data.mixer) {
                 data.mixer.update(dt);
             }
+            if (data.actions?.load && ['loader', 'mg_loader', 'mortar_loader'].includes(data.fieldGunRole)) {
+                const age = unit._lastShotAt == null ? Infinity : unit._shotAge ?? Game.gameClock - unit._lastShotAt;
+                const duration = Game.crewLoadDuration(unit);
+                const phase = data.fieldGunRole === 'mg_loader'
+                    ? (unit._reload ? unit._reload.elapsed / unit._reload.duration : -1)
+                    : (age - 0.25) / duration;
+                const action = data.actions.load;
+                if (!pushing && phase > 0 && phase < 1) {
+                    action.enabled = true; action.play();
+                    action.setEffectiveWeight(Math.sin(Math.PI * phase) ** 2);
+                    action.time = phase * action.getClip().duration;
+                    data.mixer.update(0);
+                } else if (action.isRunning()) {
+                    action.stop(); data.mixer.update(0);
+                }
+            }
             // A resting artilleryman KNEELS, unconditionally. The shared clip
             // chooser has speed/stance/min-hold bands that can strand a crewman
             // in the standing idle after a move; his rest pose is not
@@ -689,11 +788,27 @@ Game.updateFieldGunCrew = (unit, dt) => {
                     target.bone.quaternion.slerp(target.quat, blend);
                 }
             }
+            if (data.pushPose && blend < 0.5
+                && (data.fieldGunRole === 'gunner' || data.fieldGunRole === 'loader')) {
+                // The gunner holds the controls; the loader reaches toward the
+                // breech during the actual shot's loading cycle. These arm
+                // motions use the solved carriage reach, not an invisible rifle.
+                const age = unit._lastShotAt == null ? Infinity : unit._shotAge ?? Game.gameClock - unit._lastShotAt;
+                const duration = Math.max(0.6, Math.min(2.5, (unit.cooldown || 2) * 0.75));
+                const phase = (age - 0.25) / duration;
+                const loading = phase > 0 && phase < 1 ? Math.sin(Math.PI * phase) ** 2 : 0;
+                const reach = data.fieldGunRole === 'gunner' ? 0.45 : 0.25 + loading * 0.55;
+                for (const target of data.pushPose) {
+                    if (/shoulder|arm_/.test(target.bone.name)) target.bone.quaternion.slerp(target.quat, reach * (1 - blend));
+                }
+            }
             figure.position.y = 0.01;
             if (data.fieldGunHomeZ != null) {
                 figure.position.z = data.fieldGunHomeZ
                     - (Game.FIELDGUN_PUSH_CLOSE || 0) * blend;
             }
+            if (!pushing && Game._fitMachineGunCrewHands) Game._fitMachineGunCrewHands(unit, figure);
+            Game.fitMortarCrewHands?.(unit, figure, pushing);
         });
     } else {
         // Load-failure fallback: the two simple articulated figures mirror the
@@ -757,7 +872,7 @@ Game.updateFieldGunCrew = (unit, dt) => {
             const animationUnit = figure.userData.animationUnit;
             const bones = animationUnit && Game._soldierLegBones
                 ? Game._soldierLegBones(animationUnit) : null;
-            if (bones && bones.torso) bones.torso.rotation.x += 0.10 * envelope;
+            if (bones && bones.torso && !Game.isMowSoldier?.(figure.userData.soldierModel)) bones.torso.rotation.x += 0.10 * envelope;
         });
         unit.recoilTime += dt;
         if (unit.recoilTime >= duration) {

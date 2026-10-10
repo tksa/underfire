@@ -25,12 +25,8 @@ Game.MAP_ROWS = 100;
 Game.WORLD_W = Game.MAP_COLS * Game.TILE;
 Game.WORLD_H = Game.MAP_ROWS * Game.TILE;
 
-// ── Model scale rule (single source of truth) ──────────────────────────
-// Anchored to infantry: a ~1.8 m soldier reads at ~2.45 world units tall, so
-// 1 metre ≈ 1.35 world units (a 3-unit tile ≈ 2.2 m). The model pipeline exports
-// every mesh at TRUE METRE scale; the loader applies this one factor, so all
-// units are proportional with no per-model fudging. Vehicles are compressed for
-// grid playability (infantry stay 1:1). See docs/MODEL_PIPELINE.md.
+// Legacy tactical distance conversion, retained for weapon ranges and map UI.
+// Unit presentation retains the established loader tuning; scenery uses the infantry height anchor.
 Game.SCALE = {
   unitsPerMeter: 1.35,
   vehicleCompression: 0.65,

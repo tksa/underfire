@@ -9,7 +9,7 @@
     // Production serves heavyweight public assets through the Bunny Pull Zone.
     // Localhost, previews and CI stay fully local. `?cdn=0` is an emergency
     // production bypass; `?cdn=1` lets a developer exercise Bunny locally.
-    window.UF_ASSET_VERSION = 'v0.21.0';
+    window.UF_ASSET_VERSION = 'v0.22.0';
     (function () {
       var CDN_ORIGIN = 'https://underfire.b-cdn.net';
       var productionHosts = ['underfire.io', 'www.underfire.io', 'underfire.b-cdn.net'];
@@ -23,11 +23,54 @@
         /^(?:splash\.png|uf_logo\.png|under_vid\.mp4)$/i,
       ];
 
+      // These release assets are not mirrored to Bunny Storage yet. Keep
+      // their origin URLs explicit so a healthy CDN probe on another edge
+      // cannot silently replace the new models with procedural fallbacks.
+      // Remove entries only after verifying the CDN bytes match the origin.
+      var originOnlyAssets = new Set([
+        "models/french_hmg.glb",
+        "models/german_fuel.glb",
+        "models/german_hmg.glb",
+        "models/german_pak36.glb",
+        "models/german_panzer1.glb",
+        "models/german_panzer2.glb",
+        "models/german_panzer4.glb",
+        "models/german_sdkfz.glb",
+        "models/german_supply.glb",
+        "models/infantry/mow-french.glb",
+        "models/infantry/mow-polish.glb",
+        "models/infantry/mow-soldier.glb",
+        "models/mortar46.glb",
+        "models/mortar50.glb",
+        "models/mortar60.glb",
+        "models/mortar81.glb",
+        "models/polish_bofors37.glb",
+        "models/polish_hmg.glb",
+        "models/polish_supply.glb",
+        "models/polish_transport.glb",
+        "models/polish_wz34.glb",
+        "models/scenery/barn_annex.glb",
+        "models/scenery/farm_barn.glb",
+        "models/scenery/farm_cart.glb",
+        "models/scenery/farmhouse.glb",
+        "models/scenery/firewood.glb",
+        "models/scenery/hayrick.glb",
+        "models/scenery/haystack.glb",
+        "models/scenery/plank_fence.glb",
+        "models/scenery/plough.glb",
+        "models/scenery/rail_fence.glb",
+        "models/scenery/sacks.glb",
+        "models/scenery/well.glb",
+        "models/scenery/wood_barrel.glb",
+        "models/scenery/wood_shed.glb"
+]);
+
       window.UF_ASSET_CDN = {
         origin: CDN_ORIGIN,
         requested: requested,
         enabled: requested,
         fallbackReason: '',
+        originOnlyAssets: Array.from(originOnlyAssets),
       };
 
       window.ufAssetUrl = function (input) {
@@ -37,10 +80,11 @@
         catch (e) { return input; }
         if (parsed.origin !== location.origin && parsed.origin !== CDN_ORIGIN) return input;
         var path = parsed.pathname.replace(/^\/+/, '');
-        if (!window.UF_ASSET_CDN.enabled || !cdnPaths.some(function (rule) { return rule.test(path); })) {
+        var fromOrigin = window.UF_ASSET_CDN.requested && originOnlyAssets.has(path);
+        if (!fromOrigin && (!window.UF_ASSET_CDN.enabled || !cdnPaths.some(function (rule) { return rule.test(path); }))) {
           return input;
         }
-        var cdnUrl = new URL(path, CDN_ORIGIN + '/');
+        var cdnUrl = new URL(path, (fromOrigin ? location.origin : CDN_ORIGIN) + '/');
         parsed.searchParams.forEach(function (value, key) { cdnUrl.searchParams.append(key, value); });
         cdnUrl.searchParams.set('v', window.UF_ASSET_VERSION);
         cdnUrl.hash = parsed.hash;
@@ -1838,6 +1882,7 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="styles/tactical-hud.css?v=20260911">
 </head>
 
 <body>
@@ -2396,24 +2441,28 @@
       #hudExpand:hover { color: #fff; }
     </style>
     <div id="hudExpand" title="Show bar">&#9652;</div>
-    <div id="hudBar">
+    <div id="hudBar" aria-label="Tactical command panel">
       <div class="hud-fold" id="hudCollapse" title="Hide bar">&#9662;</div>
       <div class="hud-help-wrap">
         <div class="hud-help-btn" onclick="this.nextElementSibling.classList.toggle('show')">?</div>
         <div class="hud-help-tooltip">
           <strong style="color:#c9a45d">Hotkeys</strong><br>
-          C: Run/Walk/Crouch/Crawl &nbsp; S: Run toggle &nbsp; F: First aid<br>
-          G: Grenade &nbsp; T: Smoke &nbsp; V: Stop &nbsp; H: Hold fire<br>
-          E: Assault &nbsp; R: Rotate &nbsp; N: Entrench &nbsp; M: Mine &nbsp; Q: Garrison<br>
-          B: Air strike (wheel = planes) &nbsp; J: Recon &nbsp; Y: Binoculars &nbsp; K: TNT (sapper)<br>
-          Space: Pause &nbsp; X: Exit vehicle &nbsp; L: Last attack<br>
-          RC enemy: Attack target &nbsp; RC ground (mortar): Bombard<br>
+          C: Cycle movement &nbsp; S: Run toggle &nbsp; F: Attack ground<br>
+          Q: Grenade &nbsp; N: Smoke &nbsp; V: Stop &nbsp; H: Hold fire<br>
+          E: Move / Attack move &nbsp; R: Rotate &nbsp; Z: Formation<br>
+          B: Air strike (wheel = planes) &nbsp; J: Fighter cover &nbsp; Y: Binoculars &nbsp; K: TNT (sapper)<br>
+          Space: Pause &nbsp; X: Readiness &nbsp; L: Last attack<br>
+          Shift+F: First aid · Shift+Q: Garrison · Shift+N: Entrench<br>
+          Shift+X: Exit vehicle · Shift+L: Load/unload · Shift+J: Recon<br>
+          Ctrl + 0–9: Assign group · 0–9: Recall group<br>
+          RC enemy: Attack target &nbsp; Attack ground: click terrain to fire<br>
           RC drag ground: Move then face arrow direction; nearby = rotate<br>
           Arrows / screen edge: Pan &nbsp; + / -: Zoom<br>
           Shift+RC: Queue waypoint &nbsp; Ctrl/Cmd+RC: Gather &nbsp; Esc: Menu &nbsp; Z: Formation &nbsp; /: Behavior
         </div>
       </div>
       <div class="hud-section minimap-section">
+        <div class="hud-title map-heading">Field map <span id="hudMissionTime">00:00</span></div>
         <div class="minimap-frame">
           <canvas id="minimapCanvas" width="200" height="200"></canvas>
         </div>
@@ -2427,84 +2476,92 @@
         </div>
       </div>
       <div class="hud-section" id="missionPanel" style="display:none"></div>
-      <div class="hud-section cmd-section">
-        <div class="hud-title">Orders</div>
-        <div class="stance-switch" title="Right-click order mode (E to toggle)">
-          <button class="stance-btn active" id="stanceMove" data-stance="move"><span class="stance-icon">⇒</span>Move</button>
-          <button class="stance-btn" id="stanceAttack" data-stance="attack"><span class="stance-icon"><img class="ui-ico" data-uf-src="icons/attack-move.svg" alt=""></span>Attack&nbsp;Move</button>
+      <section class="hud-section info-section" id="selectedPanel" aria-label="Selected units"></section>
+      <section class="hud-section cmd-section" aria-label="Combat orders">
+        <div class="hud-title command-heading">Orders <span id="commandSelection">Select a unit</span></div>
+        <div class="primary-orders">
+          <button type="button" class="stance-btn active" id="stanceMove" data-stance="move" title="Right-click moves without stopping to engage"><span class="stance-icon">➜</span><span>Move</span></button>
+          <button type="button" class="stance-btn" id="stanceAttack" data-stance="attack" title="Right-click to advance and engage enemies (E)"><span class="stance-icon"><img class="ui-ico" data-uf-src="icons/attack-move.svg" alt=""></span><span>Attack move</span><kbd>E</kbd></button>
+          <button type="button" class="cmd-btn ground-order" id="cmdAttackGround" title="Fire at a ground position or bombard an area (F)"><span class="cmd-icon"><img class="ui-ico" data-uf-src="icons/artillery-shell.svg" alt=""></span><span class="cmd-label">Attack ground</span><kbd>F</kbd></button>
         </div>
-        <div class="cmd-grid">
-          <div class="cmd-btn" id="cmdStop" title="Stop (V)"><span class="cmd-icon">■</span><span
-              class="cmd-label">Stop</span></div>
-          <div class="cmd-btn" id="cmdHold" title="Hold fire (T or H)"><span class="cmd-icon">⊘</span><span
-              class="cmd-label">Hold</span></div>
-          <div class="cmd-btn" id="cmdGrenade" title="Grenade (Q)"><span class="cmd-icon"><img class="ui-ico" data-uf-src="icons/grenade.svg" alt=""></span><span
-              class="cmd-label">Grenade</span></div>
-          <div class="cmd-btn" id="cmdSmoke" title="Smoke (N)"><span class="cmd-icon"><img class="ui-ico" data-uf-src="icons/smoke.svg" alt=""></span><span
-              class="cmd-label">Smoke</span></div>
-          <div class="cmd-btn" id="cmdAirStrike" title="Air Strike (B) — wheel to set planes"><span class="cmd-badge" id="airStrikeBadge">0</span><span class="cmd-icon"><img class="ui-ico" data-uf-src="icons/bombing-run.svg" alt=""></span><span
-              class="cmd-label">Strike</span></div>
-          <div class="cmd-btn" id="cmdFighter" title="Fighter cover (J) — right-click a patrol area; the plane flies in from the map edge nearest your click"><span class="cmd-badge" id="fighterBadge">2</span><span class="cmd-icon">✈</span><span
-              class="cmd-label">Fighter</span></div>
-          <div class="cmd-btn" id="cmdRotate" title="Rotate (R)"><span class="cmd-icon">↻</span><span
-              class="cmd-label">Rotate</span></div>
-          <div class="cmd-btn" id="cmdProne" title="Crawl / Stand toggle (C cycles)"><span class="cmd-icon">⤓</span><span
-              class="cmd-label">Crawl</span></div>
-          <div class="cmd-btn" id="cmdAttackGround" title="Attack ground — fire on a spot (F)"><span class="cmd-icon"><img class="ui-ico" data-uf-src="icons/artillery-shell.svg" alt=""></span><span
-              class="cmd-label">Ground</span></div>
-          <div class="cmd-btn" id="cmdCavalry" title="Mount or dismount cavalry" style="display:none"><span class="cmd-icon">♞</span><span
-              class="cmd-label">Dismount</span></div>
-          <div class="cmd-btn" id="cmdTow" title="Join or unjoin a nearby anti-tank gun" style="display:none"><span class="cmd-icon">⛓</span><span
-              class="cmd-label">Join</span></div>
-          <div class="cmd-btn" id="cmdCrew" title="Crew dismounts the gun" style="display:none"><span class="cmd-icon">♟</span><span
-              class="cmd-label">Crew off</span></div>
-          <div class="cmd-btn" id="cmdCarrier" title="Load or unload infantry" style="display:none"><span class="cmd-icon">⇥</span><span
-              class="cmd-label">Load</span></div>
-          <div class="cmd-btn" id="cmdUnload" title="Unload infantry" style="display:none"><span class="cmd-badge" id="unloadBadge">0</span><span class="cmd-icon">⇤</span><span
-              class="cmd-label">Unload</span></div>
+        <div class="mortar-controls" id="mortarControls" hidden>
+          <span class="fire-method-label">Fire method</span>
+          <button type="button" class="cmd-btn" id="cmdMortarMethod" title="Sight first for more accurate opening rounds"><span class="cmd-label">Ranged</span></button>
+          <button type="button" class="cmd-btn" id="cmdMortarRapid" title="Fire promptly with wider opening rounds"><span class="cmd-label">Rapid</span></button>
+          <label class="area-control" for="mortarAreaRadius">Area radius <output id="mortarAreaValue">6m</output><input id="mortarAreaRadius" type="range" min="2" max="24" step="2" value="8" aria-label="Mortar area radius"></label>
         </div>
-      </div>
+        <div class="cmd-grid" aria-label="Additional orders">
+          <button type="button" class="cmd-btn" id="cmdStop" title="Stop (V)"><span class="cmd-icon">■</span><span
+              class="cmd-label">Stop</span><kbd>V</kbd></button>
+          <button type="button" class="cmd-btn" id="cmdHold" title="Hold fire (T or H)"><span class="cmd-icon">⊘</span><span
+              class="cmd-label">Hold fire</span><kbd>H</kbd></button>
+          <button type="button" class="cmd-btn" id="cmdGrenade" title="Grenade (Q)"><span class="cmd-icon"><img class="ui-ico" data-uf-src="icons/grenade.svg" alt=""></span><span
+              class="cmd-label">Grenade</span><kbd>Q</kbd></button>
+          <button type="button" class="cmd-btn" id="cmdSmoke" title="Smoke (N)"><span class="cmd-icon"><img class="ui-ico" data-uf-src="icons/smoke.svg" alt=""></span><span
+              class="cmd-label">Smoke</span><kbd>N</kbd></button>
+          <button type="button" class="cmd-btn" id="cmdRotate" title="Rotate (R)"><span class="cmd-icon">↻</span><span
+              class="cmd-label">Rotate</span><kbd>R</kbd></button>
+          <button type="button" class="cmd-btn" id="cmdProne" title="Crawl / Stand toggle (C cycles)"><span class="cmd-icon">⤓</span><span
+              class="cmd-label">Go prone</span><kbd>C</kbd></button>
+          <button type="button" class="cmd-btn" id="cmdAirStrike" title="Air Strike (B) — wheel to set planes"><span class="cmd-badge" id="airStrikeBadge">0</span><span class="cmd-icon"><img class="ui-ico" data-uf-src="icons/bombing-run.svg" alt=""></span><span
+              class="cmd-label">Strike</span><kbd>B</kbd></button>
+          <button type="button" class="cmd-btn" id="cmdFighter" title="Fighter cover (J) — right-click a patrol area; the plane flies in from the map edge nearest your click"><span class="cmd-badge" id="fighterBadge">2</span><span class="cmd-icon">✈</span><span
+              class="cmd-label">Fighter</span><kbd>J</kbd></button>
+          <button type="button" class="cmd-btn" id="cmdCavalry" title="Mount or dismount cavalry" style="display:none"><span class="cmd-icon">♞</span><span
+              class="cmd-label">Dismount</span></button>
+          <button type="button" class="cmd-btn" id="cmdTow" title="Join or unjoin a nearby anti-tank gun" style="display:none"><span class="cmd-icon">⛓</span><span
+              class="cmd-label">Join</span></button>
+          <button type="button" class="cmd-btn" id="cmdCrew" title="Crew dismounts the gun" style="display:none"><span class="cmd-icon">♟</span><span
+              class="cmd-label">Crew off</span></button>
+          <button type="button" class="cmd-btn" id="cmdCarrier" title="Load or unload infantry" style="display:none"><span class="cmd-icon">⇥</span><span
+              class="cmd-label">Load</span></button>
+          <button type="button" class="cmd-btn" id="cmdUnload" title="Unload infantry" style="display:none"><span class="cmd-badge" id="unloadBadge">0</span><span class="cmd-icon">⇤</span><span
+              class="cmd-label">Unload</span></button>
+        </div>
+      <details class="tactics-menu"><summary>Formation &amp; readiness</summary><section class="tactics-section" aria-label="Formation and readiness">
       <div class="hud-section fm-section">
-        <div class="hud-title">Formation (Z)</div>
+        <div class="hud-title">Formation <kbd>Z</kbd></div>
         <div class="fm-strip">
-          <div class="fm-btn" data-formation="line" title="Line"
+          <button type="button" class="fm-btn" data-formation="line" title="Line"
             onclick="Game.currentFormation='line';document.querySelectorAll('.fm-btn').forEach(b=>b.classList.toggle('active',b.dataset.formation==='line'))">
-            ═</div>
-          <div class="fm-btn" data-formation="column" title="Column"
+            ═</button>
+          <button type="button" class="fm-btn" data-formation="column" title="Column"
             onclick="Game.currentFormation='column';document.querySelectorAll('.fm-btn').forEach(b=>b.classList.toggle('active',b.dataset.formation==='column'))">
-            ║</div>
-          <div class="fm-btn" data-formation="wedge" title="Wedge"
+            ║</button>
+          <button type="button" class="fm-btn" data-formation="wedge" title="Wedge"
             onclick="Game.currentFormation='wedge';document.querySelectorAll('.fm-btn').forEach(b=>b.classList.toggle('active',b.dataset.formation==='wedge'))">
-            ◁</div>
-          <div class="fm-btn active" data-formation="block" title="Block"
+            ◁</button>
+          <button type="button" class="fm-btn active" data-formation="block" title="Block"
             onclick="Game.currentFormation='block';document.querySelectorAll('.fm-btn').forEach(b=>b.classList.toggle('active',b.dataset.formation==='block'))">
-            ▣</div>
-          <div class="fm-btn" data-formation="spread" title="Spread"
+            ▣</button>
+          <button type="button" class="fm-btn" data-formation="spread" title="Spread"
             onclick="Game.currentFormation='spread';document.querySelectorAll('.fm-btn').forEach(b=>b.classList.toggle('active',b.dataset.formation==='spread'))">
-            ⁘</div>
+            ⁘</button>
         </div>
       </div>
       <div class="hud-section pos-section">
-        <div class="hud-title">Posture (X)</div>
+        <div class="hud-title">Readiness</div>
         <div class="pos-strip">
-          <div class="pos-btn active" data-posture="auto" title="Auto — settle, rest and re-ready on their own"
-            onclick="Game.AI.applyPosture(null)">⟳</div>
-          <div class="pos-btn" data-posture="attention" title="Attention — stand formed up and ready"
-            onclick="Game.AI.applyPosture('attention')">⇡</div>
-          <div class="pos-btn" data-posture="ease" title="At ease — relax in place"
-            onclick="Game.AI.applyPosture('ease')">≈</div>
-          <div class="pos-btn" data-posture="guard" title="Guard — right-click an area to patrol (C)"
-            onclick="Game.AI.beginGuard()">◎</div>
+          <button type="button" class="pos-btn active" data-posture="auto" title="Auto — settle, rest and re-ready on their own"
+            onclick="Game.AI.applyPosture(null)">⟳</button>
+          <button type="button" class="pos-btn" data-posture="attention" title="Attention — stand formed up and ready"
+            onclick="Game.AI.applyPosture('attention')">⇡</button>
+          <button type="button" class="pos-btn" data-posture="ease" title="At ease — relax in place"
+            onclick="Game.AI.applyPosture('ease')">≈</button>
+          <button type="button" class="pos-btn" data-posture="guard" title="Guard — right-click an area to patrol (Shift+C)"
+            onclick="Game.AI.beginGuard()">◎</button>
         </div>
       </div>
       <div class="hud-section pace-section">
-        <div class="hud-title">Pace</div>
+        <div class="hud-title">Group pace</div>
         <div class="pos-strip">
-          <div class="pos-btn" id="paceBtn" title="March together: off = each unit moves at its own speed; on = the group holds the slowest unit's pace (armor waits for infantry)"
-            onclick="Game.toggleGroupPace()">⇶</div>
+          <button type="button" class="pos-btn" id="paceBtn" title="March together: off = each unit moves at its own speed; on = the group holds the slowest unit's pace (armor waits for infantry)"
+            onclick="Game.toggleGroupPace()">⇶</button>
         </div>
       </div>
-      <div class="hud-section info-section" id="selectedPanel"></div>
+      </section></details>
+        <div class="command-guidance"><span id="commandHint">Select a unit, then choose an order.</span><button type="button" id="cmdCancel" hidden>Cancel <kbd>Esc</kbd></button></div>
+      </section>
       <div class="hud-log-section" style="border-right:none; border-left: 2px solid #34373d;">
         <div id="gameMessages"></div>
       </div>
@@ -2760,11 +2817,11 @@
     if (vEl) vEl.textContent = UNDER_VERSION;
 
     const FALLBACK_NOTES = [
-      'Infantry react to tanks like soldiers: they clear the tank\'s path sideways, take cover or go prone, and never sprint down the barrel.',
-      'AT gun crews stay in action while armour is in reach and bail out when overrun; guns no longer limber up in front of a tank.',
-      'Men under fire crouch, hit the dirt and bound into cover; infantry walk at a believable pace.',
-      'No more standing corpses: death animations fixed, kneeling fire pose added, animation flicker removed.',
-      'Filmic tone mapping: sunlit roads and fields no longer blow out to white (Tone group in the debug panel).',
+      'Artillery unloads in place; select infantry and right-click an empty gun to reman it.',
+      'Infantry movement, firing and crew animations improved; short traffic pauses keep a steady movement pose.',
+      'Mortar area fire, supporting infantry fire and additional unit models.',
+      'Compact orders on the left, grouped unit cards and the field map on the right.',
+      'Reduced collision and effects overhead, with quieter impact visuals and preserved vehicle camouflage.',
     ];
     const renderUpdates = (version, date, notes) => {
       if (!upEl) return;
@@ -2815,9 +2872,9 @@
       window.ufApplyStaticAssets();
       var classic = [
         'config', 'i18n', 'utils', 'engine', 'weapons', 'terrain', 'units',
-        'pathfinding', 'combat', 'ai', 'camera', 'input', 'renderer', 'audio',
-        'mission', 'scenarios/mokra', 'neural_export', 'unit_modules', 'ai_tactics', 'valor', 'buildings', 'garrison_ui',
-        'soldier_model', 'fieldgun_model', 'cavalry_model', 'aircraft',
+        'pathfinding', 'combat', 'fire_control', 'ammunition', 'infantry_actions', 'tactical_coordination', 'ai', 'camera', 'input', 'renderer', 'tracer_fx', 'impact_fx', 'tactical_hud', 'audio',
+        'mission', 'scenarios/mokra', 'neural_export', 'unit_modules', 'ai_tactics', 'valor', 'buildings', 'scenery', 'garrison_ui',
+        'soldier_model', 'mow_soldier_model', 'fieldgun_model', 'gun_model', 'weapon_mounts', 'mortar_model', 'vehicle_model', 'army_materials', 'mortar_fire', 'supporting_fire', 'cavalry_model', 'aircraft',
         'editor', 'ruler'
       ];
       classic.forEach(function (f) {

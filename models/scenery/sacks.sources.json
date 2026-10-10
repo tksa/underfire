@@ -1,0 +1,27 @@
+{
+  "output": "sacks.glb",
+  "bytes": 497988,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/construction/entourage/sack_3/body.ply",
+      "sha256": "f59ad80f5549870d2ef0e7a713595c1d3506ac44f9a008626733a4e3995cf60f"
+    },
+    {
+      "path": "entity/construction/entourage/sack_3/material1.mtl",
+      "sha256": "be48d863b133b37e0796fdd16e6b6cfd6a85dba2ae1195b65c4d7a8a4e1db08e"
+    },
+    {
+      "path": "entity/construction/entourage/sack_3/sack_3.def",
+      "sha256": "37c5c89a66044dd85e873704a29e1cd2a4de566784d95cb530accb40a4f3ca75"
+    },
+    {
+      "path": "entity/construction/entourage/sack_3/sack_3.mdl",
+      "sha256": "83fcdd046409c9ae03551b37d6ca28cb549bbe4b4cd1af6c6583b3fce2a27193"
+    },
+    {
+      "path": "texture/common/entourage/sack1.dds",
+      "sha256": "41ecf264c5df03984ad45a84239be05ee5cefdf33a291d023c00ceb678e0ab2c"
+    }
+  ]
+}

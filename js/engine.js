@@ -4,6 +4,12 @@
  * This is loaded as a classic script — Three.js is loaded via global CDN.
  */
 
+// A Retina display used to multiply every HDR/postprocessing target by four.
+// Keep the DOM at native resolution and budget the 3D drawing buffer separately.
+Game.RENDER_PIXEL_BUDGET = 3000000;
+Game.renderPixelRatio = (width, height, dpr = window.devicePixelRatio || 1) =>
+    Math.min(dpr, 1.5, Math.sqrt(Game.RENDER_PIXEL_BUDGET / Math.max(1, width * height)));
+
 Game.initEngine = () => {
     const THREE = window.THREE;
     Game.THREE = THREE;
@@ -15,7 +21,7 @@ Game.initEngine = () => {
     // Renderer
     Game.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     Game.renderer.setSize(Game.viewW, Game.viewH);
-    Game.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    Game.renderer.setPixelRatio(Game.renderPixelRatio(Game.viewW, Game.viewH));
     Game.renderer.shadowMap.enabled = true;
     Game.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     Game.OFFMAP_COLOR = 0x14161c;   // dark UI tone beyond the map edge
@@ -172,6 +178,7 @@ Game.initEngine = () => {
         Game.camera.top = f;
         Game.camera.bottom = -f;
         Game.camera.updateProjectionMatrix();
+        Game.renderer.setPixelRatio(Game.renderPixelRatio(Game.viewW, Game.viewH));
         Game.renderer.setSize(Game.viewW, Game.viewH);
         if (Game.composer) Game._applyComposerSize();
         clearTimeout(Game._tiltResizeT);
@@ -320,7 +327,11 @@ Game.unitAtScreen = (screenX, screenY) => {
     const THREE = Game.THREE;
     const ndc = new THREE.Vector2((screenX / Game.viewW) * 2 - 1, -(screenY / Game.viewH) * 2 + 1);
     Game.raycaster.setFromCamera(ndc, Game.camera);
-    const hits = Game.raycaster.intersectObjects(Game.unitsGroup.children, true);
+    // Three's raycaster traverses invisible descendants as well. Reject whole
+    // hidden/dead units before expensive triangle and skinning intersection work.
+    const roots = Game.units.filter(u => u.alive && u.mesh?.visible !== false
+        && !u._garrisoned && u._inVehicle == null).map(u => u.mesh).filter(Boolean);
+    const hits = Game.raycaster.intersectObjects(roots, true);
     for (const h of hits) {
         let o = h.object;
         while (o && (!o.userData || o.userData.unitId == null)) o = o.parent;
@@ -449,7 +460,7 @@ Game.setupPostFX = () => {
     try {
         const composer = new PF.EffectComposer(Game.renderer, {
             frameBufferType: THREE.HalfFloatType,
-            multisampling: Math.min(4, Game.renderer.capabilities.maxSamples || 0),  // hardware MSAA (the composer bypasses the renderer's own AA)
+            multisampling: Math.min(2, Game.renderer.capabilities.maxSamples || 0),  // 2x MSAA plus SMAA keeps fine edges without four HDR samples/pixel
         });
         composer.addPass(new PF.RenderPass(Game.scene, Game.camera));
 
@@ -733,7 +744,7 @@ Game.postfxValuesText = () => {
     const f = (n) => { const t = (+n).toFixed(3).replace(/\.?0+$/, ''); return t === '' || t === '-' ? '0' : t; };
     return [
         'postfx = {',
-        `  antialias: ${s.antialias ? 'true' : 'false'},  // SMAA + 4x MSAA`,
+        `  antialias: ${s.antialias ? 'true' : 'false'},  // SMAA + 2x MSAA`,
         `  tone:           { mode: '${s.toneMode || 'AGX'}', exposure: ${f(s.toneExposure != null ? s.toneExposure : Game.TONE_EXPOSURE_DEFAULT)} },`,
         `  upscaleFactor: ${f(s.upscaleFactor)},`,
         `  bloom:          { intensity: ${f(s.bloomIntensity)}, threshold: ${f(s.bloomThreshold)} },`,

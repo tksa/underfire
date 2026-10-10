@@ -88,6 +88,8 @@ Game._vehicleRecoveryRoute = (unit, goal, reason) => {
 
 // Per-frame upkeep: cover value + decay the short-lived timers.
 Game.uMod.frame = (unit, ctx) => {
+    Game.updateWeaponHandling(unit, ctx.dt);
+    Game.updateInfantryActions?.(unit, ctx.dt);
     unit.coverBonus = unit._garrisoned ? (Game.GARRISON_COVER || 0.9) : Game.computeCover(unit);
     unit.cooldownLeft = Math.max(0, unit.cooldownLeft - ctx.dt);
     unit.underFire = Math.max(0, unit.underFire - ctx.dt);
@@ -136,6 +138,7 @@ Game.setManualStance = (unit, stance) => {
     if (!unit) return;
     unit._manualStance = stance || null;
     unit._autoStance = !stance;
+    unit._lowPostureUntil = 0;
     if (stance) unit.stance = stance;
 };
 
@@ -180,6 +183,14 @@ Game.uMod.posture = (unit, ctx) => {
         target = t;
     }
     if (target) {
+        // Stay down through a brief gap between protective requests. A fresh
+        // crouch request must not repeatedly lift a man who just went prone.
+        // Explicit stance orders, vehicle evasion and routing remain immediate.
+        const rank = Game._STANCE_RANK;
+        const urgentRun = (unit._evadeUntil || 0) > now || (unit.retreating && target === 'run');
+        if (!urgentRun && (rank[target] ?? 2) > (rank[unit.stance] ?? 2)
+            && now < (unit._lowPostureUntil || 0)) return;
+        if (target === 'prone' || target === 'crouch') unit._lowPostureUntil = now + 1.0;
         if (unit.stance !== target) unit.stance = target;
         unit._autoStance = target !== unit._manualStance;
         return;
@@ -252,15 +263,9 @@ Game.uMod.health = (unit, ctx) => {
     }
 };
 
-// Supply: infantry scavenge a little ammo while on the move.
+// Carried ammunition only changes at a real supply source. Walking across an
+// empty field must not conjure replacement rounds between magazine changes.
 Game.uMod.supply = (unit, ctx) => {
-    if (!ctx.isVeh && unit.moving && unit.ammo >= 0) {
-        unit._scavengeTimer = (unit._scavengeTimer || 0) + ctx.dt;
-        if (unit._scavengeTimer >= 8) {
-            unit._scavengeTimer = 0;
-            unit.ammo++;
-        }
-    }
 };
 
 // Deploy / limber (RWM siege): crew-served guns set up to fire, pack up to move.
@@ -395,21 +400,34 @@ Game.uMod.scan = (unit, ctx) => {
             const curVisible = cur && cand && cand.id === cur.id
                 ? true
                 : !!(cur && cur.alive && cur.team !== unit.team && Game.unitCanSee(unit, cur));
-            const curValid = curVisible && curDistSq <= (unit.sight * 1.1) ** 2
+            const curValid = curDistSq <= (unit.sight * 1.1 * (cur ? Game.firingSignature(cur) : 1)) ** 2
                 && (!Game.unitCanHurt || Game.unitCanHurt(unit, cur));
-            if (curValid && cand && cand.id !== cur.id) {
+            const crewServed = unit.deployable || unit.class === 'support';
+            const armorFirst = isAT && cand && Game.isTank(cand.kind)
+                && cur && !Game.isTank(cur.kind);
+            // Retain a recent sighting through a brief occlusion even when a
+            // different enemy is visible. The old grace applied only when NO
+            // candidate existed, so foliage caused rapid A/B target switches.
+            // This does not authorize blind fire: fire validates LOS each frame.
+            const recentlySeen = unit._targetVisibleId === cur?.id
+                && now - (unit._targetVisibleAt ?? -Infinity) < (crewServed ? 1.5 : 0.9);
+            if (curValid && !curVisible && recentlySeen && !armorFirst) {
+                enemy = cur;
+            } else if (curValid && curVisible && cand && cand.id !== cur.id) {
                 const dCand = Game.distSq(unit.x, unit.z, cand.x, cand.z);
                 // Crew-served weapons (mortars, MGs, guns) are laid on a target and
                 // stay on it: re-laying the piece for every attacker who is briefly
                 // a metre nearer had a mortar crew turning four full circles a fight.
-                const crewServed = unit.deployable || unit.class === 'support';
                 const dwellOk = (now - (unit._targetSince || 0)) > (crewServed ? 3.0 : 0.8);
                 const closerBy = crewServed ? 0.49 : 0.64;             // 30% / 20% closer
                 // An AT weapon drops a soft target the moment armor shows.
-                const armorFirst = isAT && Game.isTank(cand.kind) && !Game.isTank(cur.kind);
                 enemy = (armorFirst || (dCand < curDistSq * closerBy && dwellOk)) ? cand : cur;
             } else {
-                enemy = curValid ? cur : cand;
+                enemy = curValid && curVisible ? cur : cand;
+            }
+            if (enemy && (enemy === cand || (enemy === cur && curVisible))) {
+                unit._targetVisibleId = enemy.id;
+                unit._targetVisibleAt = now;
             }
             unit._scanEnemy = enemy || null;
             unit._scanEnemyId = enemy ? enemy.id : null;
@@ -466,12 +484,18 @@ Game.uMod.bombard = (unit, ctx) => {
 // Engage: close on a player-forced target until LOS+range (forced-target
 // pursuit), and the assault-move "stop to engage, resume when clear" posture.
 Game.uMod.engage = (unit, ctx) => {
+    if (['grenade', 'support'].includes(unit._infantryAction?.kind)) return;
     const enemy = ctx.enemy;
     const weaponDef0 = ctx.weaponDef0;
     const dt = ctx.dt;
 
     // CLOSE ASSAULT (double right-click on armor): run at the vehicle and lob
     // AT grenade bundles from short range instead of taking a rifle stand-off.
+    if (unit._grenadeChargeId != null && unit._atGrenades === 0) {
+        unit._grenadeChargeId = null;
+        unit.forcedTargetId = null;
+        if (unit.team === Game.playerTeam) Game.pushMessage(`${unit.label} is out of grenade bundles!`, 1.8);
+    }
     if (unit._grenadeChargeId != null) {
         const target = enemy && enemy.id === unit._grenadeChargeId
             && unit.forcedTargetId === unit._grenadeChargeId ? enemy : null;
@@ -499,25 +523,16 @@ Game.uMod.engage = (unit, ctx) => {
                 unit.angle = Game.rotateTo(unit.angle, want, 6 * dt);
                 unit.turretAngle = unit.angle;
                 unit._atGrenades = unit._atGrenades ?? 2;
-                if (Math.abs(Game.angleDiff(unit.angle, want)) < 0.3
+                if (unit._atGrenades > 0 && !unit._infantryAction && Math.abs(Game.angleDiff(unit.angle, want)) < 0.3
                     && (unit._atNext == null || Game.gameClock >= unit._atNext)
                     && Game.unitCanSee(unit, target) && Game.spawnThrownGrenade) {
-                    unit._atGrenades--;
-                    unit._atNext = Game.gameClock + Game.rand(2.5, 4.5);
-                    Game.spawnThrownGrenade(unit.x, unit.z,
+                    Game.beginGrenadeThrow(unit,
                         target.x + Game.rand(-0.6, 0.6), target.z + Game.rand(-0.6, 0.6),
-                        { type: 'at', dmg: 45, blastR: 2.2, supp: 18, arc: 1.4 });
+                        { type: 'at', dmg: 45, blastR: 2.2, supp: 18, arc: 1.4, automatic: true });
                     if (unit.team === Game.playerTeam) {
                         Game.pushMessage(`${unit.label} hurls a grenade bundle at ${target.label}!`, 1.6);
                     }
-                    if (unit._atGrenades <= 0) {
-                        // Pockets empty: break off; the cover reaction takes over.
-                        unit._grenadeChargeId = null;
-                        unit.forcedTargetId = null;
-                        if (unit.team === Game.playerTeam) {
-                            Game.pushMessage(`${unit.label} is out of grenade bundles!`, 1.8);
-                        }
-                    }
+
                 }
             }
             return;
@@ -533,8 +548,13 @@ Game.uMod.engage = (unit, ctx) => {
         // and only break to re-pursue if the target moves well outside range. This
         // kills the "twitch"/humping where an edge-of-range or flickering-LOS unit
         // toggled stop<->advance every frame.
-        if (inRange && sees) unit._inFiringPos = true;
-        else if (dft > unit.range * 1.18) unit._inFiringPos = false;
+        if (inRange && sees) {
+            unit._inFiringPos = true;
+            unit._firingPosSeenAt = Game.gameClock;
+        } else if (dft > unit.range * 1.18
+            || Game.gameClock - (unit._firingPosSeenAt ?? -Infinity) > 1.5) {
+            unit._inFiringPos = false;
+        }
 
         if (unit._inFiringPos) {
             unit.path = [];
@@ -553,7 +573,8 @@ Game.uMod.engage = (unit, ctx) => {
             // re-pathing synchronously here would defeat the queued order.
             const targetMoved = !unit._pursueAnchor
                 || Game.distSq(unit._pursueAnchor.x, unit._pursueAnchor.z, enemy.x, enemy.z) > 25;
-            if (!unit._routePending && (!unit.moving || unit._pursueTimer <= 0 || targetMoved)) {
+            if (!unit._routePending && unit._pursueTimer <= 0
+                && (!unit.path?.length || targetMoved)) {
                 unit._pursueTimer = 1.2;
                 unit._pursueAnchor = { x: enemy.x, z: enemy.z };
                 // Armor advances to a scored FIRING POSITION (stand-off band, LOS,
@@ -571,7 +592,8 @@ Game.uMod.engage = (unit, ctx) => {
                     gz = Game.clamp(enemy.z + Math.sin(ang) * goalDist, 1, Game.WORLD_H - 1);
                 }
                 unit.path = Game.findPath(unit, unit.x, unit.z, gx, gz);
-                unit.moving = true;
+                unit.moving = unit.path.length > 0;
+                if (!unit.moving) unit._pursueTimer = 4;
                 unit.stopTimer = 0;
             }
         }
@@ -741,7 +763,8 @@ Game.uMod.fire = (unit, ctx) => {
     const enemy = ctx.enemy;
     const dt = ctx.dt;
     const isVeh = ctx.isVeh;
-    const canFire = !unit.holdFire && !(Game.isTank(unit.kind) && unit.turretDamaged)
+    const canFire = Game.WEAPONS[unit.weaponKey]?.type !== 'none'
+        && !unit.holdFire && !(Game.isTank(unit.kind) && unit.turretDamaged)
         // Never squeeze off rounds the target's armor shrugs off (rifle vs
         // tank). Forced or not, the man holds fire; grenade charges and the
         // take-cover reaction handle armor instead.
@@ -750,8 +773,16 @@ Game.uMod.fire = (unit, ctx) => {
     const aimAngleToEnemy = enemy ? Game.angleTo(unit.x, unit.z, enemy.x, enemy.z) : null;
     ctx.hasTurret = hasTurret;
     ctx.aimAngleToEnemy = aimAngleToEnemy;
+    const seesEnemy = canFire && enemy && Game.unitCanSee(unit, enemy);
+    if (seesEnemy) Game.rememberEnemyContact(unit, enemy);
+    if (!seesEnemy
+        || Game.distSq(unit.x, unit.z, enemy.x, enemy.z) > unit.range * unit.range) {
+        Game.resetWeaponAim(unit, unit.ammo === 0 ? 'empty' : 'idle');
+    }
+    Game.updateSupportingFire?.(unit, dt, !!seesEnemy
+        && Game.distSq(unit.x, unit.z, enemy.x, enemy.z) <= unit.range * unit.range);
 
-    if (canFire && enemy && Game.unitCanSee(unit, enemy)) {
+    if (seesEnemy) {
         const d = Game.dist(unit.x, unit.z, enemy.x, enemy.z);
 
         if (d <= unit.range) {
@@ -788,7 +819,7 @@ Game.uMod.fire = (unit, ctx) => {
                     unit.hullAngVel = hRot.angVel;
                 }
 
-                if (turretAligned && ready && unit.cooldownLeft <= 0) {
+                if (Game.weaponAimReady(unit, enemy, dt, turretAligned, ready)) {
                     Game.applyShot(unit, enemy);
                     const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;
                     unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
@@ -803,7 +834,7 @@ Game.uMod.fire = (unit, ctx) => {
                 unit.turretAngle = unit.angle;
                 const hullAligned = Math.abs(Game.angleDiff(unit.angle, aimAngleToEnemy)) < 0.15;
 
-                if (hullAligned && ready && unit.cooldownLeft <= 0) {
+                if (Game.weaponAimReady(unit, enemy, dt, hullAligned, ready)) {
                     Game.applyShot(unit, enemy);
                     const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;
                     unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
@@ -838,7 +869,9 @@ Game.uMod.fire = (unit, ctx) => {
                     unit.angle = Game.rotateTo(unit.angle, aimAngleToEnemy, 5 * dt);
                     unit.turretAngle = unit.angle;
                 }
-                if (ready && unit.cooldownLeft <= 0) {
+                const cone = Game.WEAPONS[unit.weaponKey]?.type === 'smg' ? 0.4 : 0.15;
+                const aligned = mounted || Math.abs(Game.angleDiff(unit.angle, aimAngleToEnemy)) < cone;
+                if (Game.weaponAimReady(unit, enemy, dt, aligned, ready)) {
                     Game.applyShot(unit, enemy);
                     const xpReloadMod = 1 - (unit.experience || 0) * 0.0015;
                     unit.cooldownLeft = unit.cooldown * Game.clamp(1 + unit.suppressionValue / 160, 0.6, 1.8) * xpReloadMod;
@@ -860,6 +893,10 @@ Game.uMod.fire = (unit, ctx) => {
 // terrain-height follow.
 Game.uMod.move = (unit, ctx) => {
     const dt = ctx.dt;
+    if (unit._infantryAction?.kind === 'getup') {
+        unit.currentSpeed = unit._dispSpeed = 0;
+        return;
+    }
     const isVeh = ctx.isVeh;
     const isTruck = Game.isTruck(unit.kind);   // wheeled, bicycle-model steering
     const isMounted = Game.isMountedCavalry && Game.isMountedCavalry(unit);
@@ -1539,6 +1576,13 @@ Game.uMod.move = (unit, ctx) => {
                 let targetSpeed = maxSpeed * Game.clamp(1 - Math.abs(headErr) / 1.8, 0.30, 1);
                 const accelRate = maxSpeed * (Game.TRUCK_ACCEL ?? 0.6);
                 const brakeRate = maxSpeed * 1.5;
+                // A short final leg can put the click inside the minimum turn
+                // circle. Brake, back straight out to make steering room, then
+                // re-plan from the real pose instead of orbiting the destination.
+                if (isLastWaypoint && !next._truckStopCommitted && d < WHEELBASE * 2
+                    && Math.abs(headErr) > 1.3 && d > arrivalDist
+                    && (unit._finalApproachRetryAt || 0) <= Game.gameClock) next._missedTruckApproach = true;
+                if (next._missedTruckApproach) targetSpeed = 0;
                 if (isLastWaypoint && (d < 4 || next._truckStopCommitted)) {
                     // Brake to zero AT the arrival radius (v²=2ad), rather than
                     // carrying speed through it and deleting the path abruptly.
@@ -1549,6 +1593,23 @@ Game.uMod.move = (unit, ctx) => {
                 }
                 if (unit.currentSpeed < targetSpeed) unit.currentSpeed = Math.min(targetSpeed, unit.currentSpeed + accelRate * dt);
                 else unit.currentSpeed = Math.max(targetSpeed, unit.currentSpeed - brakeRate * dt);
+
+                if (next._missedTruckApproach && unit.currentSpeed < 0.08) {
+                    const back = WHEELBASE * 1.6;
+                    const reverseWp = { x: unit.x - Math.cos(unit.angle) * back,
+                        z: unit.z - Math.sin(unit.angle) * back, _endTruckReverse: true };
+                    unit._finalApproachRetryAt = Game.gameClock + 10;
+                    delete next._missedTruckApproach;
+                    if (Game.segmentPassable(unit, unit.x, unit.z, reverseWp.x, reverseWp.z,
+                        { startAngle: unit.angle, endAngle: unit.angle, margin: 0.02 })) {
+                        unit._truckRecoveryGoal = Game._captureTruckRecovery(unit);
+                        unit._detour = null; unit._drvCmd = null;
+                        unit._reverseMove = unit._reversing = unit.moving = true;
+                        unit.currentSpeed = 0; unit.path = [reverseWp];
+                        unit._dispSpeed = 0;
+                        return;
+                    }
+                }
 
                 unit.angle += (unit.currentSpeed / WHEELBASE) * Math.tan(steer) * dt;
                 unit.turretAngle = unit.angle;
@@ -1684,11 +1745,11 @@ Game.uMod.move = (unit, ctx) => {
             // rotate directly in its think tick — one discrete 0.35-0.55 rad
             // step every 0.25-0.5s, which read as a string of small jerky
             // turns. Unlike _faceAngle, this never blocks target acquisition.
-            // While the fire module is laying the weapon on a target it owns
+            // While the fire module is aiming or giving supporting fire it owns
             // the heading (two per-frame authorities shook the man 7-8 deg a
             // frame); a deployed gun traverses at crew pace; a man turns at a
             // body's pace, not a turret's.
-            if (unit.fireTargetId == null || isVeh) {
+            if ((unit.fireTargetId == null && !unit._supportFire) || isVeh) {
                 const rate = isVeh ? unit.rotationSpeed * 0.6
                     : (unit.deployable ? 0.8 : Math.min(unit.rotationSpeed || 6, 4.0));
                 unit.angle = Game.rotateTo(unit.angle, unit._faceGoal, rate * dt);
@@ -2123,13 +2184,11 @@ Game.updateUnit = (unit, dt) => {
                     const ed = Game.distSq(unit.x, unit.z, e.x, e.z);
                     if (ed < bd) { bd = ed; veh = e; }
                 }
-                if (veh) {
-                    unit._atGrenades--;
-                    unit._atNext = Game.gameClock + Game.rand(3.0, 5.0);
+                if (veh && !unit._infantryAction) {
                     // short, low arc — it's a DROP from a window, not a field lob
-                    Game.spawnThrownGrenade(unit.x, unit.z,
+                    Game.beginGrenadeThrow(unit,
                         veh.x + Game.rand(-0.5, 0.5), veh.z + Game.rand(-0.5, 0.5),
-                        { type: 'at', dmg: 45, blastR: 2.2, supp: 18, arc: 0.9, dur: 0.55 });
+                        { type: 'at', dmg: 45, blastR: 2.2, supp: 18, arc: 0.9, dur: 0.55, automatic: true });
                     if (unit.team === Game.playerTeam) {
                         Game.pushMessage(`${unit.label} drops a grenade bundle from the window!`, 1.6);
                     }
@@ -2137,6 +2196,17 @@ Game.updateUnit = (unit, dt) => {
             }
         }
         M.fire(unit, ctx);
+        return;
+    }
+
+    // Remanning owns the approach just like building entry. Resolve contact
+    // before combat/vehicle evasion can send a newly unloaded gunner elsewhere.
+    if (unit._enterGunId != null) {
+        Game.updateGunEntry(unit);
+        if (!unit.alive || unit._enterGunId == null) return;
+        M.posture?.(unit, ctx);
+        Game.updateInfantryGetUp?.(unit);
+        M.move(unit, ctx);
         return;
     }
 
@@ -2190,6 +2260,10 @@ Game.updateUnit = (unit, dt) => {
     M.deploy(unit, ctx);
     M.scan(unit, ctx);
     if (M.bombard(unit, ctx)) {
+        if (Game.isFootInfantry(unit)) {
+            Game.wantStance(unit, 'crouch', 'ground-fire', 0.5);
+            M.posture(unit, ctx);
+        }
         // Attack-ground can rotate a hull before the normal move module runs.
         // Pass that early-return pose through the same swept OBB authority so a
         // long tank cannot snap a corner through a neighbouring vehicle.
@@ -2202,6 +2276,11 @@ Game.updateUnit = (unit, dt) => {
         }
         return;
     }
+    if (unit.bombardX != null) {
+        // The fire mission owns the route to range; autonomous pursuit/cover
+        // must not replace it before the mortar has reached its firing point.
+        M.posture?.(unit, ctx); M.move(unit, ctx); return;
+    }
     M.engage(unit, ctx);
     if (unit.team !== Game.playerTeam) Game.updateAI(unit, dt, ctx.enemy);
     else if (M.takeCover) M.takeCover(unit, ctx);
@@ -2212,5 +2291,6 @@ Game.updateUnit = (unit, dt) => {
     // Idle/ambient posture (rest, at-ease, ready). Runs just before move so a
     // roused soldier is on his feet before the move module reads his stance.
     if (M.ambient) M.ambient(unit, ctx);
+    Game.updateInfantryGetUp?.(unit);
     M.move(unit, ctx);
 };

@@ -1,0 +1,35 @@
+{
+  "output": "firewood.glb",
+  "bytes": 198132,
+  "animations": [],
+  "sources": [
+    {
+      "path": "entity/construction/entourage/firewood/9_-_default.mtl",
+      "sha256": "bc59ea9fa7f16bbf2fb008a17a8492e2b7eb8e8c12b338986a969c87965faeb9"
+    },
+    {
+      "path": "entity/construction/entourage/firewood/firewood.def",
+      "sha256": "e992a0efd4bc2789e0425b24564035a74b85a69c4b9c9d98888d8ca2a6c52122"
+    },
+    {
+      "path": "entity/construction/entourage/firewood/firewood.mdl",
+      "sha256": "bf7df4b082a7e0a7b0ee5161469d12aa3c06507a75e299100b05ed89a019f077"
+    },
+    {
+      "path": "entity/construction/entourage/firewood/firewood.ply",
+      "sha256": "a7fbe8fe42de2857533623d28a221826c1a2b4c15cb1239017f6ef1b1f2ed3c0"
+    },
+    {
+      "path": "entity/construction/entourage/firewood/material2.mtl",
+      "sha256": "7bc16c825aeb658cd665d0801204be42c2bf14547dae99568df8930b589396ff"
+    },
+    {
+      "path": "texture/common/entourage/new_wood2.dds",
+      "sha256": "1a39bef8b56da853ab8bffb5ac14ea3f7453e0c2e9cca0c10a1aa2344ffe3e35"
+    },
+    {
+      "path": "texture/common/entourage/new_wood3.dds",
+      "sha256": "544fc347fb58a36092f38ebf492f9174abc7eb4d53b649f65cabc04ee88cbe09"
+    }
+  ]
+}

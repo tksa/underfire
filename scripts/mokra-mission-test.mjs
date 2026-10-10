@@ -247,8 +247,8 @@ const state = await page.evaluate(async requiredCavalryClips => {
     : [];
 
   // Walk every absolute mission-time threshold without running the simulation:
-  // vanguard 3:00, later echelons 3:55/5:05/6:25, victory 8:00. The combat
-  // cadence remains 0/55/125/205 seconds followed by a 300-second hold.
+  // Vanguard 3:00, later echelons 3:55/5:05/6:25, hold succeeds at 8:00.
+  // The existing train, counterattack and withdrawal phases then continue.
   const eventVoices = [];
   const originalEventVoice = Game.Audio.eventVoice;
   Game.Audio.eventVoice = semantic => {
@@ -272,7 +272,23 @@ const state = await page.evaluate(async requiredCavalryClips => {
   Game.updateMokraMission(94); recordTimeline(479);
   Game.updateMokraMission(1); recordTimeline(480);
   Game.Audio.eventVoice = originalEventVoice;
-  const holdVictory = Game.missionState.won && Game.missionState.phaseName === 'Timetable disrupted';
+  const holdVictory = Game.missionState.holdSucceeded && Game.missionState.trainArrived && !Game.missionState.won;
+  Game.updateMokraMission(10);
+  const counterattack = Game.missionState.counterattackStarted && Game.missionState.phase === 6;
+  Game.updateMokraMission(110);
+  const withdrawal = Game.missionState.withdrawalStarted && Game.missionState.phase === 7;
+  const carrier = polish.find(u => u.supportType === 'transport');
+  const passengers = polish.filter(u => ['medic', 'mechanic'].includes(u.supportType)).slice(0, 2);
+  carrier._passengers = passengers.map(u => u.id);
+  passengers.forEach(u => { u._inVehicle = carrier.id; });
+  carrier.x = Game.WORLD_W - 2;
+  Game.updateMokraMission(0.1);
+  const cargoExtracted = carrier._extracted && passengers.length === 2
+    && passengers.every(u => u._extracted && !u.alive && u._deathHandled) && Game.missionState.extracted === 3;
+  Game.extractMokraUnit(carrier);
+  const extractionIdempotent = Game.missionState.extracted === 3;
+  Game.updateMokraMission(80);
+  const finalVictory = Game.missionState.won && Game.missionState.withdrawalComplete;
   const postWaveGermanKinds = [...new Set(Game.getTeamUnits(Game.TEAM.GERMAN).map(u => u.kind))].sort();
   const allGermanEntriesAtWestEdge = Game.mokraGermanEntryHistory.length === 4
     && Game.mokraGermanEntryHistory.every(entry => entry.units.length > 0
@@ -359,7 +375,7 @@ const state = await page.evaluate(async requiredCavalryClips => {
     crossingPath: crossingPath.length,
     fighters: Game.fighterTotalAvailable ? Game.fighterTotalAvailable() : -1,
     airStrikes: Game.airStrikesAvailable,
-    objective: Game.missionState.primaryObjective,
+    objective: Game.SCENARIOS.mokra.primaryObjective,
     voiceSafe,
     firstSoldAttackTake,
     firstTankAttackTake,
@@ -370,12 +386,13 @@ const state = await page.evaluate(async requiredCavalryClips => {
     polishVoiceAssets: activePolishVoices.length,
     polishVoiceAssetsOk,
     dossierOk: dossier.includes('Poland 1939 RTS Battle Design Dossier') && dossier.includes('Battle of Mokra'),
-    missionDocOk: missionDoc.includes('## Preview implementation status')
+    missionDocOk: missionDoc.includes('## Current mission contract')
       && missionDoc.includes('Polish voice assets')
       && missionDoc.includes('Dyle remains the first/default battle')
       && missionDoc.includes('three-minute countdown')
-      && missionDoc.includes('western map edge'),
+      && missionDoc.includes('westernmost five-tile strip'),
     holdVictory,
+    counterattack, withdrawal, cargoExtracted, extractionIdempotent, finalVictory,
     menuMission: document.querySelector('.mission-card.selected')?.dataset.mission,
     menuSide: document.querySelector('.side-btn.selected')?.dataset.side,
     menuCards: [...document.querySelectorAll('.mission-card')].map(c => c.dataset.mission),
@@ -415,8 +432,8 @@ expect(JSON.stringify(state.totalTimeline) === JSON.stringify([
   { totalElapsed: 384, combatElapsed: 204, waves: [0, 1, 2], won: false },
   { totalElapsed: 385, combatElapsed: 205, waves: [0, 1, 2, 3], won: false },
   { totalElapsed: 479, combatElapsed: 299, waves: [0, 1, 2, 3], won: false },
-  { totalElapsed: 480, combatElapsed: 300, waves: [0, 1, 2, 3], won: true },
-]), 'Mokra absolute timeline is not vanguard 3:00, waves 3:55/5:05/6:25, victory 8:00');
+  { totalElapsed: 480, combatElapsed: 300, waves: [0, 1, 2, 3], won: false },
+]), 'Mokra deployment, attack waves or hold-to-train handoff have the wrong timing');
 expect(state.sirenCues.length === 0,
   'the temporarily disabled Mokra deployment siren was triggered');
 expect(state.initialEntryAtWestEdge && state.allGermanEntriesAtWestEdge
@@ -433,7 +450,8 @@ for (const required of ['mp38', 'mortar50', 'mortar81', 'panzer1', 'panzer2', 'p
   expect(state.postWaveGermanKinds.includes(required), `missing German scenario unit kind: ${required}`);
 }
 expect(!state.postWaveGermanKinds.includes('smg'), 'generic 1940 Sturmtrupp is fielded at Mokra');
-expect(!state.polishKinds.some(k => /7tp|20mm|tks20/i.test(k)), 'anachronistic Polish armour variant fielded');
+expect(['7tp', '7tp_dw', '7tp_dwr', 'tks20'].every(k => state.polishKinds.includes(k)),
+  'expanded playable armour reserve is incomplete');
 expect(state.railwayTiles > 150 && state.crossings === 3,
   'railway/crossing gameplay contract is incomplete');
 expect(railwayModelWaitOk && state.railModelReady && state.railMeshes === 1
@@ -466,7 +484,7 @@ expect(state.attentionIdsTracked && state.attentionUnitCount === 33
   && state.attentionStandingWest,
   'the opening Polish line/reserve infantry are not tracked, standing still, and facing west');
 expect(state.initialBofors === 3, 'secondary-objective Bofors tracking is incomplete');
-expect(state.initialPolishStrength === 59, 'reinforced Polish opening strength is wrong');
+expect(state.initialPolishStrength === 64, 'reinforced Polish opening strength is wrong');
 expect(state.mountedUhlans === 4 && state.mountedReserve === 4,
   'the four mounted ułans are not assigned to pl_12th_uhlans_reserve');
 expect(state.mountedEastOfRailway && state.mountedInReserveZone,
@@ -509,6 +527,8 @@ expect(state.polishVoiceAssets === 75 && state.polishVoiceAssetsOk,
   'one or more active Polish voice assets is missing');
 expect(state.dossierOk && state.missionDocOk, 'campaign/mission documentation is missing');
 expect(state.holdVictory, 'five-minute hold does not resolve as an operational victory');
+expect(state.counterattack && state.withdrawal && state.finalVictory, 'later mission phases do not complete');
+expect(state.cargoExtracted && state.extractionIdempotent, 'carrier extraction loses or double-counts passengers');
 expect(state.allWavesCommitted, 'the three timed German echelons were not all committed');
 expect(state.menuMission === 'mokra' && state.menuSide === 'polish', 'explicit Mokra selection is not Poland-first');
 expect(state.menuCards.join('|') === 'dyle|mokra', 'Dyle is not the first/default battle selection');

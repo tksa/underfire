@@ -1845,7 +1845,7 @@ Game.getHeight = (x, z) => {
     const h = (h00 * (1 - fx) * (1 - fy) + h10 * fx * (1 - fy) +
         h01 * (1 - fx) * fy + h11 * fx * fy);
 
-    return h * Game.HEIGHT_SCALE;
+    return h * Game.HEIGHT_SCALE + (Game.craterHeightOffset?.(x,z) || 0);
 };
 
 /**
@@ -3169,6 +3169,7 @@ Game._addFieldDividers = () => {
         if ((e - s) >= 6 && Math.random() < 0.5) gapAt = Game.randi(s + 2, e - 3);
         else if (st && !st.hasGate && (e - s) >= 4) gapAt = Game.randi(s + 1, e - 2);
         if (gapAt >= 0 && st) st.hasGate = true;
+        const jp = Game.rand(-0.04, 0.04); // one offset for the whole run
         for (let i = s; i < e; i++) {
             if (i === gapAt || i === gapAt + 1) continue;
             const px2 = run.vert ? run.k * T : (i + 0.5) * T;
@@ -3180,11 +3181,10 @@ Game._addFieldDividers = () => {
             }
             // Jitter only PERPENDICULAR to the run — along-axis jitter opened
             // visible gaps between pieces (they also overscale ~12%, below).
-            const jp = Game.rand(-0.08, 0.08);
             pieces.push({
                 x: run.vert ? run.k * T + jp : (i + 0.5) * T,
                 z: run.vert ? (i + 0.5) * T : run.k * T + jp,
-                rotY: (run.vert ? Math.PI / 2 : 0) + Game.rand(-0.02, 0.02),
+                rotY: (run.vert ? Math.PI / 2 : 0),
                 kind, variant, tint,
                 // worn walls sag: reduced height, stronger dip at low condition
                 hMul: cond < 0.55 ? Game.rand(0.62 + cond * 0.5, 1.0) : 1,
@@ -3212,11 +3212,21 @@ Game._addFieldDividers = () => {
     // stretch never mixes wall/fence or stone styles.
     {
         const segs = [];
+        const roadNeighbors = (x, y) => {
+            const out = [];
+            for (let dx=-1; dx<=1; dx++) for (let dy=-1; dy<=1; dy++) {
+                if ((!dx && !dy) || typeAt(x+dx,y+dy)!=='road') continue;
+                if (dx && dy && (typeAt(x+dx,y)==='road' || typeAt(x,y+dy)==='road')) continue;
+                out.push([dx,dy]);
+            }
+            return out;
+        };
         for (let ty = 0; ty < ROWS; ty++) {
             for (let tx = 0; tx < COLS; tx++) {
-                if (typeAt(tx, ty) !== 'road') continue;
+                if (typeAt(tx, ty) !== 'road' || roadNeighbors(tx,ty).length>2) continue;
                 for (const [dx, dy] of [[1, 0], [0, 1], [1, 1], [1, -1]]) {
-                    if (typeAt(tx + dx, ty + dy) === 'road') {
+                    if (dx && dy && (typeAt(tx+dx,ty)==='road' || typeAt(tx,ty+dy)==='road')) continue;
+                    if (typeAt(tx + dx, ty + dy) === 'road' && roadNeighbors(tx+dx,ty+dy).length<=2) {
                         segs.push({
                             x1: (tx + 0.5) * T, z1: (ty + 0.5) * T,
                             x2: (tx + dx + 0.5) * T, z2: (ty + dy + 0.5) * T,
@@ -3261,91 +3271,12 @@ Game._addFieldDividers = () => {
     }
     if (!pieces.length) return;
 
-    // Fence-to-wall junctions: a fence piece that meets a wall (shared
-    // tile-corner endpoint) is pulled 6% toward the wall so its end tip is
-    // buried INSIDE the masonry — firm contact, no gap, and nothing pokes out
-    // of the far side (the wall is taller and thicker than the fence tip).
-    {
-        const wallCorners = new Set();
-        pieces.forEach(p => { if (p.kind === 'wall') { wallCorners.add(p.c1); wallCorners.add(p.c2); } });
-        for (const p of pieces) {
-            if (p.kind !== 'fence') continue;
-            const atC1 = wallCorners.has(p.c1), atC2 = wallCorners.has(p.c2);
-            if (atC1 === atC2) continue;               // free-standing, or bridging two walls: leave centred
-            const shift = T * 0.06 * (atC1 ? -1 : 1);  // c1 is the lower-coordinate end of the run axis
-            if (p.rotY > 0.5) p.z += shift;            // vertical run: pieces lie along z
-            else p.x += shift;                          // horizontal run: along x
-        }
-    }
-
-    // 3. Load each model once and instance its share of the pieces (one
-    //    InstancedMesh per variant, variants assigned per run). Degradable: a
-    //    missing model just skips its runs.
+    // Join actual segment endpoints; reject duplicate/crossing road edges.
+    const clean = Game.cleanDividerSegments ? Game.cleanDividerSegments(pieces) : pieces;
     const byKind = { wall: [], fence: [] };
-    pieces.forEach(p => byKind[p.kind].push(p));
-    const place = (url, list, variant, kind) => {
-        const mine = list.filter(p => p.variant === variant);
-        if (!mine.length) return;
-        Game.gltfLoader.load(Game.assetUrl(url), (gltf) => {
-            let src = null;
-            gltf.scene.traverse(o => { if (!src && o.isMesh) src = o; });
-            if (!src) return;
-            const geo = src.geometry;
-            if (!geo.attributes.normal) geo.computeVertexNormals();   // optimizer strips normals
-            geo.computeBoundingBox();
-            const bb = geo.boundingBox;
-            // Each piece spans one tile edge PLUS ~12% overlap into its
-            // neighbours, so consecutive pieces interpenetrate and the joins
-            // between elements disappear. Walls keep that length but drop 20%
-            // in height/thickness (they read oversized at full scale).
-            const scale = (T * 1.12) / Math.max(0.001, bb.max.x - bb.min.x);
-            const bulk = kind === 'wall' ? scale * 0.8 : scale;
-            const mat = src.material;
-            mat.roughness = 0.95; mat.metalness = 0.0;
-            if (kind === 'wall') {
-                // The baked source texture reads too light/beige on the terrain —
-                // swap in the procedural dark fieldstone (normal map kept).
-                mat.map = Game._makeDarkStoneTexture();
-                if (mat.color) mat.color.setHex(0xffffff);
-                mat.needsUpdate = true;
-            }
-            const inst = new THREE.InstancedMesh(geo, mat, mine.length);
-            inst.name = 'divider-' + kind + '-' + (variant + 1);
-            inst.castShadow = true;
-            inst.receiveShadow = true;
-            const dummy = new THREE.Object3D();
-            const icol = new THREE.Color();
-            mine.forEach((p, i) => {
-                const hm = p.hMul || 1;                // worn walls sag (guide sec 18.3)
-                const y = Game.getHeight(p.x, p.z) + (-bb.min.y * bulk * hm - 0.07);
-                dummy.position.set(p.x, y, p.z);
-                dummy.rotation.set(0, p.rotY, 0);
-                dummy.scale.set(p.sMul ? scale * p.sMul : scale, bulk * hm, bulk);
-                dummy.updateMatrix();
-                inst.setMatrixAt(i, dummy.matrix);
-                icol.setScalar(p.tint || 1);           // per-enclosure lighter/darker grey
-                inst.setColorAt(i, icol);
-                // Tanks crush dividers via the shared knock-down animator; the
-                // tighter radius keeps a tank driving ALONGSIDE a wall from
-                // flattening it — it has to actually hit it.
-                if (Game.foliageKD) {
-                    Game.foliageKD.push({
-                        leaves: inst, branches: inst, idx: i,
-                        x: p.x, y, z: p.z, rotY: p.rotY,
-                        s: p.sMul ? scale * p.sMul : scale, sy: bulk * hm, sz: bulk,
-                        rrMul: 0.8, rrAdd: 0.1,
-                        stone: kind === 'wall',   // stone crumbles to rubble instead of tipping
-                        wood: kind === 'fence',   // fences splinter into planks
-                        dir: 0, fallT: 0, triggered: false,
-                    });
-                }
-            });
-            inst.instanceMatrix.needsUpdate = true;
-            if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
-            inst.computeBoundingSphere();
-            Game.terrainGroup.add(inst);
-        }, undefined, () => { /* optional asset missing — keep the map bare there */ });
-    };
+    clean.forEach(p => byKind[p.kind].push(p));
+    const place = (url, list, variant, kind) => Game.buildDividerInstances?.(url,
+        list.filter(p => p.variant === variant), kind, variant);
     Game.DIVIDER_MODELS.wall.forEach((u, i) => place(u, byKind.wall, i, 'wall'));
     Game.DIVIDER_MODELS.fence.forEach((u, i) => place(u, byKind.fence, i, 'fence'));
 
@@ -3655,6 +3586,10 @@ Game._addTerrainSurfaceDetails = () => {
 };
 
 Game.buildTerrainMeshes = () => {
+    Game._terrainBuildSerial = (Game._terrainBuildSerial || 0) + 1;
+    Game._terrainDeformation = null;
+    if (Game._craterQueue) Game._craterQueue.length = 0;
+    Game.clearFarmScenery?.();
     const THREE = Game.THREE;
     const T = Game.TILE;
 
@@ -3918,7 +3853,8 @@ Game.buildTerrainMeshes = () => {
     };
 
     // Instance prototypes across positions ({x, z, height, scale}). World height
-    // of each instance ~= height * scale * scaleK. One draw call per prototype.
+    // of each instance ~= height * scale * scaleK. Spatial batches preserve every
+    // tree but avoid drawing the entire map whenever one hedge is on screen.
     const placeFoliage = (protos, positions, scaleK, namePrefix, leafMat, trunkMat) => {
         if (!protos.length || !positions.length) return;
         const lMat = leafMat || foliageCardMat;   // trees get the soft-blend leaf; shrubs pass a crisp one
@@ -3928,49 +3864,61 @@ Game.buildTerrainMeshes = () => {
         const dummy = new THREE.Object3D();
         const color = new THREE.Color();
         protos.forEach((proto, p) => {
-            const list = buckets[p];
-            if (!list.length) return;
-            const branches = new THREE.InstancedMesh(proto.bgeo, bMat, list.length);
-            const leaves = new THREE.InstancedMesh(proto.lgeo, lMat, list.length);
-            branches.name = namePrefix + '-branches-' + p;
-            leaves.name = namePrefix + '-leaves-' + p;
-            branches.castShadow = true;
-            branches.receiveShadow = true;
-            leaves.castShadow = true;
-            leaves.receiveShadow = true;
-            leaves.customDepthMaterial = foliageDepthMat;
-            for (let i = 0; i < list.length; i++) {
-                const t = list[i];
-                const baseY = Game.getHeight(t.x, t.z);
-                const s = (t.height * t.scale * scaleK) / proto.nh;
-                const ry = Math.random() * Math.PI * 2;
-                dummy.position.set(t.x, baseY - (t.sink || 0), t.z);
-                dummy.rotation.set(0, ry, 0);
-                dummy.scale.set(s, s, s);
-                dummy.updateMatrix();
-                branches.setMatrixAt(i, dummy.matrix);
-                leaves.setMatrixAt(i, dummy.matrix);
-                // Register small/medium trees + all bushes so a tank knocks them
-                // flat (only the very largest trees resist).
-                const worldH = t.height * t.scale * scaleK;
-                if ((namePrefix === 'hedge-shrub' || worldH < 6.5) && Game.foliageKD) {
-                    Game.foliageKD.push({
-                        leaves, branches, idx: i,
-                        x: t.x, y: baseY - (t.sink || 0), z: t.z,
-                        rotY: ry, s, dir: 0, fallT: 0, triggered: false,
-                    });
-                }
-                const lh = proto.leafHSL || { h: 0.26, s: 0.42, l: 0.33 };
-                color.setHSL(lh.h + Game.rand(-0.03, 0.07), lh.s + Game.rand(0, 0.18), lh.l + Game.rand(0, 0.14));
-                leaves.setColorAt(i, color);
+            const chunks = new Map();
+            for (const t of buckets[p]) {
+                const key = `${Math.floor(t.x / 48)},${Math.floor(t.z / 48)}`;
+                if (!chunks.has(key)) chunks.set(key, []);
+                chunks.get(key).push(t);
             }
-            branches.instanceMatrix.needsUpdate = true;
-            leaves.instanceMatrix.needsUpdate = true;
-            if (leaves.instanceColor) leaves.instanceColor.needsUpdate = true;
-            branches.computeBoundingSphere();
-            leaves.computeBoundingSphere();
-            Game.terrainGroup.add(branches);
-            Game.terrainGroup.add(leaves);
+            chunks.forEach((list, key) => {
+                let movementMargin = 1;
+                const branches = new THREE.InstancedMesh(proto.bgeo, bMat, list.length);
+                const leaves = new THREE.InstancedMesh(proto.lgeo, lMat, list.length);
+                branches.name = namePrefix + '-branches-' + p + '-' + key;
+                leaves.name = namePrefix + '-leaves-' + p + '-' + key;
+                branches.castShadow = true;
+                branches.receiveShadow = true;
+                leaves.castShadow = true;
+                leaves.receiveShadow = true;
+                leaves.customDepthMaterial = foliageDepthMat;
+                for (let i = 0; i < list.length; i++) {
+                    const t = list[i];
+                    const baseY = Game.getHeight(t.x, t.z);
+                    const s = (t.height * t.scale * scaleK) / proto.nh;
+                    const ry = Math.random() * Math.PI * 2;
+                    dummy.position.set(t.x, baseY - (t.sink || 0), t.z);
+                    dummy.rotation.set(0, ry, 0);
+                    dummy.scale.set(s, s, s);
+                    dummy.updateMatrix();
+                    branches.setMatrixAt(i, dummy.matrix);
+                    leaves.setMatrixAt(i, dummy.matrix);
+                    // Register small/medium trees + all bushes so a tank knocks them
+                    // flat (only the very largest trees resist).
+                    const worldH = t.height * t.scale * scaleK;
+                    movementMargin = Math.max(movementMargin,
+                        namePrefix === 'hedge-shrub' || worldH < 6.5 ? worldH : 1.5);
+                    if ((namePrefix === 'hedge-shrub' || worldH < 6.5) && Game.foliageKD) {
+                        Game.foliageKD.push({
+                            leaves, branches, idx: i,
+                            x: t.x, y: baseY - (t.sink || 0), z: t.z,
+                            rotY: ry, s, dir: 0, fallT: 0, triggered: false,
+                        });
+                    }
+                    const lh = proto.leafHSL || { h: 0.26, s: 0.42, l: 0.33 };
+                    color.setHSL(lh.h + Game.rand(-0.03, 0.07), lh.s + Game.rand(0, 0.18), lh.l + Game.rand(0, 0.14));
+                    leaves.setColorAt(i, color);
+                }
+                branches.instanceMatrix.needsUpdate = true;
+                leaves.instanceMatrix.needsUpdate = true;
+                if (leaves.instanceColor) leaves.instanceColor.needsUpdate = true;
+                branches.computeBoundingSphere();
+                leaves.computeBoundingSphere();
+                // Wind and a knocked-down tree may extend beyond its upright bound.
+                branches.boundingSphere.radius += movementMargin;
+                leaves.boundingSphere.radius += movementMargin;
+                Game.terrainGroup.add(branches);
+                Game.terrainGroup.add(leaves);
+            });
         });
     };
 
@@ -4181,6 +4129,7 @@ Game.buildTerrainMeshes = () => {
 
     // ── Field dividers: stone walls + farm fences along some field joins ──
     if (Game._addFieldDividers) Game._addFieldDividers();
+    Game.addFarmScenery?.();
 
     // ── Hedges: rows of squashed bushes on hedge tiles ──
     const hedgeTiles = [];
@@ -4410,35 +4359,46 @@ Game.buildTerrainMeshes = () => {
         });
 
         if (blades.length) {
-            const inst = new THREE.InstancedMesh(grassBladeGeo, grassBladeMat, blades.length);
-            inst.name = 'forest-undergrowth-blades';
-            inst.castShadow = true;
-            inst.receiveShadow = true;
-            inst.visible = Game.SHOW_GRASS !== false;   // debug toggle
-            (Game._grassMeshes = Game._grassMeshes || []).push(inst);
-            inst.customDepthMaterial = grassDepthMat;
-            const dummy = new THREE.Object3D();
-            const color = new THREE.Color();
+            const chunks = new Map();
+            for (const b of blades) {
+                const key = `${Math.floor(b.x / 32)},${Math.floor(b.z / 32)}`;
+                if (!chunks.has(key)) chunks.set(key, []);
+                chunks.get(key).push(b);
+            }
+            chunks.forEach((list, key) => {
+                const inst = new THREE.InstancedMesh(grassBladeGeo, grassBladeMat, list.length);
+                inst.name = 'forest-undergrowth-blades-' + key;
+                // Sub-metre grass receives light/shadows but doesn't repeat its
+                // geometry in the shadow pass; trees and bushes still cast shadows.
+                inst.castShadow = false;
+                inst.receiveShadow = true;
+                inst.visible = Game.SHOW_GRASS !== false;   // debug toggle
+                (Game._grassMeshes = Game._grassMeshes || []).push(inst);
+                inst.customDepthMaterial = grassDepthMat;
+                const dummy = new THREE.Object3D();
+                const color = new THREE.Color();
 
-            blades.forEach((b, i) => {
-                dummy.position.set(b.x, Game.getHeight(b.x, b.z) + 0.03, b.z);
-                dummy.rotation.set(b.lean * 0.35, b.yaw, b.lean);
-                dummy.scale.set(b.width, b.height, 1);
-                dummy.updateMatrix();
-                inst.setMatrixAt(i, dummy.matrix);
+                list.forEach((b, i) => {
+                    dummy.position.set(b.x, Game.getHeight(b.x, b.z) + 0.03, b.z);
+                    dummy.rotation.set(b.lean * 0.35, b.yaw, b.lean);
+                    dummy.scale.set(b.width, b.height, 1);
+                    dummy.updateMatrix();
+                    inst.setMatrixAt(i, dummy.matrix);
 
-                if (b.type === 'dense_forest') color.setHSL(0.29 + Game.rand(-0.025, 0.035), 0.38 + Game.rand(0, 0.13), 0.24 + Game.rand(0, 0.1));
-                else if (b.type === 'forest') color.setHSL(0.285 + Game.rand(-0.03, 0.04), 0.40 + Game.rand(0, 0.15), 0.27 + Game.rand(0, 0.12));
-                else if (b.type === 'hedge') color.setHSL(0.28 + Game.rand(-0.035, 0.045), 0.44 + Game.rand(0, 0.17), 0.29 + Game.rand(0, 0.13));
-                else if (b.type === 'stubble') color.setHSL(0.15 + Game.rand(-0.02, 0.03), 0.32 + Game.rand(0, 0.12), 0.31 + Game.rand(0, 0.11));
-                else color.setHSL(0.25 + Game.rand(-0.04, 0.05), 0.45 + Game.rand(0, 0.18), 0.40 + Game.rand(0, 0.14));   // brighter grass green
-                inst.setColorAt(i, color);
+                    if (b.type === 'dense_forest') color.setHSL(0.29 + Game.rand(-0.025, 0.035), 0.38 + Game.rand(0, 0.13), 0.24 + Game.rand(0, 0.1));
+                    else if (b.type === 'forest') color.setHSL(0.285 + Game.rand(-0.03, 0.04), 0.40 + Game.rand(0, 0.15), 0.27 + Game.rand(0, 0.12));
+                    else if (b.type === 'hedge') color.setHSL(0.28 + Game.rand(-0.035, 0.045), 0.44 + Game.rand(0, 0.17), 0.29 + Game.rand(0, 0.13));
+                    else if (b.type === 'stubble') color.setHSL(0.15 + Game.rand(-0.02, 0.03), 0.32 + Game.rand(0, 0.12), 0.31 + Game.rand(0, 0.11));
+                    else color.setHSL(0.25 + Game.rand(-0.04, 0.05), 0.45 + Game.rand(0, 0.18), 0.40 + Game.rand(0, 0.14));   // brighter grass green
+                    inst.setColorAt(i, color);
+                });
+
+                inst.instanceMatrix.needsUpdate = true;
+                if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+                inst.computeBoundingSphere();
+                inst.boundingSphere.radius += 1;
+                Game.terrainGroup.add(inst);
             });
-
-            inst.instanceMatrix.needsUpdate = true;
-            if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
-            inst.computeBoundingSphere();
-            Game.terrainGroup.add(inst);
         }
     }
 

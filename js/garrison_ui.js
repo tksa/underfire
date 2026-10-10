@@ -38,24 +38,36 @@ Game.updateGarrisonUI = () => {
     const selInf = selected.filter(u => u.alive && Game.isFootInfantry(u)
         && !u._garrisoned && u._inVehicle == null);
     const canEnter = selInf.length > 0;
+    const inCmd = !!Game._commandMode || Game.orderStance === 'attack';
+    // An attack cursor cannot enter/tow. Skip expensive triangle picks entirely
+    // in that mode, and reuse the same unit pick for entry and towing otherwise.
+    const key = `${inCmd}:${selected.map(u => u.id).join(',')}:${Game.mouse?.screenX}:${Game.mouse?.screenY}`
+        + `:${Game.cam.x}:${Game.cam.z}:${Game.cam.zoom}`;
+    const now = performance.now();
+    const previous = Game._garrisonUI.pick;
+    const reuse = previous?.key === key && now < previous.until;
+    const screenHover = reuse ? previous.unit
+        : !inCmd && selected.length && Game.mouse && Game.unitAtScreen
+            ? Game.unitAtScreen(Game.mouse.screenX, Game.mouse.screenY) : null;
 
     // Building under the cursor (only relevant when we have infantry to send in).
-    let hover = null;
-    if (canEnter && Game.mouse) {
+    let hover = reuse ? previous.building : null;
+    if (!reuse && !inCmd && canEnter && Game.mouse) {
         hover = (Game.buildingAtScreen && Game.buildingAtScreen(Game.mouse.screenX, Game.mouse.screenY))
             || (Game.buildingAt && Game.buildingAt(Game.mouse.worldX, Game.mouse.worldZ));
         if (hover && hover.collapsed) hover = null;
     }
     Game.hoverBuilding = hover;
-    const hoverUnit = canEnter && Game.mouse && Game.unitAtScreen
-        ? Game.unitAtScreen(Game.mouse.screenX, Game.mouse.screenY) : null;
+    const hoverUnit = canEnter ? screenHover : null;
     const hoverTransport = hoverUnit && hoverUnit.team === Game.playerTeam
         && hoverUnit.supportType === 'transport' ? hoverUnit : null;
     Game.hoverTransport = hoverTransport;
+    const canEnterGun = !!hoverUnit && !!Game.canManGun && selInf.some(u => Game.canManGun(hoverUnit, u));
+    Game.hoverGun = canEnterGun ? hoverUnit : null;
 
     // Empty horses are world props rather than selectable units. Only advertise
     // entry when this exact horse can accept a selected dismounted reserve rider.
-    const hoverHorse = Game.mouse
+    const hoverHorse = reuse ? previous.horse : !inCmd && selected.length && Game.mouse
         ? ((Game.horseAtScreen && Game.horseAtScreen(Game.mouse.screenX, Game.mouse.screenY))
             || (!hoverUnit && Game.horseAtWorld
                 && Game.horseAtWorld(Game.mouse.worldX, Game.mouse.worldZ)))
@@ -63,24 +75,39 @@ Game.updateGarrisonUI = () => {
     const canEnterHorse = !!hoverHorse && !!Game.canMountHorse
         && selected.some(u => Game.canMountHorse(u, hoverHorse));
     Game.hoverHorse = hoverHorse;
+    // A stationary cursor needs only 12.5 picks/s as units move underneath it.
+    // Mouse/camera/selection changes invalidate immediately; clicks always pick
+    // fresh in input.js, so this visual cache never decides an actual order.
+    if (!reuse) Game._garrisonUI.pick = { key, until: performance.now() + 80,
+        unit: screenHover, building: hover, horse: hoverHorse };
 
     // Cursor affordance: a door+chevron over an enterable building (with room)
     // while infantry are selected — but not while an attack/command mode owns the
     // cursor. This is what signals "click to enter"; empty buildings get no label.
-    const inCmd = !!Game._commandMode || Game.orderStance === 'attack';
     const canEnterBuilding = !!hover && Game.buildingHasRoom(hover);
     const canEnterTransport = !!hoverTransport && Game.transportHasRoom(hoverTransport);
-    // Tow affordance: single transport over a towable gun (or the reverse).
-    // hoverUnit above is gated on infantry being selected; the tow pair needs
-    // its own ungated screen pick (a TRUCK or GUN is selected here).
-    const towScreenHover = Game.mouse && Game.unitAtScreen
-        ? Game.unitAtScreen(Game.mouse.screenX, Game.mouse.screenY) : null;
-    const towPair = Game.getTowHoverPair ? Game.getTowHoverPair(towScreenHover) : null;
+    const towPair = screenHover && Game.getTowHoverPair ? Game.getTowHoverPair(screenHover) : null;
     Game.hoverTowPair = towPair;
     const wantEnter = !inCmd
-        && ((canEnter && (canEnterBuilding || canEnterTransport)) || canEnterHorse || !!towPair);
+        && ((canEnter && (canEnterBuilding || canEnterTransport || canEnterGun)) || canEnterHorse || !!towPair);
     const vp = document.getElementById('viewport');
     if (vp) vp.classList.toggle('cmd-enter', wantEnter);
+
+    // Keep this instruction visible even when optional occupancy overlays are
+    // disabled. The same eligibility helper drives the cursor and right-click.
+    let gunHint = Game._garrisonUI.gunHint;
+    if (canEnterGun && !inCmd) {
+        if (!gunHint) {
+            gunHint = document.createElement('div');
+            gunHint.style.cssText = 'position:absolute;transform:translate(-50%,-100%);padding:4px 7px;'
+                + 'font:600 12px system-ui;color:#eee;background:rgba(20,22,18,.85);white-space:nowrap;';
+            c.appendChild(gunHint); Game._garrisonUI.gunHint = gunHint;
+        }
+        gunHint.textContent = 'Enter / man gun · Right-click';
+        const p = Game._projWorld(hoverUnit.x, (hoverUnit.y || 0) + 2, hoverUnit.z);
+        gunHint.style.display = p.vis ? 'block' : 'none';
+        gunHint.style.left = p.x + 'px'; gunHint.style.top = p.y + 'px';
+    } else if (gunHint) gunHint.style.display = 'none';
 
     // A selected building that emptied or collapsed drops its selection.
     if (Game.selectedBuilding && (Game.selectedBuilding.collapsed
@@ -133,8 +160,9 @@ Game.updateGarrisonUI = () => {
                 + `<div style="width:${Math.round(am * 100)}%;height:2px;background:#d8b93c;border-radius:1px"></div></div>`
                 + '</div>');
         }
-        el.innerHTML = `<div style="font-size:10px;text-align:center;margin-bottom:1px">\u{1F465} ${st.count}/${st.capacity}</div>`
+        const html = `<div style="font-size:10px;text-align:center;margin-bottom:1px">\u{1F465} ${st.count}/${st.capacity}</div>`
             + rows.join('');
+        if (el._garrisonHTML !== html) { el.innerHTML = html; el._garrisonHTML = html; }
         // Selected building: bright frame (right-click terrain = all out;
         // right-click the building = one out).
         const isSel = rec === Game.selectedBuilding;
@@ -184,8 +212,9 @@ Game.updateGarrisonUI = () => {
                 + `<div style="width:${Math.round(am * 100)}%;height:2px;background:#d8b93c;border-radius:1px"></div></div>`
                 + '</div>');
         }
-        el.innerHTML = `<div style="font-size:10px;text-align:center;margin-bottom:1px">👥 ${count}/${Game.carrierCapacity(truck)}</div>`
+        const html = `<div style="font-size:10px;text-align:center;margin-bottom:1px">👥 ${count}/${Game.carrierCapacity(truck)}</div>`
             + rows.join('');
+        if (el._garrisonHTML !== html) { el.innerHTML = html; el._garrisonHTML = html; }
         const selected = Game.selection && Game.selection.has(truck.id);
         el.style.borderColor = selected ? '#ffd24a' : 'rgba(255,255,255,0.15)';
         el.style.boxShadow = selected ? '0 0 6px rgba(255,210,74,0.55)' : 'none';

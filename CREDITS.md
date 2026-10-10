@@ -3,8 +3,75 @@
 Most bundled third-party assets are **CC0 / Public Domain** (no attribution legally
 required); listed here as good practice and to record provenance. The **UI icons**
 are attribution-licensed, while the user-provided Polish voice recordings and
-mounted-cavalry model have separate provenance with no CC0/public-domain claim
+mounted-cavalry model and MOW-derived models have separate provenance with no CC0/public-domain claim
 made here.
+
+## Gameplay and animation design references
+
+**Spring: 1944** contributors ([repository](https://github.com/spring1944/spring1944),
+reviewed at `36b570c251a924a372e8054e3ccf5d03b656a83e`) and **eliw00d's Realism
+Mod for Men of War: Assault Squad 2**
+([repository](https://github.com/eliw00d/realism-mod), reviewed at
+`37a65c68801c904bec540cf5c1991b3f05903582`) informed the comparison of weapon
+handling, motion-dependent accuracy, infantry poses, crew roles and navigation.
+The resulting JavaScript, procedural gun geometry and procedural animation
+changes were written for Under Fire. No code or assets from either project
+are included. See [the reference review](docs/REFERENCE_GAP_REVIEW.md) for the
+specific sources, implemented gaps and remaining work. This acknowledgment
+does not imply endorsement by either project.
+
+The restrained material exposure correction in `js/army_materials.js` is
+original Under Fire code. It preserves source camouflage, weathering, textures
+and markings. The rejected palette-replacement/weathering shader was removed.
+The R35 uses its bundled separate maps and rebuilt vertex normals instead of
+the mismatched single-atlas repaint.
+
+## Men of War: Assault Squad 2 — user-provided assets
+
+`models/infantry/mow-{soldier,french,polish}.glb`, `models/german_hmg.glb`, and
+`models/german_{panzer1,panzer2,panzer4,sdkfz,pak36,supply,fuel}.glb`
+derive from the user's locally supplied MOW AS2 archives. They include human
+skins, motion clips, MG34/K98/MP40/BAR/Luger meshes, a German helmet, an MG34 mount,
+vehicles and a PaK 36 carriage.
+Their original game authorship and rights remain with their respective owners;
+no CC0 or public-domain status is asserted. The supplied licence note is retained
+in the local review workspace and is not represented as publisher verification.
+
+Source model headers credit **ubrashaev** (human skins), **Mauzer** (weapons),
+**Art** (helmet), and **garry** (MG34 mount). These are recorded exporter credits,
+not a claim of sole ownership. Source paths and SHA-256 hashes accompany every
+converted GLB in its `.sources.json` file. The British and Soviet body meshes
+used for French/Polish presentation are adapted stand-ins, with original faction
+helmets; they do not claim exact 1939/1940 uniforms. MP40 and BAR meshes serve as
+close visual substitutes for MP38 and wz.28.
+
+`models/scenery/*.glb` also derives from the supplied MOW archives: village
+houses/outbuildings, hay, carts, barrels, sacks, firewood, wells, ploughs and
+fences. `scripts/convert-mow-scenery.py` preserves original materials and records
+source paths and hashes beside each GLB. Original game authorship and rights
+remain with their respective owners, under the same provenance above.
+
+The newly imported rigid-model headers additionally credit **ubrashaev** (PaK 36),
+**garry** (Panzer I B, Panzer II F and Opel cargo truck), **IROKEZ** (Panzer IV G),
+**Артем** (Sd.Kfz. 222, decoded from the source's Windows-1251 header), and
+**butyvsky** (Opel tanker). The Panzer II F is a visual approximation for the
+early Panzer II. The Panzer IV G body carries an original short KwK37 barrel;
+it is not an exact early Panzer IV hull. `scripts/convert-mow-vehicles.py`
+regenerates these assets from the local source folders and the pinned reader.
+
+The FM24, MAS36, MAS38, wz.35, Ruby and Vis presentation meshes, French/Polish
+helmets, Hotchkiss M1914 and wz.30 HMG models, and the six mortar configurations
+are original Under Fire geometry. The Polish wz.34, Bofors 37mm and Fiat 621L
+supply/transport models are original, stylized presentation meshes as well.
+Mortars and Polish support vehicles can be regenerated with
+`scripts/build-mortars.py` and `scripts/build-polish-support.py`. The HMGs
+can be regenerated with `scripts/build-support-weapons.py`; original infantry
+equipment is built by `scripts/convert-mow-infantry.py`.
+
+The original conversion scripts use an externally installed, pinned
+[Blender GOH GEM Exporter format reader](https://github.com/f389722475/Blender-GOH-Gem-Exporter/tree/35d2f3e452ca07b48bd8aeb6b145e2e74b8f870d).
+That reader, the installer, decoders and source archives are not bundled.
+See [the MOW review](docs/MOW_AS2_REVIEW.md) for the extraction and integration record.
 
 ## UI Icons (game-icons.net — CC-BY 3.0)
 Command-bar glyphs in `icons/` are from [game-icons.net](https://game-icons.net),
@@ -127,7 +194,7 @@ The **Renault AHN3 supply truck** (`models/french_supply.glb`) and the
 **Laffly fuel truck** (`models/french_fuel.glb`) are original models created for
 Under Fire by the project, released as **CC0 / public domain**.
 
-The skinned **WWI/WWII soldier** (`models/soldier.glb`, used for all foot
+The legacy skinned **WWI/WWII soldier** (`models/soldier.glb`, formerly used for all foot
 infantry) is a Sketchfab model ("German WWI Soldier"). **TODO: confirm author +
 exact licence/source URL before public release.** Textures downscaled to 512 and
 recompressed for web; geometry/rig unchanged.

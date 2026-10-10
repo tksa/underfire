@@ -33,7 +33,9 @@ const readGlb = path => {
 
 const { json, binary } = readGlb(new URL('../models/polish_fieldgun75.glb', import.meta.url));
 assert(json && binary, 'Armata GLB is missing its JSON or binary chunk');
-const primitive = json.meshes[0].primitives[0];
+const bodyNode = json.nodes.find(node => node.name === 'armata_body');
+assert(bodyNode?.mesh != null, 'Armata GLB is missing its named gun/trail body');
+const primitive = json.meshes[bodyNode.mesh].primitives[0];
 const accessor = json.accessors[primitive.attributes.POSITION];
 const view = json.bufferViews[accessor.bufferView];
 const offset = (view.byteOffset || 0) + (accessor.byteOffset || 0);
@@ -271,6 +273,7 @@ const wrapper = new Group();
 const mesh = new Group();
 mesh.userData.modelWrapper = wrapper;
 const unit = {
+  team: 'polish',
   kind: 'fieldgun75',
   mesh,
   currentSpeed: 0,

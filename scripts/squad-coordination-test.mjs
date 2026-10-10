@@ -1,0 +1,53 @@
+import { chromium } from 'playwright';
+const browser=await chromium.launch();
+try {
+    const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+    await page.goto(process.env.SMOKE_URL||'http://127.0.0.1:8741',{waitUntil:'domcontentloaded'});
+    await page.waitForFunction(()=>Game.units?.length>0);
+    const checks=await page.evaluate(()=>{
+        Game._paused=true;window.requestAnimationFrame=()=>0;Game.units=[];Game.gameClock=100;
+        Game._coverReservations.clear();Game.setPatch(55,55,42,42,'grass');
+        const rows=[],check=(name,pass,detail)=>rows.push({name,pass:!!pass,detail});
+        const soldiers=Array.from({length:8},(_,i)=>Game.makeUnit('german','grenadier',210+(i%2),225+Math.floor(i/2)*3,{aiState:'attack'}));
+        const enemy=Game.makeUnit('french','fusilier',224,230,{aiState:'player'});
+        const sq={posture:'attack'},sightings=new Map(soldiers.map(u=>[u.id,enemy]));
+        Game.updateSquadManeuver(sq,soldiers,sightings);
+        const first=sq.bound,movers=soldiers.filter(u=>u._squadBound===first);
+        check('contact produces a bounded moving element',first&&movers.length>0&&movers.length<=4);
+        check('at least half the squad remains to cover the bound',soldiers.filter(u=>!u._squadBound&&!u.moving).length>=4);
+        if (!first) return rows;
+        const goals=Object.values(first.targets);
+        check('reserved destinations never overlap',goals.every((a,i)=>goals.every((b,j)=>i===j||Game.distSq(a.x,a.z,b.x,b.z)>=2.2**2)));
+        check('cover searches respect another soldier reservation',movers.length&& !Game.coverSlotAvailable(soldiers.find(u=>!u._squadBound),goals[0].x,goals[0].z));
+        for(const u of movers){const p=first.targets[u.id];u.x=p.x;u.z=p.z;u.path=[];u.moving=false;u._dispSpeed=0;}
+        Game.gameClock+=3;Game.updateSquadManeuver(sq,soldiers,sightings);
+        check('arriving element has time to settle before the handoff',!sq.bound&&sq.nextBoundAt>Game.gameClock);
+        Game.gameClock+=2;Game.updateSquadManeuver(sq,soldiers,sightings);
+        check('the next bound switches fire teams',sq.bound&&sq.bound.phase!==first.phase);
+        const nextMovers=soldiers.filter(u=>u._squadBound);const commanded=nextMovers[0];
+        if(commanded) Game.issueCommand(commanded.x-8,commanded.z,'move',[commanded]);
+        check('explicit movement cancels a squad reservation',commanded&&!commanded._squadBound&&!Game._coverReservations.has(commanded.id));
+        sq.posture='fallback';Game.updateSquadManeuver(sq,soldiers,sightings);
+        check('fallback releases every bound and cover claim',!sq.bound&&soldiers.every(u=>!u._squadBound&&!Game._coverReservations.has(u.id)));
+        const shooter=soldiers[0],ally=soldiers[1];Game.units=[shooter,ally,enemy];
+        Object.assign(shooter,{x:210,z:230,y:0,stance:'stand',moving:false,path:[],ammo:30,_infantryAction:null});
+        Object.assign(ally,{x:230,z:230,y:0,stance:'stand'});Object.assign(enemy,{x:250,z:230,y:0});
+        check('standing friendly blocks the firing lane',Game.friendlyFireBlocker(shooter,enemy)===ally);
+        const ammo=shooter.ammo;Game.applyShot(shooter,enemy);
+        check('a blocked shot spends no ammunition',shooter.ammo===ammo);
+        ally.stance='prone';check('a sufficiently high shot passes over a prone friendly',!Game.friendlyFireBlocker(shooter,enemy));
+        ally.stance='stand';ally.z+=4;check('a friendly beside the lane does not block it',!Game.friendlyFireBlocker(shooter,enemy));
+        ally.z=230;ally._inVehicle=123;check('passengers are not duplicate firing obstacles',!Game.friendlyFireBlocker(shooter,enemy));
+        ally._inVehicle=null;
+        Game.rememberEnemyContact(shooter,enemy);const oldX=enemy.x;enemy.x+=30;Game.gameClock+=6;
+        const contact=Game.enemyContact(shooter,enemy.id);
+        check('contact memory stores the sighting, not a live enemy position',contact.x===oldX&&contact.confidence===0.5);
+        const sees=Game.unitCanSee;Game.unitCanSee=()=>false;
+        Game.uMod.fire(shooter,{dt:0.1,isVeh:false,enemy});Game.unitCanSee=sees;
+        check('hidden movement never refreshes remembered coordinates',Game.enemyContact(shooter,enemy.id).x===oldX);
+        Game.gameClock+=6;check('old contacts expire',Game.enemyContact(shooter,enemy.id)===null);
+        return rows;
+    });
+    const failures=checks.filter(c=>!c.pass);console.log(JSON.stringify({checks:checks.length,failures,errors},null,2));
+    if(failures.length||errors.length)process.exitCode=1;
+} finally {await browser.close();}

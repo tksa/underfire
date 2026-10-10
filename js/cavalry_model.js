@@ -427,6 +427,7 @@ Game.orderMountHorse = (horse, options = {}) => {
     if (Game.clearArrivalFacing) Game.clearArrivalFacing(rider);
     rider._enterRec = null;
     rider._enterCarrierId = null;
+    rider._enterGunId = null;
     rider.forcedTargetId = null;
     rider.fireTargetId = null;
     rider.bombardX = null;
@@ -565,33 +566,51 @@ const CAVALRY_CLIP_NAMES = Object.freeze({
 
 // Clone before renaming: the cached source scene is shared by every horse and
 // must retain its authored animation metadata for future clones/reloads.
-Game.prepareCavalryAnimations = (sourceClips) => (sourceClips || []).map(source => {
-    const clip = source.clone();
-    clip.name = CAVALRY_CLIP_NAMES[source.name] || source.name;
-    return clip;
-});
+Game.prepareCavalryAnimations = (sourceClips) => {
+    const clips = (sourceClips || []).map(source => {
+        const clip = source.clone();
+        clip.name = CAVALRY_CLIP_NAMES[source.name] || source.name;
+        return clip;
+    });
+    const idle = clips.find(c => c.name === 'idle');
+    if (idle && Game.THREE) {
+        const horseTrack = track => Game.CAVALRY_HORSE_BONES.has(track.name.split('.')[0]);
+        for (const fire of clips.filter(c => c.name.startsWith('fire_'))) {
+            // A halted horse stands while its rider aims; the source combines
+            // every directional firing take with a full gallop cycle.
+            const tracks = [...fire.tracks.filter(t => !horseTrack(t)), ...idle.tracks.filter(horseTrack)]
+                .map(t => t.clone());
+            clips.push(new Game.THREE.AnimationClip(fire.name.replace('fire_', 'aim_'), -1, tracks));
+        }
+    }
+    return clips;
+};
 
 Game.chooseCavalryClip = (unit, names) => {
     if (!names || !names.length) return null;
     const pick = (...choices) => choices.find(name => names.includes(name));
     const speed = unit._dispSpeed != null ? unit._dispSpeed : (unit.currentSpeed || 0);
 
-    if (unit.fireTargetId != null) {
+    if (unit.fireTargetId != null && unit.ammo !== 0 && !unit.holdFire) {
+        const stationary = speed < (unit.mesh.userData._stationaryAim ? 0.45 : 0.18);
+        unit.mesh.userData._stationaryAim = stationary;
+        const aim = direction => stationary
+            ? pick(`aim_${direction}`, `fire_${direction}`, 'idle')
+            : pick(`fire_${direction}`, 'run', 'idle');
         const target = Game.getUnitById(unit.fireTargetId);
         if (target) {
             const bearing = Math.atan2(target.z - unit.z, target.x - unit.x);
             const relative = Game.angleDiff(unit.angle || 0, bearing);
             const abs = Math.abs(relative);
-            if (abs > Math.PI * 0.72) return pick('fire_backward', 'fire_forward', 'run', 'idle');
+            if (abs > Math.PI * 0.72) return aim('backward');
             if (abs > Math.PI * 0.22) {
                 // Positive game-angle rotation points to the rider's right in the
                 // x/z movement plane; negative points left.
                 return relative > 0
-                    ? pick('fire_right', 'fire_forward', 'run', 'idle')
-                    : pick('fire_left', 'fire_forward', 'run', 'idle');
+                    ? aim('right') : aim('left');
             }
         }
-        return pick('fire_forward', 'run', 'idle');
+        return aim('forward');
     }
 
     const moving = speed > (unit.mesh.userData._locoOn ? 0.12 : 0.30);
