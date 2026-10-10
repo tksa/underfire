@@ -1,8 +1,18 @@
 {
- "version": "v0.22.0",
- "build": "1dd67de",
+ "version": "v0.22.1",
+ "build": "300134b",
  "generated": "2026-10-10",
  "commits": [
+  {
+   "hash": "300134b",
+   "date": "2026-10-10",
+   "subject": "serve versioned assets from origin while CDN is unavailable"
+  },
+  {
+   "hash": "da25d6b",
+   "date": "2026-10-10",
+   "subject": "release v0.22.0"
+  },
   {
    "hash": "1dd67de",
    "date": "2026-10-10",
@@ -62,16 +72,6 @@
    "hash": "c0cf463",
    "date": "2026-07-17",
    "subject": "early-war vehicle scale + Polish AT gun readability"
-  },
-  {
-   "hash": "f602916",
-   "date": "2026-07-17",
-   "subject": "hold Shift + arrows to orbit and tilt the camera"
-  },
-  {
-   "hash": "6339b06",
-   "date": "2026-07-16",
-   "subject": "release v0.19.2"
   }
  ]
 }
