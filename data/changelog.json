@@ -1,8 +1,18 @@
 {
- "version": "v0.21.0",
- "build": "eb3cb40",
- "generated": "2026-09-10",
+ "version": "v0.22.0",
+ "build": "1dd67de",
+ "generated": "2026-10-10",
  "commits": [
+  {
+   "hash": "1dd67de",
+   "date": "2026-10-10",
+   "subject": "improve infantry and artillery, unit models, controls and performance"
+  },
+  {
+   "hash": "3c238a7",
+   "date": "2026-09-10",
+   "subject": "release v0.21.0"
+  },
   {
    "hash": "eb3cb40",
    "date": "2026-09-10",
@@ -62,16 +72,6 @@
    "hash": "6339b06",
    "date": "2026-07-16",
    "subject": "release v0.19.2"
-  },
-  {
-   "hash": "2080121",
-   "date": "2026-07-16",
-   "subject": "slow units complete moves"
-  },
-  {
-   "hash": "5725a7a",
-   "date": "2026-07-16",
-   "subject": "release v0.19.1"
   }
  ]
 }
