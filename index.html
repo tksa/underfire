@@ -6,16 +6,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Under Fire — A World War II RTS</title>
   <script>
-    // Production serves heavyweight public assets through the Bunny Pull Zone.
-    // Localhost, previews and CI stay fully local. `?cdn=0` is an emergency
-    // production bypass; `?cdn=1` lets a developer exercise Bunny locally.
-    window.UF_ASSET_VERSION = 'v0.22.0';
+    // Serve versioned production assets from the origin until Bunny passes
+    // the CORS/content checks in docs/CDN.md. `?cdn=1` opts into CDN diagnostics;
+    // localhost, previews and CI otherwise stay fully local.
+    window.UF_ASSET_VERSION = 'v0.22.1';
     (function () {
       var CDN_ORIGIN = 'https://underfire.b-cdn.net';
       var productionHosts = ['underfire.io', 'www.underfire.io', 'underfire.b-cdn.net'];
       var override = new URLSearchParams(location.search).get('cdn');
       var requested = override === '1'
         || (override !== '0' && productionHosts.indexOf(location.hostname) !== -1);
+      var useCdn = override === '1';
       window.UF_REQUEST_VERSION = requested ? window.UF_ASSET_VERSION : String(Date.now());
       var cdnPaths = [
         /^(?:models|textures|sounds|icons)\//i,
@@ -68,7 +69,7 @@
       window.UF_ASSET_CDN = {
         origin: CDN_ORIGIN,
         requested: requested,
-        enabled: requested,
+        enabled: useCdn,
         fallbackReason: '',
         originOnlyAssets: Array.from(originOnlyAssets),
       };
@@ -80,10 +81,10 @@
         catch (e) { return input; }
         if (parsed.origin !== location.origin && parsed.origin !== CDN_ORIGIN) return input;
         var path = parsed.pathname.replace(/^\/+/, '');
-        var fromOrigin = window.UF_ASSET_CDN.requested && originOnlyAssets.has(path);
-        if (!fromOrigin && (!window.UF_ASSET_CDN.enabled || !cdnPaths.some(function (rule) { return rule.test(path); }))) {
+        if (!window.UF_ASSET_CDN.requested || !cdnPaths.some(function (rule) { return rule.test(path); })) {
           return input;
         }
+        var fromOrigin = !window.UF_ASSET_CDN.enabled || originOnlyAssets.has(path);
         var cdnUrl = new URL(path, (fromOrigin ? location.origin : CDN_ORIGIN) + '/');
         parsed.searchParams.forEach(function (value, key) { cdnUrl.searchParams.append(key, value); });
         cdnUrl.searchParams.set('v', window.UF_ASSET_VERSION);
@@ -113,7 +114,7 @@
       // A missing GLB CORS header would otherwise make the game boot without
       // models. Probe the actual extension before boot and fall back to origin.
       window.ufPrepareAssetCdn = async function () {
-        if (!window.UF_ASSET_CDN.requested) return false;
+        if (!window.UF_ASSET_CDN.enabled) return false;
         try {
           var probe = CDN_ORIGIN + '/models/soldier.glb?v=' + encodeURIComponent(window.UF_ASSET_VERSION);
           var response = await fetch(probe, { method: 'HEAD', mode: 'cors', cache: 'no-store' });

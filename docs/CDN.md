@@ -1,11 +1,24 @@
 # Bunny CDN Operations
 
-## v0.22.0 release routing
+## v0.22.1 release routing
+
+Production currently serves heavyweight assets directly from the origin with
+the stable release-version query. The live Bunny model and audio responses
+lacked CORS headers, so normal startup no longer probes that known-broken
+endpoint. `?cdn=1` retains opt-in CDN diagnostics and automatic origin fallback;
+`?cdn=0` remains a local-path bypass. Origin fallback also rewrites previously
+resolved CDN URLs and preserves the current release version.
+
+Restore default CDN routing only after its CORS/content contract passes and all
+release assets have been uploaded, purged and checksum-verified.
+
+### v0.22.0 model additions
 
 The new unit, infantry and scenery GLBs in this release are explicitly routed
 to the origin by `originOnlyAssets` in `index.html`. CDN write/purge credentials
-were unavailable at deployment, and the CDN did not have these files. Existing
-mirrored assets retain their CDN routing and the CORS-probe origin fallback.
+were unavailable at deployment, and the CDN did not have these files. In
+opt-in diagnostic mode, existing mirrored assets use CDN routing and the
+CORS-probe origin fallback.
 Origin-only assets also receive the stable release version query; the loading
 manager preserves that route when resolving an already absolute URL.
 
@@ -14,7 +27,7 @@ model's CORS headers and SHA-256 against the origin before removing its entry.
 `node scripts/asset-routing-test.mjs` checks this release contract. The general
 CDN contract below remains necessary when enabling CDN delivery for these files.
 
-Production keeps `index.html`, game JavaScript, CSV and JSON on `underfire.io` and routes heavyweight public assets through the Bunny Pull Zone at `https://underfire.b-cdn.net`:
+The intended CDN configuration keeps `index.html`, game JavaScript, CSV and JSON on `underfire.io` and routes heavyweight public assets through the Bunny Pull Zone at `https://underfire.b-cdn.net`:
 
 - `models/`
 - `textures/`
@@ -40,7 +53,7 @@ Do these in the Bunny dashboard before deploying the CDN-enabled code:
 5. If Bunny Optimizer is enabled, exclude `textures/` and baked maps. Normal, roughness and AO channels are data, not ordinary photographs; format conversion or colour/quality processing can corrupt the material.
 6. Hotlink protection is optional. If enabled, allow `underfire.io`, `www.underfire.io` and every preview hostname. Initially leave direct-file blocking disabled because privacy tools can omit `Referer`. See [hotlink protection](https://docs.bunny.net/cdn/security/hotlink-protection).
 
-The runtime performs a CORS `HEAD` probe against `models/soldier.glb` before game boot. If that check fails, the resolver falls back to the origin for the current page instead of booting with missing models.
+When CDN delivery is enabled, the runtime performs a CORS `HEAD` probe against `models/soldier.glb` before game boot. If that check fails, the resolver falls back to the origin for the current page instead of booting with missing models.
 
 ## Release and cache-refresh order
 
